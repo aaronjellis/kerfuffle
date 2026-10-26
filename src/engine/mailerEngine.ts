@@ -41,7 +41,7 @@ export interface MailerSpans {
    * inset = centerFromCrease - width/2: the slot's edge nearest the side crease.
    */
   slot: { len: number; width: number; centerFromCrease: number; inset: number };
-  /** null for the 'tuck' lock style, or when the board is too thin for the lock ears */
+  /** null for the 'tuck' lock style, or when the lock ears cannot be cut (tabW < 2 or tabLen < 4) */
   lock: { tabW: number; tabLen: number; slitLen: number } | null;
   /** Why a requested front lock fell back to a tuck top; null otherwise */
   lockNote: string | null;
@@ -158,8 +158,10 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     // Keep at least 3 mm of front ear crease attached above the slit on low boxes.
     const slitLen = Math.min(clamp(params.lockTabDepthMm, 12, tuckH) + 1, frontH - earInset - 3);
     const tabLen = Math.max(0, Math.min(clamp(params.lockTabDepthMm, 12, tuckH), slitLen - 1));
-    // Under 2 mm the ear cannot be cut: fall back to a tuck top (no slits, full ear crease, thumb notch).
+    // An ear narrower than 2 mm or shorter than 4 mm cannot be cut: fall back to a tuck top
+    // (no slits, full ear crease, thumb notch) and say why.
     if (tabW < 2) lockNote = 'board too thin for lock ears';
+    else if (tabLen < 4) lockNote = 'box too low for lock ears';
     else lock = { tabW, tabLen, slitLen };
   }
   const notchR = params.thumbNotch && lock === null ? Math.min(12, W / 8) : 0;
@@ -237,9 +239,6 @@ const rectPoints = (x: number, y: number, w: number, h: number): Point2D[] => [
   { x, y: y + h },
 ];
 
-/** The lock tab as cut on the tuck flap: null for the tuck style or when too small to cut. */
-const cutLockTab = (s: MailerSpans) => (s.lock && s.lock.tabLen >= 4 && s.lock.tabW >= 2 ? s.lock : null);
-
 /**
  * The four floor slots in floor-local coordinates (x from the left side crease, y from the back
  * crease), each `slot.width × slot.len`. Shared by the 2D sheet and the 3D floor.
@@ -269,7 +268,7 @@ interface PerimNode {
  */
 function tuckFlapRightHalf(s: MailerSpans, tx1: number, top: number, root: number): PerimNode[] {
   const nodes: PerimNode[] = [];
-  const lockTab = cutLockTab(s);
+  const lockTab = s.lock;
   const tabTop = lockTab ? root - lockTab.tabLen : root;
   const rc = lockTab ? Math.max(0, Math.min(s.tuckR, tabTop - top)) : s.tuckR;
   nodes.push({ x: tx1 - rc, y: top });

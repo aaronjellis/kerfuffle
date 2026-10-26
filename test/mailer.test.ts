@@ -181,6 +181,14 @@ describe('mailer 2D sheet', () => {
     expect(Math.max(...eys) - Math.min(...eys)).toBeCloseTo(55 + 0.3 - 2 * 1.5 * 0.6, 2);
     expect(m.stats.fingerCountSummary).toMatch(/tuck top \(board too thin for lock ears\)/);
   });
+  it('low box degrades a front lock to a tuck top and says so (T 8, H 15)', () => {
+    const m = model({ cardboardLockStyle: 'front-lock', materialThicknessMm: 8, heightMm: 15 });
+    const s = computeMailerSpans(m.params, 110, 80, 15);
+    expect(s.lock).toBeNull();
+    expect(s.lockNote).toBe('box too low for lock ears');
+    expect(paths(m).some((p) => p.id.startsWith('mailer-slit-'))).toBe(false);
+    expect(m.stats.fingerCountSummary).toContain('tuck top (box too low for lock ears)');
+  });
   it('summary names the effective closure and ear width', () => {
     const m = model({ cardboardLockStyle: 'front-lock', materialThicknessMm: 1.5 });
     expect(m.stats.fingerCountSummary).toContain('front lock, 4.5 mm ears');
