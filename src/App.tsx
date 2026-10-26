@@ -38,6 +38,7 @@ import type { SectionHandlers } from './ui/sections';
 import { AppBar } from './ui/AppBar';
 import { Inspector } from './ui/Inspector';
 import { Stage, type ViewMode } from './ui/Stage';
+import { withPrintedPinClamp } from './ui/paramRules';
 
 export const App: React.FC = () => {
   const [params, setParams] = useState<BoxParameters>(DEFAULT_BOX_PARAMETERS);
@@ -127,17 +128,19 @@ export const App: React.FC = () => {
     const firstTemplate =
       BOX_TEMPLATES.find((t) => t.category === cat)?.id || 'finger-basic';
     const matchingMaterial = MATERIAL_PRESETS.find((m) => m.category === cat);
-    setParams((prev) => ({
-      ...prev,
-      category: cat,
-      templateId: firstTemplate,
-      materialThicknessMm: matchingMaterial
-        ? matchingMaterial.thicknessMm
-        : prev.materialThicknessMm,
-      kerfMm: matchingMaterial ? matchingMaterial.kerfMm : prev.kerfMm,
-      // A preset picked for another category no longer applies.
-      materialPresetId: undefined,
-    }));
+    setParams((prev) =>
+      withPrintedPinClamp({
+        ...prev,
+        category: cat,
+        templateId: firstTemplate,
+        materialThicknessMm: matchingMaterial
+          ? matchingMaterial.thicknessMm
+          : prev.materialThicknessMm,
+        kerfMm: matchingMaterial ? matchingMaterial.kerfMm : prev.kerfMm,
+        // A preset picked for another category no longer applies.
+        materialPresetId: undefined,
+      })
+    );
   };
 
   const handleSelectTemplate = (templateId: BoxTemplateId) => {
@@ -146,21 +149,23 @@ export const App: React.FC = () => {
     const matchingMaterial = MATERIAL_PRESETS.find(
       (m) => m.category === meta.category
     );
-    setParams((prev) => ({
-      ...prev,
-      category: meta.category,
-      templateId,
-      materialThicknessMm:
-        prev.category !== meta.category && matchingMaterial
-          ? matchingMaterial.thicknessMm
-          : prev.materialThicknessMm,
-      kerfMm:
-        prev.category !== meta.category && matchingMaterial
-          ? matchingMaterial.kerfMm
-          : prev.kerfMm,
-      materialPresetId:
-        prev.category !== meta.category ? undefined : prev.materialPresetId,
-    }));
+    setParams((prev) =>
+      withPrintedPinClamp({
+        ...prev,
+        category: meta.category,
+        templateId,
+        materialThicknessMm:
+          prev.category !== meta.category && matchingMaterial
+            ? matchingMaterial.thicknessMm
+            : prev.materialThicknessMm,
+        kerfMm:
+          prev.category !== meta.category && matchingMaterial
+            ? matchingMaterial.kerfMm
+            : prev.kerfMm,
+        materialPresetId:
+          prev.category !== meta.category ? undefined : prev.materialPresetId,
+      })
+    );
   };
 
   // Auto-play fold / assemble animation loop

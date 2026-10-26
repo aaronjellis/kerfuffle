@@ -4,6 +4,7 @@ import { NumberField } from '../../components/NumberField';
 import type { BoxParameters } from '../../engine/types';
 import { Field, Switch } from '../Field';
 import { computePrintBoxDims } from '../../engine/printParts';
+import { withPrintedPinClamp } from '../paramRules';
 import { DROPPED_NOTES, unitHelpers } from './shared';
 import type { SectionProps } from './types';
 
@@ -52,9 +53,10 @@ export const HingeSection: React.FC<SectionProps> = ({ params, updateParam, disp
       <Field label="Hinge type">
         <select
           value={params.clamshellHingeType}
-          onChange={(e) =>
-            updateParam('clamshellHingeType', e.target.value as BoxParameters['clamshellHingeType'])
-          }
+          onChange={(e) => {
+            const clamshellHingeType = e.target.value as BoxParameters['clamshellHingeType'];
+            handlers.setParams((prev) => withPrintedPinClamp({ ...prev, clamshellHingeType }));
+          }}
         >
           <option value="butt-hardware">Butt seam for a hardware hinge</option>
           <option value="side-pivot">Pivot pin holes in the side walls</option>
