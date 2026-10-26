@@ -16,9 +16,9 @@ export interface MailerSpans {
   floorW: number; // W + T + 2*roll, plus 2T when includeLidFlaps (room for the flaps inside the inner walls)
   floorD: number; // D + 2T
   backH: number; // H + T
-  frontH: number; // H + T
-  outerSideH: number; // H + T/2
-  innerSideH: number; // H - T/2 (never below 8)
+  frontH: number; // H + T/2: floor mid-plane up to the lid's underside
+  outerSideH: number; // H: floor mid-plane up to the roll bridge's mid-plane
+  innerSideH: number; // H (never below 8)
   innerSideLen: number; // D - T (along the depth)
   rollLen: number; // D (along the depth)
   lidD: number; // D + 3T
@@ -89,9 +89,9 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   const floorW = W + T + 2 * roll + (params.includeLidFlaps ? 2 * T : 0);
   const floorD = D + 2 * T;
   const backH = H + T;
-  const frontH = H + T;
-  const outerSideH = H + T / 2;
-  const innerSideH = Math.max(8, H - T / 2);
+  const frontH = H + T / 2;
+  const outerSideH = H;
+  const innerSideH = Math.max(8, H);
   const lidD = D + 3 * T;
   const tuckH = Math.min(params.tuckFlapMm, H - T);
   const tuckW = W - 2 * T;
@@ -228,6 +228,67 @@ interface PerimNode {
 }
 
 /**
+ * The tuck flap's right edge, from its free edge at `top` down to its root crease at `root`,
+ * with the front-lock tab when one is cut. `tx1` is the flap's right edge. Shared by the 2D
+ * perimeter and the 3D tuck flap.
+ */
+function tuckFlapRightHalf(s: MailerSpans, tx1: number, top: number, root: number): PerimNode[] {
+  const nodes: PerimNode[] = [];
+  const lockTab = cutLockTab(s);
+  const tabTop = lockTab ? root - lockTab.tabLen : root;
+  const rc = lockTab ? Math.max(0, Math.min(s.tuckR, tabTop - top)) : s.tuckR;
+  nodes.push({ x: tx1 - rc, y: top });
+  if (rc > 0) nodes.push({ x: tx1, y: top + rc, q: { x: tx1, y: top } });
+  if (lockTab) {
+    const { tabW, tabLen } = lockTab;
+    // Root edge tilts 15° off the perpendicular to the flap's side edge.
+    const rootDrop = tabW * Math.tan((15 * Math.PI) / 180);
+    const rt = Math.max(0, Math.min(4, tabW, tabLen - rootDrop));
+    const ox = tx1 + tabW;
+    nodes.push({ x: tx1, y: tabTop });
+    nodes.push({ x: ox - rt, y: tabTop });
+    if (rt > 0) nodes.push({ x: ox, y: tabTop + rt, q: { x: ox, y: tabTop } });
+    nodes.push({ x: ox, y: root - rootDrop });
+  }
+  nodes.push({ x: tx1, y: root });
+  return nodes;
+}
+
+/** Mirror a right half across `x = cx` and reverse it: the curve arriving at right[i] arrives at mirror(right[i-1]). */
+function mirrorLeft(right: PerimNode[], cx: number): PerimNode[] {
+  const mx = (v: number) => 2 * cx - v;
+  const k = right.length - 1;
+  return right.map((_, j) => {
+    const n = right[k - j];
+    const arriving = j > 0 ? right[k - j + 1].q : undefined;
+    return { x: mx(n.x), y: n.y, q: arriving ? { x: mx(arriving.x), y: arriving.y } : undefined };
+  });
+}
+
+/** A closed loop of perimeter nodes as polygon points, each quadratic sampled in `steps` segments. */
+function loopPoints(loop: PerimNode[], steps = 4): Point2D[] {
+  const pts: Point2D[] = [];
+  let prev = loop[loop.length - 1];
+  for (const n of loop) {
+    if (n.q) {
+      for (let i = 1; i < steps; i++) {
+        const u = i / steps;
+        const a = (1 - u) * (1 - u);
+        const b = 2 * u * (1 - u);
+        const c = u * u;
+        pts.push({ x: a * prev.x + b * n.q.x + c * n.x, y: a * prev.y + b * n.q.y + c * n.y });
+      }
+    }
+    const last = pts[pts.length - 1];
+    if (!last || Math.hypot(n.x - last.x, n.y - last.y) > 1e-6) pts.push({ x: n.x, y: n.y });
+    prev = n;
+  }
+  const [first, last] = [pts[0], pts[pts.length - 1]];
+  if (pts.length > 1 && Math.hypot(first.x - last.x, first.y - last.y) <= 1e-6) pts.pop();
+  return pts;
+}
+
+/**
  * The right half of the perimeter, clockwise from the tuck flap's top edge down to the
  * front wall's bottom-right corner at (floorR, frontBottom).
  */
@@ -239,23 +300,7 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
   const nodes: PerimNode[] = [];
 
   // Tuck flap, with a lock tab on its side edge for the front lock (omitted when too small to cut).
-  const lockTab = cutLockTab(s);
-  const tabTop = lockTab ? y.lidTop - lockTab.tabLen : y.lidTop;
-  const rc = lockTab ? Math.max(0, Math.min(s.tuckR, tabTop - y.tuckTop)) : s.tuckR;
-  nodes.push({ x: tx1 - rc, y: y.tuckTop });
-  if (rc > 0) nodes.push({ x: tx1, y: y.tuckTop + rc, q: { x: tx1, y: y.tuckTop } });
-  if (lockTab) {
-    const { tabW, tabLen } = lockTab;
-    // Root edge tilts 15° off the perpendicular to the flap's side edge.
-    const rootDrop = tabW * Math.tan((15 * Math.PI) / 180);
-    const rt = Math.max(0, Math.min(4, tabW, tabLen - rootDrop));
-    const ox = tx1 + tabW;
-    nodes.push({ x: tx1, y: tabTop });
-    nodes.push({ x: ox - rt, y: tabTop });
-    if (rt > 0) nodes.push({ x: ox, y: tabTop + rt, q: { x: ox, y: tabTop } });
-    nodes.push({ x: ox, y: y.lidTop - rootDrop });
-  }
-  nodes.push({ x: tx1, y: y.lidTop });
+  nodes.push(...tuckFlapRightHalf(s, tx1, y.tuckTop, y.lidTop));
 
   // Lid right edge with the lid flap.
   nodes.push({ x: fr, y: y.lidTop });
@@ -327,14 +372,8 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
 function perimeterPath(s: MailerSpans): string {
   const right = rightHalfPerimeter(s);
   const cx = (s.x.floorL + s.x.floorR) / 2;
-  const mx = (v: number) => 2 * cx - v;
   const k = right.length - 1;
-  // Mirror across the centre line and reverse: the curve arriving at right[i] arrives at mirror(right[i-1]).
-  const left: PerimNode[] = right.map((_, j) => {
-    const n = right[k - j];
-    const arriving = j > 0 ? right[k - j + 1].q : undefined;
-    return { x: mx(n.x), y: n.y, q: arriving ? { x: mx(arriving.x), y: arriving.y } : undefined };
-  });
+  const left = mirrorLeft(right, cx);
 
   // Front wall's bottom edge in 2D (its top rim when folded), walked right to left.
   const bottom: PerimNode[] = [];
@@ -475,15 +514,6 @@ function flatPosition(p: Panel3DTransform, byId: Map<string, Panel3DTransform>):
   return [x, y, z];
 }
 
-/** Euler XYZ angles (three.js order) for a turn of `beta` about Y followed by `phi` about world Z. */
-function eulerYThenZ(beta: number, phi: number): [number, number, number] {
-  const [cb, sb, cf, sf] = [Math.cos(beta), Math.sin(beta), Math.cos(phi), Math.sin(phi)];
-  const m13 = cf * sb;
-  const y = Math.asin(Math.max(-1, Math.min(1, m13)));
-  if (Math.abs(m13) < 0.9999999) return [Math.atan2(-sf * sb, cb), y, Math.atan2(sf, cf * cb)];
-  return [Math.atan2(0, cf), y, 0];
-}
-
 /**
  * The roll-end mailer's 3D fold rig, built from the same ply-model spans as the 2D sheet.
  *
@@ -508,7 +538,7 @@ export function buildMailerRig(
   // Mid-planes, all from the spans.
   const yFloor = -H / 2;
   const yLid = yFloor + s.backH; // the back wall reaches from the floor's mid-plane to the lid's
-  const yRoll = yFloor + s.outerSideH; // roll bridge: top of the outer wall
+  const yRoll = yFloor + s.outerSideH; // roll bridge mid-plane, T below the lid mid-plane: top meets lid underside
   const yBack = yFloor + s.backH / 2;
   const yFront = yFloor + s.frontH / 2;
   const xOuter = s.floorW / 2; // outer wall straddles the floor's side crease
@@ -532,9 +562,10 @@ export function buildMailerRig(
     const h = s.innerSideH;
     const { len, depth } = s.tab;
     const ch = Math.min(s.tab.chamfer, depth, len / 2);
-    const centers = s.tab.centers
-      .map((c) => {
-        const z = zBack + c * s.floorD;
+    const centers = floorSlotRects(s)
+      .filter((r) => r.id.startsWith('l-'))
+      .map((r) => {
+        const z = zBack + r.y + s.slot.len / 2;
         return sx < 0 ? w / 2 + z : w / 2 - z;
       })
       .sort((a, b) => b - a);
@@ -558,6 +589,14 @@ export function buildMailerRig(
     pts.push({ x: 0, y: h });
     return pts;
   };
+
+  // Tuck flap with the front-lock ears, the same shape as the sheet. The sheet runs from the free
+  // edge (y = 0) to the root (y = tuckH); in 3D the root is the top edge, so y flips.
+  const tuckRight = tuckFlapRightHalf(s, s.tuckW / 2, 0, s.tuckH);
+  const tuckOutline = loopPoints([...tuckRight, ...mirrorLeft(tuckRight, 0)]).map((p) => ({
+    x: p.x + s.tuckW / 2,
+    y: s.tuckH - p.y,
+  }));
 
   const panels: Panel3DTransform[] = [];
   const add = (p: Omit<Panel3DTransform, 'thicknessMm' | 'explodedPos'>) =>
@@ -603,18 +642,20 @@ export function buildMailerRig(
   });
 
   // Dust ears fold in about a vertical axis, landing between the outer and inner walls.
-  if (s.earW > 0 && s.earH > 0) {
-    for (const [wall, wallName, z, y, dir] of [
-      ['back', 'Back', zBack, yBack, 1],
-      ['front', 'Front', zFront, yFront, -1],
-    ] as const) {
+  // Each ear is its wall's row less the sheet's ear inset at both creases.
+  const { earInset } = insetsFor(T);
+  for (const [wall, wallName, z, y, dir, earH] of [
+    ['back', 'Back', zBack, yBack, 1, s.backH - 2 * earInset],
+    ['front', 'Front', zFront, yFront, -1, s.frontH - 2 * earInset],
+  ] as const) {
+    if (s.earW > 0 && earH > 0) {
       for (const [side, sideName, sx] of sides) {
         add({
           id: `${wall}-dust-${side}`,
           name: `${sideName} ${wallName} Dust Flap`,
           faceId: wall,
           widthMm: s.earW,
-          heightMm: s.earH,
+          heightMm: earH,
           color: '#b88c5d',
           closedPos: [sx * xEar, y, z + (dir * s.earW) / 2],
           rotation: [0, sx * hp, 0],
@@ -703,30 +744,27 @@ export function buildMailerRig(
     },
   });
 
-  // Lid side flaps hinge on the lid's side edges, start T behind its front edge as on the sheet,
-  // and fold past vertical by θ so their free ends land inside the inner walls.
+  // Lid side flaps start T behind the lid's front edge, as on the sheet, and hang straight down
+  // inside the inner walls, outer face against the inner wall's inner face. The 3D hinge sits on
+  // the flap's mid-plane (so the flat rig stays in the floor plane), not at the lid's side edge.
   if (s.lidFlapDepth > 0) {
-    const L = s.lidFlapDepth;
-    const theta = Math.atan((s.roll + T) / L);
+    const xLidFlap = xInner - T; // W/2 + T/2
     const z = zLidFront - T - s.lidFlapLen / 2;
     for (const [side, sideName, sx] of sides) {
-      // Hanging direction: down, tilted θ toward the centre.
-      const dx = -sx * Math.sin(theta);
-      const dy = -Math.cos(theta);
       add({
         id: `lid-flap-${side}`,
         name: `${sideName} Lid Flap`,
         faceId: `lid-flap-${side}`,
         widthMm: s.lidFlapLen,
-        heightMm: L,
+        heightMm: s.lidFlapDepth,
         color: '#c9a073',
-        closedPos: [sx * xOuter + (dx * L) / 2, yLid + (dy * L) / 2, z],
-        rotation: eulerYThenZ(sx * hp, -sx * theta),
+        closedPos: [sx * xLidFlap, yLid - s.lidFlapDepth / 2, z],
+        rotation: [0, sx * hp, 0],
         foldRig: {
           parentId: 'top',
-          pivotOffset: [sx * xOuter, yLid, z],
+          pivotOffset: [sx * xLidFlap, yLid, z],
           axis: 'z',
-          flatAngleRad: sx * (hp + theta),
+          flatAngleRad: sx * hp,
           foldedAngleRad: 0,
           stage: [0.5, 0.64],
         },
@@ -743,6 +781,7 @@ export function buildMailerRig(
     color: '#b5895a',
     closedPos: [0, yLid - s.tuckH / 2, zTuck],
     rotation: [0, 0, 0],
+    outlinePoints: tuckOutline,
     foldRig: {
       parentId: 'top',
       pivotOffset: [0, yLid, zTuck],
@@ -752,31 +791,6 @@ export function buildMailerRig(
       stage: [0.5, 0.7],
     },
   });
-
-  // Front-lock tabs on the tuck flap's side edges, at its root, folding back into the box.
-  const lock = cutLockTab(s);
-  if (lock) {
-    for (const [side, sideName, sx] of sides) {
-      add({
-        id: `lock-tab-${side}`,
-        name: `${sideName} Front Lock Tab`,
-        faceId: `lock-tab-${side}`,
-        widthMm: lock.tabW,
-        heightMm: lock.tabLen,
-        color: '#a87c4f',
-        closedPos: [(sx * s.tuckW) / 2, yLid - lock.tabLen / 2, zTuck - lock.tabW / 2],
-        rotation: [0, sx * hp, 0],
-        foldRig: {
-          parentId: 'tuck-flap',
-          pivotOffset: [(sx * s.tuckW) / 2, yLid, zTuck],
-          axis: 'y',
-          flatAngleRad: -sx * hp,
-          foldedAngleRad: 0,
-          stage: [0.62, 0.76],
-        },
-      });
-    }
-  }
 
   const byId = new Map(panels.map((p) => [p.id, p]));
   return panels.map((p) => ({ ...p, explodedPos: flatPosition(p, byId) }));

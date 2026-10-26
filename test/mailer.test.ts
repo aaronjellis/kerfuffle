@@ -12,9 +12,9 @@ describe('mailer ply model', () => {
       expect(s.floorW).toBeCloseTo(110 + T + 4 * T + 2 * T);
       expect(s.floorD).toBeCloseTo(80 + 2 * T);
       expect(s.backH).toBeCloseTo(55 + T);
-      expect(s.frontH).toBeCloseTo(55 + T);
-      expect(s.outerSideH).toBeCloseTo(55 + T / 2);
-      expect(s.innerSideH).toBeCloseTo(55 - T / 2);
+      expect(s.frontH).toBeCloseTo(55 + T / 2);
+      expect(s.outerSideH).toBeCloseTo(55);
+      expect(s.innerSideH).toBeCloseTo(55);
       expect(s.lidD).toBeCloseTo(80 + 3 * T);
       expect(s.tuckW).toBeCloseTo(110 - 2 * T);
       expect(s.lidFlapDepth).toBeCloseTo(55 - T);
@@ -41,24 +41,24 @@ describe('mailer ply model', () => {
   });
   it('keeps a shallow box printable: tab shallower than the inner wall', () => {
     const s = computeMailerSpans({ ...base, materialThicknessMm: 3 }, 60, 60, 15);
-    expect(s.innerSideH).toBeCloseTo(13.5);
-    expect(s.tab.depth).toBeCloseTo(8); // T + 5, under innerSideH - 2 = 11.5
+    expect(s.innerSideH).toBeCloseTo(15);
+    expect(s.tab.depth).toBeCloseTo(8); // T + 5, under innerSideH - 2 = 13
   });
   it('floors the inner wall at 8 and clamps the tab to fit it', () => {
     const s = computeMailerSpans({ ...base, materialThicknessMm: 3 }, 60, 60, 8);
-    expect(s.innerSideH).toBeCloseTo(8); // H - T/2 would be 6.5
+    expect(s.innerSideH).toBeCloseTo(8);
     expect(s.tab.depth).toBeCloseTo(6); // innerSideH - 2
   });
   it('lays out the default box', () => {
     const s = computeMailerSpans({ ...base, materialThicknessMm: 3, includeLidFlaps: true }, 110, 80, 55);
     expect(s.x.tabL).toBe(0);
     expect(s.x.innerL).toBeCloseTo(8);
-    expect(s.x.rollL).toBeCloseTo(61.5);
-    expect(s.x.outerL).toBeCloseTo(67.5);
+    expect(s.x.rollL).toBeCloseTo(63);
+    expect(s.x.outerL).toBeCloseTo(69);
     expect(s.x.floorL).toBeCloseTo(124);
     expect(s.x.floorR).toBeCloseTo(255);
-    expect(s.x.outerR).toBeCloseTo(311.5);
-    expect(s.x.rollR).toBeCloseTo(317.5);
+    expect(s.x.outerR).toBeCloseTo(310);
+    expect(s.x.rollR).toBeCloseTo(316);
     expect(s.x.innerR).toBeCloseTo(371);
     expect(s.x.tabR).toBeCloseTo(379);
     expect(s.blankW).toBeCloseTo(379);
@@ -68,8 +68,8 @@ describe('mailer ply model', () => {
     expect(s.y.backTop).toBeCloseTo(30 + 89);
     expect(s.y.floorTop).toBeCloseTo(30 + 89 + 58);
     expect(s.y.frontTop).toBeCloseTo(30 + 89 + 58 + 86);
-    expect(s.y.frontBottom).toBeCloseTo(30 + 89 + 58 + 86 + 58);
-    expect(s.blankH).toBeCloseTo(30 + 89 + 58 + 86 + 58);
+    expect(s.y.frontBottom).toBeCloseTo(30 + 89 + 58 + 86 + 56.5);
+    expect(s.blankH).toBeCloseTo(30 + 89 + 58 + 86 + 56.5);
     expect(s.tuckR).toBeCloseTo(8);
     expect(s.earW).toBeCloseTo(37);
     expect(s.earH).toBeCloseTo(49);
@@ -107,6 +107,8 @@ describe('applySideOverflow', () => {
 });
 
 import { generateBoxModel } from '../src/engine/boxGenerator';
+import * as THREE from 'three';
+import type { Panel3DTransform } from '../src/engine/types';
 
 describe('mailer 2D sheet', () => {
   const model = (over = {}) => generateBoxModel({ ...base, widthMm: 110, depthMm: 80, heightMm: 55, materialThicknessMm: 1.5, ...over });
@@ -249,13 +251,11 @@ describe('mailer 3D rig', () => {
         const floor = closed(m, 'bottom'), top = closed(m, 'top');
         expect(top.closedPos[1] - T / 2 - (floor.closedPos[1] + T / 2)).toBeCloseTo(55, 1);
         if (includeLidFlaps) {
+          const innerWallFace = Math.abs(ri.closedPos[0]) - T / 2;
           for (const id of ['lid-flap-l', 'lid-flap-r']) {
-            const f = closed(m, id);
-            const pivotX = f.foldRig!.pivotOffset[0];
-            const freeMidX = pivotX + 2 * (f.closedPos[0] - pivotX);
-            // The free end's inner face: half a ply toward the centre.
-            const innerFace = Math.abs(freeMidX) - T / 2;
-            expect(Math.abs(innerFace - 55)).toBeLessThanOrEqual(1);
+            const fx = Math.abs(closed(m, id).closedPos[0]);
+            expect(Math.abs(fx - T / 2 - 55)).toBeLessThan(0.01);
+            expect(Math.abs(fx + T / 2 - innerWallFace)).toBeLessThan(0.01);
           }
         }
       }
@@ -282,12 +282,47 @@ describe('mailer 3D rig', () => {
     const maxY = Math.max(...inner.outlinePoints!.map((p) => p.y));
     expect(maxY).toBeGreaterThan(inner.heightMm + 1);
   });
-  it('adds lid flaps and lock tabs as children, and drops them when off', () => {
+  it('adds lid flaps as children of the lid, and drops them when off', () => {
     const on = generateBoxModel({ ...base, includeLidFlaps: true, cardboardLockStyle: 'front-lock' });
     expect(closed(on, 'lid-flap-l').foldRig?.parentId).toBe('top');
-    expect(closed(on, 'lock-tab-l').foldRig?.parentId).toBe('tuck-flap');
     const off = generateBoxModel({ ...base, includeLidFlaps: false, cardboardLockStyle: 'tuck' });
-    expect(off.panels3D.some((p) => p.id.startsWith('lid-flap-') || p.id.startsWith('lock-tab-'))).toBe(false);
+    expect(off.panels3D.some((p) => p.id.startsWith('lid-flap-'))).toBe(false);
+  });
+  it('carries the front-lock ears on the tuck flap outline, with no separate lock-tab panels', () => {
+    for (const cardboardLockStyle of ['front-lock', 'tuck'] as const) {
+      for (const includeLidFlaps of [false, true]) {
+        const m = generateBoxModel({ ...base, cardboardLockStyle, includeLidFlaps });
+        const s = computeMailerSpans(m.params, m.params.widthMm, m.params.depthMm, m.params.heightMm);
+        expect(m.panels3D.some((p) => p.id.startsWith('lock-tab-'))).toBe(false);
+        const xs = closed(m, 'tuck-flap').outlinePoints!.map((p) => p.x);
+        const expected = cardboardLockStyle === 'front-lock' ? s.tuckW + 2 * s.lock!.tabW : s.tuckW;
+        expect(Math.abs(Math.max(...xs) - Math.min(...xs) - expected)).toBeLessThan(0.01);
+      }
+    }
+  });
+  it('drops each inner-wall tab onto its floor slot in z', () => {
+    for (const includeLidFlaps of [false, true]) {
+      const m = generateBoxModel({ ...base, includeLidFlaps });
+      const floor = closed(m, 'bottom');
+      const toWorld = (p: Panel3DTransform, x: number, y: number) =>
+        new THREE.Vector3(x - p.widthMm / 2, -(y - p.heightMm / 2), 0)
+          .applyEuler(new THREE.Euler(...p.rotation))
+          .add(new THREE.Vector3(...p.closedPos));
+      const holeZ = floor.holeContours!.map((h) => {
+        const ys = h.map((q) => q.y);
+        return toWorld(floor, 0, (Math.min(...ys) + Math.max(...ys)) / 2).z;
+      });
+      for (const id of ['left-roll-inner', 'right-roll-inner']) {
+        const w = closed(m, id);
+        const tip = w.outlinePoints!.filter((q) => q.y > w.heightMm + 0.01);
+        expect(tip).toHaveLength(8);
+        for (let i = 0; i < tip.length; i += 4) {
+          const xs = tip.slice(i, i + 4).map((q) => q.x);
+          const z = toWorld(w, (Math.min(...xs) + Math.max(...xs)) / 2, w.heightMm).z;
+          expect(Math.min(...holeZ.map((hz) => Math.abs(hz - z)))).toBeLessThan(0.01);
+        }
+      }
+    }
   });
   it('every child names an existing parent and stages lie in 0..1', () => {
     const m = generateBoxModel({ ...base, cardboardLockStyle: 'front-lock' });
