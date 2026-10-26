@@ -55,6 +55,8 @@ export const App: React.FC = () => {
   const [settingQuery, setSettingQuery] = useState<string>('');
   /** The one open inspector section; null when the user closed it. */
   const [selectedPart, setSelectedPart] = useState<PartId | null>('size');
+  /** Asks the inspector to scroll a part's chip and section into view; `n` makes a repeat count. */
+  const [scrollRequest, setScrollRequest] = useState<{ id: PartId; n: number } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const animDirRef = useRef<number>(1);
@@ -109,19 +111,34 @@ export const App: React.FC = () => {
     setSelectedPart((prev) => (prev === id ? null : id));
   };
 
-  /** A chip always opens its part, and clears the search so the section shows. */
+  /**
+   * A chip or a pick on the stage always opens its part, clears the search so the section
+   * shows, and scrolls the chip and the section into view.
+   */
   const handleSelectPart = (id: PartId) => {
     setSettingQuery('');
     setSelectedPart(id);
+    setScrollRequest((prev) => ({ id, n: (prev?.n ?? 0) + 1 }));
+  };
+
+  /** A pick on the stage, in 3D or 2D: opens the part and reports it. */
+  const pickPart = (part: PartId, view: '3d' | '2d') => {
+    handleSelectPart(part);
+    window.posthog?.capture('part_selected', { part, view, template: params.templateId, project: ANALYTICS_PROJECT });
   };
 
   /** A click on a 3D mesh opens the part it belongs to; a face also becomes the artwork target. */
   const handleSelectMeshPart = (meshPartId: string) => {
     const part = partForMesh(meshPartId, params.templateId);
     if (!part) return;
-    handleSelectPart(part);
     if (part === 'artwork') setSelectedFaceId(meshPartId);
-    window.posthog?.capture('part_selected', { part, template: params.templateId, project: ANALYTICS_PROJECT });
+    pickPart(part, '3d');
+  };
+
+  /** A face or an artwork picked in 2D becomes the artwork target app-wide: Artwork opens and 3D highlights it. */
+  const handlePickFace2D = (faceId: string) => {
+    setSelectedFaceId(faceId);
+    pickPart('artwork', '2d');
   };
 
   // Switch category & pick first template in that category
@@ -527,6 +544,7 @@ export const App: React.FC = () => {
           onToggleWireframe={() => setShowWireframe((w) => !w)}
           selectedFaceId={selectedFaceId}
           onSelectFace={setSelectedFaceId}
+          onPickFace2D={handlePickFace2D}
           selectedPart={selectedPart}
           onSelectMeshPart={handleSelectMeshPart}
           selectedArtworkId={selectedArtworkId}
@@ -545,6 +563,7 @@ export const App: React.FC = () => {
           selectedPart={selectedPart}
           onSelectPart={handleSelectPart}
           onTogglePart={handleTogglePart}
+          scrollRequest={scrollRequest}
           sectionProps={{ params, updateParam, displayUnit, model, handlers: sectionHandlers }}
         />
       </div>

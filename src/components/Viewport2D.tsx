@@ -29,6 +29,7 @@ interface Viewport2DProps {
   selectedFaceId: string;
   selectedArtworkId: string | null;
   displayUnit?: DisplayUnit;
+  /** A face or an artwork picked on the sheet. */
   onSelectFace: (faceId: string) => void;
   onSelectArtwork: (artId: string | null) => void;
   onUpdateArtwork: (artId: string, patch: Partial<FaceArtwork>) => void;
@@ -351,7 +352,8 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
             </g>
           ))}
 
-        {/* Nested 2D Panels */}
+        {/* Nested 2D Panels. The face and artwork targets stay out of the tab order
+            (tabIndex -1): the Parts row and the Artwork section are the keyboard path. */}
         {panels2D.map((panel) => {
           const isPanelSelected =
             panel.id === selectedFaceId || panel.id === `base-${selectedFaceId}`;
@@ -377,7 +379,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                 height={panel.safeRect.height}
                 {...(panelSelectable && {
                   role: 'button',
-                  tabIndex: 0,
+                  tabIndex: -1,
                   'aria-label': sentenceCase(panel.name),
                   'aria-pressed': isPanelSelected,
                   onKeyDown: onActivate(selectPanel),
@@ -410,7 +412,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                       width={sf.width}
                       height={sf.height}
                       role="button"
-                      tabIndex={0}
+                      tabIndex={-1}
                       aria-label={sentenceCase(sf.name)}
                       aria-pressed={subSelected}
                       onKeyDown={onActivate(() => onSelectFace(sf.id))}
@@ -528,7 +530,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
             >
               <image
                 role="button"
-                tabIndex={0}
+                tabIndex={-1}
                 aria-label={`Artwork on the ${faceName(artwork.faceId).toLowerCase()}`}
                 onKeyDown={onActivate(() => {
                   onSelectFace(artwork.faceId);

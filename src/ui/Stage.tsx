@@ -26,6 +26,8 @@ interface StageProps {
   onToggleWireframe: () => void;
   selectedFaceId: string;
   onSelectFace: (faceId: string) => void;
+  /** A face or an artwork picked in 2D: selects it app-wide, the same as a 3D pick. */
+  onPickFace2D: (faceId: string) => void;
   selectedPart: PartId | null;
   /** A click on a 3D mesh, with the mesh's part id or face id. */
   onSelectMeshPart: (meshPartId: string) => void;
@@ -53,6 +55,7 @@ export const Stage: React.FC<StageProps> = ({
   onToggleWireframe,
   selectedFaceId,
   onSelectFace,
+  onPickFace2D,
   selectedPart,
   onSelectMeshPart,
   selectedArtworkId,
@@ -102,7 +105,7 @@ export const Stage: React.FC<StageProps> = ({
               selectedFaceId={selectedFaceId}
               selectedArtworkId={selectedArtworkId}
               displayUnit={displayUnit}
-              onSelectFace={onSelectFace}
+              onSelectFace={onPickFace2D}
               onSelectArtwork={onSelectArtwork}
               onUpdateArtwork={onUpdateArtwork}
               onToggleParam={onToggleParam}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 import type { BoxCategory, BoxTemplateId } from '../engine/types';
 import type { PartDef, PartId } from './parts';
@@ -23,6 +23,8 @@ interface InspectorProps {
   onSelectPart: (id: PartId) => void;
   /** A section header: opens or closes it. */
   onTogglePart: (id: PartId) => void;
+  /** Set on every chip click and stage pick; `n` changes each time, so a repeat scrolls again. */
+  scrollRequest: { id: PartId; n: number } | null;
   sectionProps: SectionProps;
 }
 
@@ -41,26 +43,34 @@ export const Inspector: React.FC<InspectorProps> = ({
   selectedPart,
   onSelectPart,
   onTogglePart,
+  scrollRequest,
   sectionProps,
 }) => {
+  const asideRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Bumped on every chip click, so a second click on the same chip scrolls again.
-  const [scrollTarget, setScrollTarget] = useState<{ id: PartId; n: number } | null>(null);
   const query = settingQuery.trim();
 
+  // The opened section scrolls to the top of the list (on a phone, to just under the pinned
+  // chips), and the pressed chip scrolls sideways into its track.
   useEffect(() => {
-    if (!scrollTarget) return;
-    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-part="${scrollTarget.id}"]`);
-    el?.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-  }, [scrollTarget]);
-
-  const chooseChip = (id: PartId) => {
-    onSelectPart(id);
-    setScrollTarget((prev) => ({ id, n: (prev?.n ?? 0) + 1 }));
-  };
+    if (!scrollRequest) return;
+    const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
+    const section = scrollRef.current?.querySelector<HTMLElement>(`[data-part="${scrollRequest.id}"]`);
+    section?.scrollIntoView({ block: 'start', behavior });
+    // The track is scrolled by hand: scrollIntoView on the chip would also scroll the sheet
+    // and cut the section's scroll short.
+    const track = asideRef.current?.querySelector<HTMLElement>('.parts-row-track');
+    const chip = track?.querySelector<HTMLElement>(`[data-ph-capture-attribute-part="${scrollRequest.id}"]`);
+    if (!track || !chip) return;
+    const fade = 16; // the track's 1 rem edge fade
+    const t = track.getBoundingClientRect();
+    const c = chip.getBoundingClientRect();
+    const dx = c.left < t.left + fade ? c.left - t.left - fade : c.right > t.right - fade ? c.right - t.right + fade : 0;
+    if (dx !== 0) track.scrollBy({ left: dx, behavior });
+  }, [scrollRequest]);
 
   return (
-    <aside className="inspector" aria-label="Settings">
+    <aside className="inspector" aria-label="Settings" ref={asideRef}>
       <div className="inspect-head">
         <TemplatePopover category={category} templateId={templateId} onSelectTemplate={onSelectTemplate} />
         <div className="inspect-search">
@@ -84,7 +94,7 @@ export const Inspector: React.FC<InspectorProps> = ({
           )}
         </div>
       </div>
-      <PartsRow parts={parts} selected={selectedPart} onSelect={chooseChip} />
+      <PartsRow parts={parts} selected={selectedPart} onSelect={onSelectPart} />
 
       <div className="inspect-scroll" ref={scrollRef}>
         {visibleParts.map((part) => {
