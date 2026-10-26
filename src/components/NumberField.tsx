@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DisplayUnit } from '../engine/types';
+import { formatFromMm as formatDraft, parseDraft, toMm as draftToMm, type DraftUnit } from './numberDraft';
 
 interface NumberFieldProps {
   /** Current value in millimeters (or raw count when isRawCount is true) */
@@ -37,20 +38,9 @@ export const NumberField: React.FC<NumberFieldProps> = ({
   className,
   ariaLabel,
 }) => {
-  const isInch = !isRawCount && displayUnit === 'in';
-
-  const formatFromMm = (mm: number): string => {
-    if (isRawCount) return String(Math.round(mm));
-    const v = isInch
-      ? Number((mm / 25.4).toFixed(inDecimals))
-      : Number(mm.toFixed(mmDecimals));
-    return String(v);
-  };
-
-  const toMm = (displayVal: number): number => {
-    if (isRawCount) return Math.round(displayVal);
-    return isInch ? Number((displayVal * 25.4).toFixed(3)) : displayVal;
-  };
+  const unit: DraftUnit = { displayUnit, inDecimals, mmDecimals, isRawCount, minMm, maxMm };
+  const formatFromMm = (mm: number): string => formatDraft(mm, unit);
+  const toMm = (displayVal: number): number => draftToMm(displayVal, unit);
 
   const [draft, setDraft] = useState<string>(() => formatFromMm(valueMm));
   const [isFocused, setIsFocused] = useState<boolean>(false);
@@ -62,17 +52,15 @@ export const NumberField: React.FC<NumberFieldProps> = ({
     }
   }, [valueMm, displayUnit, isFocused, isRawCount, inDecimals, mmDecimals]);
 
+  // A blur without an edit commits nothing, so it never clears a preset or rounds the value.
   const commitDraft = (raw: string) => {
-    const trimmed = raw.trim();
-    const parsed = Number(trimmed);
-    if (trimmed === '' || Number.isNaN(parsed)) {
+    const nextMm = parseDraft(raw, valueMm, unit);
+    if (nextMm === null) {
       setDraft(formatFromMm(valueMm));
       return;
     }
-    const mm = toMm(parsed);
-    const clampedMm = Math.max(minMm, Math.min(maxMm, mm));
-    onChangeMm(clampedMm);
-    setDraft(formatFromMm(clampedMm));
+    onChangeMm(nextMm);
+    setDraft(formatFromMm(nextMm));
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
