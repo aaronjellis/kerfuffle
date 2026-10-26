@@ -74,8 +74,20 @@ export function computePrintBoxDims(
   const outerW = innerW + 2 * wall;
   const outerD = innerD + 2 * wall;
 
+  const hole = params.hingePinDiameterMm + PIN_CLEARANCE;
+  const R = Math.max(MIN_HINGE_R, hole / 2 + wall);
+
   // One lid-height clamp for the whole 3D box. The base interior never drops below 5 mm.
-  const lidInner = Math.min(innerH - 8, Math.max(10, params.lidHeightMm));
+  let lidInner = Math.min(innerH - 8, Math.max(10, params.lidHeightMm));
+  // The knuckle's fill prism reaches 2R below the lid rim, so the lid must be at least 2R + 1 tall
+  // to keep it above the bed. Raise the lid into the base if the base keeps its 5 mm interior;
+  // otherwise the box is too small for the hinge and it is dropped.
+  let hingeFits = params.include3dHinge;
+  const hingeLidInner = 2 * R + 1 - floor;
+  if (hingeFits && lidInner < hingeLidInner) {
+    if (innerH - hingeLidInner >= MIN_BASE_INNER_H) lidInner = hingeLidInner;
+    else hingeFits = false;
+  }
   const baseH = Math.max(innerH - lidInner + floor, floor + MIN_BASE_INNER_H);
   const lidH = lidInner + floor;
 
@@ -83,9 +95,7 @@ export function computePrintBoxDims(
   const rIn = Math.min(params.innerFilletMm, Math.max(0.5, rOut - wall * 0.5));
 
   let hinge: PrintBoxDims['hinge'] = null;
-  if (params.include3dHinge) {
-    const hole = params.hingePinDiameterMm + PIN_CLEARANCE;
-    const R = Math.max(MIN_HINGE_R, hole / 2 + wall);
+  if (hingeFits) {
     const runLen = Math.max(8, Math.min(outerW - 2 * (rOut + 2), 0.6 * outerW));
     const n = runLen < 24 ? 2 : Math.max(3, oddUp(Math.round(runLen / 14)));
     const knuckleW = (runLen - (n - 1) * KNUCKLE_GAP) / n;
@@ -268,6 +278,8 @@ export function buildShellPieces(
   return pieces;
 }
 
+// The bore is an inscribed 24-gon, so its effective diameter is hole * cos(7.5 deg): about 0.23 mm
+// clearance on a 1.75 mm pin, not the nominal 0.25.
 const KNUCKLE_SEGMENTS = 24;
 
 /** `n` points on a circle of radius `r` centred at (cx, cy), counter-clockwise. */

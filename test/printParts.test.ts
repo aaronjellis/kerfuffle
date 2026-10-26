@@ -242,6 +242,8 @@ describe('knuckle hinge pieces', () => {
           minR = Math.min(minR, Math.hypot(pos.getY(i) - h.axisY, pos.getZ(i) - rim));
         }
         expect(minR).toBeGreaterThan(h.hole / 2 - 0.01);
+        // A solid 24-gon has vertices only at R; the inscribed bore puts them exactly at hole/2.
+        expect(minR).toBeCloseTo(h.hole / 2, 2);
       }
     }
   });
@@ -281,6 +283,23 @@ describe('knuckle hinge pieces', () => {
         expect(vol).toBeGreaterThan(0);
       }
     }
+  });
+
+  it('drops the hinge when the lid cannot be raised to 2R + 1', () => {
+    // wall 8 -> R 9, lid needs 19; a 20 mm interior cannot keep the base's 5 mm.
+    const t = computePrintBoxDims({ ...p, wallThickness3dMm: 8 }, 30, 30, 20);
+    expect(t.hinge).toBeNull();
+    expect(buildHingePieces(t, 'lid')).toEqual([]);
+  });
+
+  it('raises the lid so its knuckle fill stays above the bed', () => {
+    // wall 6 -> R 7, lid needs 15; lidHeightMm 10 gives only 12.
+    const t = computePrintBoxDims({ ...p, wallThickness3dMm: 6, lidHeightMm: 10 }, 60, 60, 40);
+    expect(t.hinge).not.toBeNull();
+    expect(t.lidH).toBeCloseTo(2 * t.hinge!.R + 1, 6);
+    expect(t.baseH + t.lidH).toBeCloseTo(40 + 2 * t.floor, 6);
+    expect(t.baseH - t.floor).toBeGreaterThanOrEqual(5);
+    expect(unionBox(buildHingePieces(t, 'lid')).min.z).toBeGreaterThanOrEqual(-1e-9);
   });
 
   it('returns no pieces when the hinge is off', () => {
