@@ -306,7 +306,7 @@ export const DEFAULT_BOX_PARAMETERS: BoxParameters = {
   clamshellHingeType: 'butt-hardware',
   hingeFingerWidthMm: 8,
   includeHingeScrewHoles: true,
-  hingePinDiameterMm: 2.0,
+  hingePinDiameterMm: 1.75,
   livingHingePitchMm: 2.5,
   livingHingeAttachMode: 'one-piece-back',
   dividerCols: 2,
