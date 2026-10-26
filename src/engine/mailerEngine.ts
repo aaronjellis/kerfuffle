@@ -1,4 +1,4 @@
-import type { BoxPanel2D, BoxParameters, DielinePath, Panel3DTransform } from './types';
+import type { BoxPanel2D, BoxParameters, DielinePath, Panel3DTransform, Point2D } from './types';
 import { buildScoreLinePaths } from './cardboardEngine';
 import { fmt, pointsToSvgPath } from './fingerJointEngine';
 
@@ -189,6 +189,30 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
 /** Crease insets shared by the perimeter and the creases: ears and inner wall 1.5T, roll strip T. */
 const insetsFor = (T: number) => ({ earInset: 1.5 * T, innerInset: 1.5 * T, rollInset: T });
 
+const rectPoints = (x: number, y: number, w: number, h: number): Point2D[] => [
+  { x, y },
+  { x: x + w, y },
+  { x: x + w, y: y + h },
+  { x, y: y + h },
+];
+
+/** The lock tab as cut on the tuck flap: null for the tuck style or when too small to cut. */
+const cutLockTab = (s: MailerSpans) => (s.lock && s.lock.tabLen >= 4 && s.lock.tabW >= 2 ? s.lock : null);
+
+/**
+ * The four floor slots in floor-local coordinates (x from the left side crease, y from the back
+ * crease), each `slot.width × slot.len`. Shared by the 2D sheet and the 3D floor.
+ */
+function floorSlotRects(s: MailerSpans): { id: string; x: number; y: number }[] {
+  return s.tab.centers.flatMap((c, i) => {
+    const y = c * s.floorD - s.slot.len / 2;
+    return [
+      { id: `l-${i + 1}`, x: s.slot.inset },
+      { id: `r-${i + 1}`, x: s.floorW - s.slot.inset - s.slot.width },
+    ].map((r) => ({ ...r, y }));
+  });
+}
+
 /** A perimeter vertex; `q` is the control point of a quadratic arriving at it, `arc` an arc arriving at it. */
 interface PerimNode {
   x: number;
@@ -209,7 +233,7 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
   const nodes: PerimNode[] = [];
 
   // Tuck flap, with a lock tab on its side edge for the front lock (omitted when too small to cut).
-  const lockTab = s.lock && s.lock.tabLen >= 4 && s.lock.tabW >= 2 ? s.lock : null;
+  const lockTab = cutLockTab(s);
   const tabTop = lockTab ? y.lidTop - lockTab.tabLen : y.lidTop;
   const rc = lockTab ? Math.max(0, Math.min(s.tuckR, tabTop - y.tuckTop)) : s.tuckR;
   nodes.push({ x: tx1 - rc, y: y.tuckTop });
@@ -345,20 +369,10 @@ export function buildMailerSheet(
   const paths: DielinePath[] = [{ id: 'mailer-perimeter-cut', layer: 'cut', d: perimeterPath(s), closed: true }];
 
   // Floor slots that take the inner wall's tabs.
-  s.tab.centers.forEach((c, i) => {
-    const yc = y.floorTop + c * s.floorD;
-    const y0 = yc - s.slot.len / 2;
-    const y1 = yc + s.slot.len / 2;
-    const rect = (x0: number) =>
-      pointsToSvgPath([
-        { x: x0, y: y0 },
-        { x: x0 + s.slot.width, y: y0 },
-        { x: x0 + s.slot.width, y: y1 },
-        { x: x0, y: y1 },
-      ]);
-    paths.push({ id: `mailer-slot-l-${i + 1}`, layer: 'cut', d: rect(fl + s.slot.inset), closed: true });
-    paths.push({ id: `mailer-slot-r-${i + 1}`, layer: 'cut', d: rect(fr - s.slot.inset - s.slot.width), closed: true });
-  });
+  for (const r of floorSlotRects(s)) {
+    const d = pointsToSvgPath(rectPoints(fl + r.x, y.floorTop + r.y, s.slot.width, s.slot.len));
+    paths.push({ id: `mailer-slot-${r.id}`, layer: 'cut', d, closed: true });
+  }
 
   // Front lock: a slit down each front ear crease, starting where the perimeter leaves the crease.
   if (s.lock && s.lock.slitLen > earInset) {
@@ -437,9 +451,32 @@ export function generateMailerBox(
   };
 }
 
+/** Where a panel's centre lies with every fold in its chain at `flatAngleRad`: its place on the flat blank. */
+function flatPosition(p: Panel3DTransform, byId: Map<string, Panel3DTransform>): [number, number, number] {
+  let [x, y, z] = p.closedPos;
+  let cur: Panel3DTransform | undefined = p;
+  while (cur?.foldRig) {
+    const { pivotOffset, axis, flatAngleRad, parentId }: NonNullable<Panel3DTransform['foldRig']> = cur.foldRig;
+    const [px, py, pz] = pivotOffset;
+    const [rx, ry, rz] = [x - px, y - py, z - pz];
+    const c = Math.cos(flatAngleRad);
+    const s = Math.sin(flatAngleRad);
+    if (axis === 'x') [y, z] = [py + ry * c - rz * s, pz + ry * s + rz * c];
+    else if (axis === 'y') [x, z] = [px + rx * c + rz * s, pz - rx * s + rz * c];
+    else [x, y] = [px + rx * c - ry * s, py + rx * s + ry * c];
+    cur = parentId ? byId.get(parentId) : undefined;
+  }
+  return [x, y, z];
+}
+
 /**
- * Stop-gap 3D fold rig carried over from the retired generator so the suite stays green.
- * Task 4 replaces it with a rig built from the spans.
+ * The roll-end mailer's 3D fold rig, built from the same ply-model spans as the 2D sheet.
+ *
+ * Every pivot sits where the parent's and the child's mid-planes meet, so with every fold
+ * at `flatAngleRad` the whole rig lies in the floor's mid-plane. The floor's mid-plane is at
+ * `y = −H/2` (the plane the flat blank lies in); the floor top is `T/2` above it and the lid
+ * underside is `H` above the floor top. Inner walls' inner faces sit at `x = ±W/2`, the back
+ * wall's inner face and the tuck flap's inner face are `D` apart.
  */
 export function buildMailerRig(
   spans: MailerSpans,
@@ -448,299 +485,278 @@ export function buildMailerRig(
   D: number,
   H: number,
 ): Panel3DTransform[] {
-  const { T, earW, earH, roll, innerSideH, tuckH, tuckW } = spans;
-  return [
-    {
-      id: 'bottom',
-      name: 'Bottom Floor',
-      faceId: 'bottom',
-      widthMm: W,
-      heightMm: D,
-      thicknessMm: T,
-      color: '#c69c6d',
-      closedPos: [0, -H / 2, 0],
-      explodedPos: [0, -H / 2, 0],
-      rotation: [Math.PI / 2, 0, 0],
-    },
-    {
-      id: 'front',
-      name: 'Front Wall',
-      faceId: 'front',
-      widthMm: W,
-      heightMm: H,
-      thicknessMm: T,
-      color: '#d1a778',
-      closedPos: [0, 0, D / 2],
-      explodedPos: [0, -H / 2, D / 2 + H / 2],
-      rotation: [0, 0, 0],
-      foldRig: {
-        pivotOffset: [0, -H / 2, D / 2],
-        axis: 'x',
-        flatAngleRad: Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.0, 0.24],
-      },
-    },
-    {
-      id: 'back',
-      name: 'Back Spine',
-      faceId: 'back',
-      widthMm: W,
-      heightMm: H,
-      thicknessMm: T,
-      color: '#d1a778',
-      closedPos: [0, 0, -D / 2],
-      explodedPos: [0, -H / 2, -D / 2 - H / 2],
-      rotation: [0, Math.PI, 0],
-      foldRig: {
-        pivotOffset: [0, -H / 2, -D / 2],
-        axis: 'x',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.0, 0.24],
-      },
-    },
-    // 4 Side Dust Flaps (attached to Back & Front walls; fold 90° inward after Front & Back reach vertical at t = 0.24)
-    {
-      id: 'back-dust-l',
-      name: 'Left Back Dust Flap',
-      faceId: 'back',
-      widthMm: earW,
-      heightMm: earH,
-      thicknessMm: T,
-      color: '#b88c5d',
-      closedPos: [-W / 2, 0, -D / 2 + earW / 2],
-      explodedPos: [-W / 2 - earW / 2, -H / 2, -D / 2 - H / 2],
-      rotation: [0, -Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'back',
-        pivotOffset: [-W / 2, 0, -D / 2],
-        axis: 'y',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.24, 0.44],
-      },
-    },
-    {
-      id: 'back-dust-r',
-      name: 'Right Back Dust Flap',
-      faceId: 'back',
-      widthMm: earW,
-      heightMm: earH,
-      thicknessMm: T,
-      color: '#b88c5d',
-      closedPos: [W / 2, 0, -D / 2 + earW / 2],
-      explodedPos: [W / 2 + earW / 2, -H / 2, -D / 2 - H / 2],
-      rotation: [0, Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'back',
-        pivotOffset: [W / 2, 0, -D / 2],
-        axis: 'y',
-        flatAngleRad: Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.24, 0.44],
-      },
-    },
-    {
-      id: 'front-dust-l',
-      name: 'Left Front Dust Flap',
-      faceId: 'front',
-      widthMm: earW,
-      heightMm: earH,
-      thicknessMm: T,
-      color: '#b88c5d',
-      closedPos: [-W / 2, 0, D / 2 - earW / 2],
-      explodedPos: [-W / 2 - earW / 2, -H / 2, D / 2 + H / 2],
-      rotation: [0, -Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'front',
-        pivotOffset: [-W / 2, 0, D / 2],
-        axis: 'y',
-        flatAngleRad: Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.24, 0.44],
-      },
-    },
-    {
-      id: 'front-dust-r',
-      name: 'Right Front Dust Flap',
-      faceId: 'front',
-      widthMm: earW,
-      heightMm: earH,
-      thicknessMm: T,
-      color: '#b88c5d',
-      closedPos: [W / 2, 0, D / 2 - earW / 2],
-      explodedPos: [W / 2 + earW / 2, -H / 2, D / 2 + H / 2],
-      rotation: [0, Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'front',
-        pivotOffset: [W / 2, 0, D / 2],
-        axis: 'y',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.24, 0.44],
-      },
-    },
-    // Left & Right Outer Walls + Rollover Bridges + Inner Rollover Walls
-    {
-      id: 'left',
-      name: 'Left Outer Wall',
-      faceId: 'left',
-      widthMm: D,
-      heightMm: H,
-      thicknessMm: T,
+  const s = spans;
+  const { T } = s;
+  const hp = Math.PI / 2;
+
+  // Mid-planes, all from the spans.
+  const yFloor = -H / 2;
+  const yLid = yFloor + s.backH; // the back wall reaches from the floor's mid-plane to the lid's
+  const yRoll = yFloor + s.outerSideH; // roll bridge: top of the outer wall
+  const yBack = yFloor + s.backH / 2;
+  const yFront = yFloor + s.frontH / 2;
+  const xOuter = s.floorW / 2; // outer wall straddles the floor's side crease
+  const xEar = xOuter - T; // dust ear, just inside the outer wall
+  const xLidFlap = xOuter - 2 * T; // lid flap, between the ear and the inner wall
+  const xInner = xOuter - s.roll; // inner wall: W/2 + T/2
+  const zBack = -s.floorD / 2;
+  const zFront = s.floorD / 2;
+  const zTuck = zFront - T; // tuck flap, just inside the front wall
+  const zLidBack = zBack - T / 2; // lid runs lidD forward from the back wall's outer face
+  const zLidFront = zLidBack + s.lidD;
+
+  // Floor: slots match the 2D sheet. Rotation +π/2 about x puts local y=0 at the front edge.
+  const floorHoles = floorSlotRects(s).map((r) =>
+    rectPoints(r.x, s.floorD - r.y - s.slot.len, s.slot.width, s.slot.len),
+  );
+
+  // Inner wall with its two tabs past the free (bottom) edge. Local x runs back to front on
+  // the left wall (−π/2 about y) and front to back on the right (+π/2).
+  const innerOutline = (sx: number): Point2D[] => {
+    const w = s.innerSideLen;
+    const h = s.innerSideH;
+    const { len, depth } = s.tab;
+    const ch = Math.min(s.tab.chamfer, depth, len / 2);
+    const centers = s.tab.centers
+      .map((c) => {
+        const z = zBack + c * s.floorD;
+        return sx < 0 ? w / 2 + z : w / 2 - z;
+      })
+      .sort((a, b) => b - a);
+    const pts: Point2D[] = [
+      { x: 0, y: 0 },
+      { x: w, y: 0 },
+      { x: w, y: h },
+    ];
+    for (const pc of centers) {
+      const t0 = pc - len / 2;
+      const t1 = pc + len / 2;
+      pts.push(
+        { x: t1, y: h },
+        { x: t1, y: h + depth - ch },
+        { x: t1 - ch, y: h + depth },
+        { x: t0 + ch, y: h + depth },
+        { x: t0, y: h + depth - ch },
+        { x: t0, y: h },
+      );
+    }
+    pts.push({ x: 0, y: h });
+    return pts;
+  };
+
+  const panels: Panel3DTransform[] = [];
+  const add = (p: Omit<Panel3DTransform, 'thicknessMm' | 'explodedPos'>) =>
+    panels.push({ ...p, thicknessMm: T, explodedPos: p.closedPos });
+  const sides = [
+    ['l', 'Left', -1],
+    ['r', 'Right', 1],
+  ] as const;
+
+  add({
+    id: 'bottom',
+    name: 'Bottom Floor',
+    faceId: 'bottom',
+    widthMm: s.floorW,
+    heightMm: s.floorD,
+    color: '#c69c6d',
+    closedPos: [0, yFloor, 0],
+    rotation: [hp, 0, 0],
+    outlinePoints: rectPoints(0, 0, s.floorW, s.floorD),
+    holeContours: floorHoles,
+  });
+  add({
+    id: 'front',
+    name: 'Front Wall',
+    faceId: 'front',
+    widthMm: s.floorW,
+    heightMm: s.frontH,
+    color: '#d1a778',
+    closedPos: [0, yFront, zFront],
+    rotation: [0, 0, 0],
+    foldRig: { pivotOffset: [0, yFloor, zFront], axis: 'x', flatAngleRad: hp, foldedAngleRad: 0, stage: [0, 0.22] },
+  });
+  add({
+    id: 'back',
+    name: 'Back Spine',
+    faceId: 'back',
+    widthMm: s.floorW,
+    heightMm: s.backH,
+    color: '#d1a778',
+    closedPos: [0, yBack, zBack],
+    rotation: [0, Math.PI, 0],
+    foldRig: { pivotOffset: [0, yFloor, zBack], axis: 'x', flatAngleRad: -hp, foldedAngleRad: 0, stage: [0, 0.22] },
+  });
+
+  // Dust ears fold in about a vertical axis, landing between the outer and inner walls.
+  if (s.earW > 0 && s.earH > 0) {
+    for (const [wall, wallName, z, y, dir] of [
+      ['back', 'Back', zBack, yBack, 1],
+      ['front', 'Front', zFront, yFront, -1],
+    ] as const) {
+      for (const [side, sideName, sx] of sides) {
+        add({
+          id: `${wall}-dust-${side}`,
+          name: `${sideName} ${wallName} Dust Flap`,
+          faceId: wall,
+          widthMm: s.earW,
+          heightMm: s.earH,
+          color: '#b88c5d',
+          closedPos: [sx * xEar, y, z + (dir * s.earW) / 2],
+          rotation: [0, sx * hp, 0],
+          foldRig: {
+            parentId: wall,
+            pivotOffset: [sx * xEar, y, z],
+            axis: 'y',
+            flatAngleRad: dir * sx * hp,
+            foldedAngleRad: 0,
+            stage: [0.22, 0.4],
+          },
+        });
+      }
+    }
+  }
+
+  // Side columns: outer wall, roll bridge, inner wall with tabs.
+  for (const [side, sideName, sx] of sides) {
+    const wall = side === 'l' ? 'left' : 'right';
+    add({
+      id: wall,
+      name: `${sideName} Outer Wall`,
+      faceId: wall,
+      widthMm: s.floorD,
+      heightMm: s.outerSideH,
       color: '#bc9162',
-      closedPos: [-W / 2, 0, 0],
-      explodedPos: [-W / 2 - H / 2, -H / 2, 0],
-      rotation: [0, -Math.PI / 2, 0],
-      foldRig: {
-        pivotOffset: [-W / 2, -H / 2, 0],
-        axis: 'z',
-        flatAngleRad: Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.30, 0.55],
-      },
-    },
-    {
-      id: 'left-roll-bridge',
-      name: 'Left Rollover Top Bridge',
-      faceId: 'left',
-      widthMm: roll,
-      heightMm: D,
-      thicknessMm: T,
+      closedPos: [sx * xOuter, yFloor + s.outerSideH / 2, 0],
+      rotation: [0, sx * hp, 0],
+      foldRig: { pivotOffset: [sx * xOuter, yFloor, 0], axis: 'z', flatAngleRad: -sx * hp, foldedAngleRad: 0, stage: [0.3, 0.52] },
+    });
+    add({
+      id: `${wall}-roll-bridge`,
+      name: `${sideName} Rollover Top Bridge`,
+      faceId: wall,
+      widthMm: s.roll,
+      heightMm: s.rollLen,
       color: '#b38758',
-      closedPos: [-W / 2 + roll / 2, H / 2, 0],
-      explodedPos: [-W / 2 - H - roll / 2, -H / 2, 0],
-      rotation: [Math.PI / 2, 0, 0],
+      closedPos: [sx * (xOuter - s.roll / 2), yRoll, 0],
+      rotation: [hp, 0, 0],
       foldRig: {
-        parentId: 'left',
-        pivotOffset: [-W / 2, H / 2, 0],
+        parentId: wall,
+        pivotOffset: [sx * xOuter, yRoll, 0],
         axis: 'z',
-        flatAngleRad: Math.PI / 2,
+        flatAngleRad: -sx * hp,
         foldedAngleRad: 0,
-        stage: [0.48, 0.72],
+        stage: [0.48, 0.66],
       },
-    },
-    {
-      id: 'left-roll-inner',
-      name: 'Left Inner Rollover Wall',
-      faceId: 'left',
-      widthMm: D,
-      heightMm: innerSideH,
-      thicknessMm: T,
+    });
+    add({
+      id: `${wall}-roll-inner`,
+      name: `${sideName} Inner Rollover Wall`,
+      faceId: wall,
+      widthMm: s.innerSideLen,
+      heightMm: s.innerSideH,
       color: '#ab7f50',
-      closedPos: [-W / 2 + roll, H / 2 - innerSideH / 2, 0],
-      explodedPos: [-W / 2 - H - roll - innerSideH / 2, -H / 2, 0],
-      rotation: [0, -Math.PI / 2, 0],
+      closedPos: [sx * xInner, yRoll - s.innerSideH / 2, 0],
+      rotation: [0, sx * hp, 0],
+      outlinePoints: innerOutline(sx),
       foldRig: {
-        parentId: 'left-roll-bridge',
-        pivotOffset: [-W / 2 + roll, H / 2, 0],
+        parentId: `${wall}-roll-bridge`,
+        pivotOffset: [sx * xInner, yRoll, 0],
         axis: 'z',
-        flatAngleRad: Math.PI / 2,
+        flatAngleRad: -sx * hp,
         foldedAngleRad: 0,
-        stage: [0.54, 0.78],
+        stage: [0.54, 0.74],
       },
+    });
+  }
+
+  add({
+    id: 'top',
+    name: 'Mailer Lid Top',
+    faceId: 'top',
+    widthMm: s.floorW,
+    heightMm: s.lidD,
+    color: '#dbb386',
+    closedPos: [0, yLid, (zLidBack + zLidFront) / 2],
+    rotation: [-hp, 0, 0],
+    foldRig: {
+      parentId: 'back',
+      pivotOffset: [0, yLid, zBack],
+      axis: 'x',
+      flatAngleRad: -hp,
+      foldedAngleRad: 0,
+      stage: [0.6, 0.86],
     },
-    {
-      id: 'right',
-      name: 'Right Outer Wall',
-      faceId: 'right',
-      widthMm: D,
-      heightMm: H,
-      thicknessMm: T,
-      color: '#bc9162',
-      closedPos: [W / 2, 0, 0],
-      explodedPos: [W / 2 + H / 2, -H / 2, 0],
-      rotation: [0, Math.PI / 2, 0],
-      foldRig: {
-        pivotOffset: [W / 2, -H / 2, 0],
-        axis: 'z',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.30, 0.55],
-      },
+  });
+
+  // Lid side flaps start T behind the lid's front edge, as on the sheet, and hang inside the roll.
+  if (s.lidFlapDepth > 0) {
+    const z = zLidFront - T - s.lidFlapLen / 2;
+    for (const [side, sideName, sx] of sides) {
+      add({
+        id: `lid-flap-${side}`,
+        name: `${sideName} Lid Flap`,
+        faceId: `lid-flap-${side}`,
+        widthMm: s.lidFlapLen,
+        heightMm: s.lidFlapDepth,
+        color: '#c9a073',
+        closedPos: [sx * xLidFlap, yLid - s.lidFlapDepth / 2, z],
+        rotation: [0, sx * hp, 0],
+        foldRig: {
+          parentId: 'top',
+          pivotOffset: [sx * xLidFlap, yLid, z],
+          axis: 'z',
+          flatAngleRad: sx * hp,
+          foldedAngleRad: 0,
+          stage: [0.5, 0.64],
+        },
+      });
+    }
+  }
+
+  add({
+    id: 'tuck-flap',
+    name: 'Inner Tuck Flap (Inside Front Wall)',
+    faceId: 'tuck-flap',
+    widthMm: s.tuckW,
+    heightMm: s.tuckH,
+    color: '#b5895a',
+    closedPos: [0, yLid - s.tuckH / 2, zTuck],
+    rotation: [0, 0, 0],
+    foldRig: {
+      parentId: 'top',
+      pivotOffset: [0, yLid, zTuck],
+      axis: 'x',
+      flatAngleRad: -hp,
+      foldedAngleRad: 0,
+      stage: [0.5, 0.7],
     },
-    {
-      id: 'right-roll-bridge',
-      name: 'Right Rollover Top Bridge',
-      faceId: 'right',
-      widthMm: roll,
-      heightMm: D,
-      thicknessMm: T,
-      color: '#b38758',
-      closedPos: [W / 2 - roll / 2, H / 2, 0],
-      explodedPos: [W / 2 + H + roll / 2, -H / 2, 0],
-      rotation: [Math.PI / 2, 0, 0],
-      foldRig: {
-        parentId: 'right',
-        pivotOffset: [W / 2, H / 2, 0],
-        axis: 'z',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.48, 0.72],
-      },
-    },
-    {
-      id: 'right-roll-inner',
-      name: 'Right Inner Rollover Wall',
-      faceId: 'right',
-      widthMm: D,
-      heightMm: innerSideH,
-      thicknessMm: T,
-      color: '#ab7f50',
-      closedPos: [W / 2 - roll, H / 2 - innerSideH / 2, 0],
-      explodedPos: [W / 2 + H + roll + innerSideH / 2, -H / 2, 0],
-      rotation: [0, Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'right-roll-bridge',
-        pivotOffset: [W / 2 - roll, H / 2, 0],
-        axis: 'z',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.54, 0.78],
-      },
-    },
-    {
-      id: 'top',
-      name: 'Mailer Lid Top',
-      faceId: 'top',
-      widthMm: W,
-      heightMm: D,
-      thicknessMm: T,
-      color: '#dbb386',
-      closedPos: [0, H / 2, 0],
-      explodedPos: [0, -H / 2, -D / 2 - H - D / 2],
-      rotation: [-Math.PI / 2, 0, 0],
-      foldRig: {
-        parentId: 'back',
-        pivotOffset: [0, H / 2, -D / 2],
-        axis: 'x',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.54, 0.82],
-      },
-    },
-    {
-      id: 'tuck-flap',
-      name: 'Inner Tuck Flap (Inside Front Wall)',
-      faceId: 'tuck-flap',
-      widthMm: tuckW,
-      heightMm: tuckH,
-      thicknessMm: T,
-      color: '#b5895a',
-      // Sits INSIDE the box at Z = D/2 - T (behind Front Wall at Z = D/2)
-      closedPos: [0, H / 2 - tuckH / 2, D / 2 - T],
-      explodedPos: [0, -H / 2, -D / 2 - H - D - tuckH / 2],
-      rotation: [0, 0, 0],
-      foldRig: {
-        parentId: 'top',
-        pivotOffset: [0, H / 2, D / 2 - T],
-        axis: 'x',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        // Folds down FIRST before the lid finishes closing and before the front locking tab folds inward!
-        stage: [0.46, 0.72],
-      },
-    },
-  ];
+  });
+
+  // Front-lock tabs on the tuck flap's side edges, at its root, folding back into the box.
+  const lock = cutLockTab(s);
+  if (lock) {
+    for (const [side, sideName, sx] of sides) {
+      add({
+        id: `lock-tab-${side}`,
+        name: `${sideName} Front Lock Tab`,
+        faceId: `lock-tab-${side}`,
+        widthMm: lock.tabW,
+        heightMm: lock.tabLen,
+        color: '#a87c4f',
+        closedPos: [(sx * s.tuckW) / 2, yLid - lock.tabLen / 2, zTuck - lock.tabW / 2],
+        rotation: [0, sx * hp, 0],
+        foldRig: {
+          parentId: 'tuck-flap',
+          pivotOffset: [(sx * s.tuckW) / 2, yLid, zTuck],
+          axis: 'y',
+          flatAngleRad: -sx * hp,
+          foldedAngleRad: 0,
+          stage: [0.62, 0.76],
+        },
+      });
+    }
+  }
+
+  const byId = new Map(panels.map((p) => [p.id, p]));
+  return panels.map((p) => ({ ...p, explodedPos: flatPosition(p, byId) }));
 }

@@ -232,3 +232,40 @@ describe('mailer perimeter geometry', () => {
     });
   });
 });
+
+describe('mailer 3D rig', () => {
+  const closed = (m: ReturnType<typeof generateBoxModel>, id: string) => m.panels3D.find((p) => p.id === id)!;
+  it('folds to the typed inner size at T=1.5 and T=3', () => {
+    for (const T of [1.5, 3]) {
+      const m = generateBoxModel({ ...base, widthMm: 110, depthMm: 80, heightMm: 55, materialThicknessMm: T });
+      const li = closed(m, 'left-roll-inner'), ri = closed(m, 'right-roll-inner');
+      expect(ri.closedPos[0] - li.closedPos[0] - T).toBeCloseTo(110, 1);
+      const back = closed(m, 'back'), tuck = closed(m, 'tuck-flap');
+      expect(tuck.closedPos[2] - T / 2 - (back.closedPos[2] + T / 2)).toBeCloseTo(80, 1);
+      const floor = closed(m, 'bottom'), top = closed(m, 'top');
+      expect(top.closedPos[1] - T / 2 - (floor.closedPos[1] + T / 2)).toBeCloseTo(55, 1);
+    }
+  });
+  it('cuts four slots through the floor and puts tabs on the inner walls', () => {
+    const m = generateBoxModel({ ...base });
+    expect(closed(m, 'bottom').holeContours).toHaveLength(4);
+    const inner = closed(m, 'left-roll-inner');
+    const maxY = Math.max(...inner.outlinePoints!.map((p) => p.y));
+    expect(maxY).toBeGreaterThan(inner.heightMm + 1);
+  });
+  it('adds lid flaps and lock tabs as children, and drops them when off', () => {
+    const on = generateBoxModel({ ...base, includeLidFlaps: true, cardboardLockStyle: 'front-lock' });
+    expect(closed(on, 'lid-flap-l').foldRig?.parentId).toBe('top');
+    expect(closed(on, 'lock-tab-l').foldRig?.parentId).toBe('tuck-flap');
+    const off = generateBoxModel({ ...base, includeLidFlaps: false, cardboardLockStyle: 'tuck' });
+    expect(off.panels3D.some((p) => p.id.startsWith('lid-flap-') || p.id.startsWith('lock-tab-'))).toBe(false);
+  });
+  it('every child names an existing parent and stages lie in 0..1', () => {
+    const m = generateBoxModel({ ...base, cardboardLockStyle: 'front-lock' });
+    const ids = new Set(m.panels3D.map((p) => p.id));
+    for (const p of m.panels3D) {
+      if (p.foldRig?.parentId) expect(ids.has(p.foldRig.parentId)).toBe(true);
+      if (p.foldRig) expect(p.foldRig.stage[0]).toBeLessThan(p.foldRig.stage[1]);
+    }
+  });
+});
