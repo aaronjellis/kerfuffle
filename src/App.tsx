@@ -134,6 +134,8 @@ export const App: React.FC = () => {
 
   /** A face or an artwork picked in 2D becomes the artwork target app-wide: Artwork opens and 3D highlights it. */
   const handlePickFace2D = (faceId: string) => {
+    // A drag on the artwork already selected is not a new pick: no second part_selected, search clear or scroll.
+    if (faceId === selectedFaceId && selectedPart === 'artwork') return;
     setSelectedFaceId(faceId);
     pickPart('artwork', '2d');
   };
