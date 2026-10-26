@@ -6,14 +6,9 @@ import { Viewport3D } from '../components/Viewport3D';
 import { Viewport2D } from '../components/Viewport2D';
 import { Segmented } from './Field';
 import type { PartId } from './parts';
+import { STAGE_ACCENT_HEX, STAGE_HEX } from './stageColors';
 
 export type ViewMode = 'split' | '3d' | '2d';
-
-/** The 3D scene's clear color. Keep in step with `--stage` in tokens.css. */
-export const STAGE_HEX = '#2b3036';
-
-/** The 3D selection glow. The stage is always dark, so this is the dark-scheme `--accent`. */
-export const STAGE_ACCENT_HEX = '#9fcf52';
 
 interface StageProps {
   model: GeneratedBoxModel;

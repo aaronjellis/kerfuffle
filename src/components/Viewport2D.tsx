@@ -7,6 +7,10 @@ import {
 import { EXPORT_PROFILES, MACHINE_BED_PRESETS } from '../engine/presets';
 import { effectiveLayer, resolveSheetArtworks } from '../engine/exporters';
 import { fmt } from '../engine/fingerJointEngine';
+import { STAGE_ACCENT_HEX } from '../ui/stageColors';
+
+/** A selected panel's wash: the stage accent at low opacity. */
+const STAGE_ACCENT_FILL = `${STAGE_ACCENT_HEX}24`;
 
 interface Viewport2DProps {
   model: GeneratedBoxModel;
@@ -349,10 +353,10 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                 height={panel.safeRect.height}
                 fill={
                   isPanelSelected
-                    ? 'rgba(245, 158, 11, 0.12)'
+                    ? STAGE_ACCENT_FILL
                     : 'rgba(255, 255, 255, 0.02)'
                 }
-                stroke={isPanelSelected ? '#f59e0b' : 'rgba(148, 163, 184, 0.18)'}
+                stroke={isPanelSelected ? STAGE_ACCENT_HEX : 'rgba(148, 163, 184, 0.18)'}
                 strokeWidth={isPanelSelected ? 0.5 : 0.25}
                 strokeDasharray="2 1.5"
               />
@@ -375,17 +379,17 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                       height={sf.height}
                       fill={
                         subSelected
-                          ? 'rgba(245, 158, 11, 0.14)'
+                          ? STAGE_ACCENT_FILL
                           : 'rgba(255, 255, 255, 0.01)'
                       }
-                      stroke={subSelected ? '#f59e0b' : 'transparent'}
+                      stroke={subSelected ? STAGE_ACCENT_HEX : 'transparent'}
                       strokeWidth={0.5}
                     />
                     {params.showGuideLabels2D && !params.scoreInnerFaceLabels && sf.name && (
                       <text
                         x={sf.x + sf.width / 2}
                         y={sf.y + sf.height / 2}
-                        fill={subSelected ? '#fbbf24' : 'rgba(148, 163, 184, 0.45)'}
+                        fill={subSelected ? STAGE_ACCENT_HEX : 'rgba(148, 163, 184, 0.45)'}
                         fontSize="3.8"
                         fontFamily="monospace"
                         textAnchor="middle"
@@ -424,7 +428,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                   <text
                     x={panel.widthMm / 2}
                     y={panel.heightMm / 2}
-                    fill={isPanelSelected ? '#fbbf24' : 'rgba(148, 163, 184, 0.55)'}
+                    fill={isPanelSelected ? STAGE_ACCENT_HEX : 'rgba(148, 163, 184, 0.55)'}
                     fontSize="4.2"
                     fontWeight="600"
                     fontFamily="monospace"
@@ -497,7 +501,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                 width={artwork.widthMm}
                 height={artwork.heightMm}
                 fill="none"
-                stroke={isSelected ? '#f59e0b' : 'rgba(56, 189, 248, 0.55)'}
+                stroke={isSelected ? STAGE_ACCENT_HEX : 'rgba(56, 189, 248, 0.55)'}
                 strokeWidth={isSelected ? 0.55 : 0.3}
                 strokeDasharray={isSelected ? undefined : '1.5 1'}
               />
@@ -507,7 +511,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                   y1={y - 12}
                   x2={sheetCenterX}
                   y2={y + artwork.heightMm + 12}
-                  stroke="#f59e0b"
+                  stroke={STAGE_ACCENT_HEX}
                   strokeWidth={0.35}
                   strokeDasharray="1.5 1"
                   pointerEvents="none"
@@ -519,7 +523,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                   y1={sheetCenterY}
                   x2={x + artwork.widthMm + 12}
                   y2={sheetCenterY}
-                  stroke="#f59e0b"
+                  stroke={STAGE_ACCENT_HEX}
                   strokeWidth={0.35}
                   strokeDasharray="1.5 1"
                   pointerEvents="none"

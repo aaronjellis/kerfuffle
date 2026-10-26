@@ -14,7 +14,8 @@ export function meshPartIdFor(panel: Panel3DTransform, params: MeshParams): stri
 
   if (params.category === 'cardboard-fold') {
     if (id.startsWith('lid-flap-')) return 'flap';
-    if (id === 'tuck-flap' || id.startsWith('lock-tab-')) return 'closure';
+    // The front-lock ears are part of the tuck flap's outline, not panels of their own.
+    if (id === 'tuck-flap') return 'closure';
     if (id.endsWith('-roll-inner')) return 'tabs';
     return panel.faceId;
   }
