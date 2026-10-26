@@ -28,8 +28,10 @@ export interface MailerSpans {
   lidFlapDepth: number; // H - T (0 when flaps off)
   lidFlapLen: number; // D - T
   earW: number; // min(H, D/2 - T)
-  earH: number; // H - 2T
-  tab: { len: number; depth: number; centers: [number, number]; chamfer: 4 };
+  earBackH: number; // H - 2T: backH less an ear inset (1.5T) at each crease
+  earFrontH: number; // frontH - 2 * earInset = H - 2.5T
+  /** chamferEff = min(chamfer, depth, len / 2): the chamfer actually cut on the tab's free corners */
+  tab: { len: number; depth: number; centers: [number, number]; chamfer: 4; chamferEff: number };
   /**
    * centerFromCrease = roll: the inner wall's mid-plane, measured from the floor's side crease.
    * inset = centerFromCrease - width/2: the slot's edge nearest the side crease.
@@ -69,6 +71,12 @@ export interface MailerSpans {
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
 /**
+ * Insets shared by the perimeter, the creases and the rig: ears and inner wall 1.5T, roll strip T,
+ * lid flaps 2T back from the lid's front edge (so in 3D they end flush with the tuck flap's back face).
+ */
+const insetsFor = (T: number) => ({ earInset: 1.5 * T, innerInset: 1.5 * T, rollInset: T, lidFlapSetback: 2 * T });
+
+/**
  * Keeps sideways projections (lid flaps, dust ears) on the blank.
  * `sideReach` is how far they extend past `floorL` and `floorR`. If they would
  * land at a negative x, every x shifts right by that left overflow. `blankW` is
@@ -87,6 +95,7 @@ export function applySideOverflow(
 export function computeMailerSpans(params: BoxParameters, W: number, D: number, H: number): MailerSpans {
   const T = params.materialThicknessMm;
   const roll = 2 * T;
+  const { earInset } = insetsFor(T);
 
   const floorW = W + T + 2 * roll + (params.includeLidFlaps ? 2 * T : 0);
   const floorD = D + 2 * T;
@@ -101,11 +110,15 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   const lidFlapDepth = params.includeLidFlaps ? H - T : 0;
   const earW = Math.min(H, D / 2 - T);
 
+  const tabLen = clamp(D / 4, 14, 26);
+  const tabDepth = Math.min(T + 5, innerSideH - 2);
+  const tabChamfer = 4;
   const tab: MailerSpans['tab'] = {
-    len: clamp(D / 4, 14, 26),
-    depth: Math.min(T + 5, innerSideH - 2),
+    len: tabLen,
+    depth: tabDepth,
     centers: [0.25, 0.75],
-    chamfer: 4,
+    chamfer: tabChamfer,
+    chamferEff: Math.min(tabChamfer, tabDepth, tabLen / 2),
   };
   // The slot is centred under the inner wall's mid-plane, which sits `roll` in from the side crease.
   const slotWidth = T + 0.5;
@@ -125,7 +138,7 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     const capped = Math.min(params.lockTabWidthMm, upper);
     const tabW = upper >= 8 ? Math.max(8, capped) : Math.max(0, capped);
     // Keep at least 3 mm of front ear crease attached above the slit on low boxes.
-    const slitLen = Math.min(clamp(params.lockTabDepthMm, 12, tuckH) + 1, frontH - 1.5 * T - 3);
+    const slitLen = Math.min(clamp(params.lockTabDepthMm, 12, tuckH) + 1, frontH - earInset - 3);
     const tabLen = Math.max(0, Math.min(clamp(params.lockTabDepthMm, 12, tuckH), slitLen - 1));
     // Under 2 mm the ear cannot be cut: fall back to a tuck top (no slits, full ear crease, thumb notch).
     if (tabW < 2) lockNote = 'board too thin for lock ears';
@@ -185,7 +198,8 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     lidFlapDepth,
     lidFlapLen: D - T,
     earW,
-    earH: H - 2 * T,
+    earBackH: backH - 2 * earInset,
+    earFrontH: frontH - 2 * earInset,
     tab,
     slot,
     lock,
@@ -197,12 +211,6 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     blankH: y.frontBottom,
   };
 }
-
-/**
- * Insets shared by the perimeter, the creases and the rig: ears and inner wall 1.5T, roll strip T,
- * lid flaps 2T back from the lid's front edge (so in 3D they end flush with the tuck flap's back face).
- */
-const insetsFor = (T: number) => ({ earInset: 1.5 * T, innerInset: 1.5 * T, rollInset: T, lidFlapSetback: 2 * T });
 
 const rectPoints = (x: number, y: number, w: number, h: number): Point2D[] => [
   { x, y },
@@ -323,11 +331,11 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
   }
   nodes.push({ x: fr, y: y.backTop });
 
-  // Dust ear on a wall row, inset earInset from both creases, 3 mm chamfers on the free corners.
-  const ear = (rowTop: number, rowBottom: number) => {
+  // Dust ear on a wall row, inset earInset from the row's top crease, 3 mm chamfers on the free corners.
+  const ear = (rowTop: number, earH: number) => {
     const e0 = rowTop + earInset;
-    const e1 = rowBottom - earInset;
-    if (s.earW <= 0 || e1 <= e0) return;
+    const e1 = e0 + earH;
+    if (s.earW <= 0 || earH <= 0) return;
     const ex = fr + s.earW;
     const ch = Math.min(3, s.earW, (e1 - e0) / 2);
     nodes.push(
@@ -339,7 +347,7 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
       { x: fr, y: e1 },
     );
   };
-  ear(y.backTop, y.floorTop);
+  ear(y.backTop, s.earBackH);
   nodes.push({ x: fr, y: y.floorTop });
 
   // Side column: outer wall full floorD, roll inset T, inner wall inset 1.5T, two chamfered tabs.
@@ -350,7 +358,7 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
     { x: x.rollR, y: y.floorTop + innerInset },
     { x: x.innerR, y: y.floorTop + innerInset },
   );
-  const ch = Math.min(s.tab.chamfer, s.tab.depth, s.tab.len / 2);
+  const ch = s.tab.chamferEff;
   for (const c of s.tab.centers) {
     const yc = y.floorTop + c * s.floorD;
     const t0 = yc - s.tab.len / 2;
@@ -373,7 +381,7 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
     { x: fr, y: y.frontTop },
   );
 
-  ear(y.frontTop, y.frontBottom);
+  ear(y.frontTop, s.earFrontH);
   nodes.push({ x: fr, y: y.frontBottom });
   return nodes;
 }
@@ -408,13 +416,7 @@ function perimeterPath(s: MailerSpans): string {
 }
 
 /** The roll-end mailer's single cut-and-score sheet, built only from the ply-model spans. */
-export function buildMailerSheet(
-  spans: MailerSpans,
-  params: BoxParameters,
-  W: number,
-  D: number,
-  H: number,
-): BoxPanel2D {
+export function buildMailerSheet(spans: MailerSpans, params: BoxParameters): BoxPanel2D {
   const s = spans;
   const { T, x, y } = s;
   const { earInset, innerInset, rollInset } = insetsFor(T);
@@ -452,15 +454,16 @@ export function buildMailerSheet(
   const vertical = (id: string, sx: number, y0: number, y1: number) => {
     if (y1 > y0) scores.push([id, sx, y0, sx, y1]);
   };
-  const frontEarEnd = s.lock ? y.frontBottom - s.lock.slitLen : y.frontBottom - earInset;
+  const frontEarTop = y.frontTop + earInset;
+  const frontEarEnd = s.lock ? y.frontBottom - s.lock.slitLen : frontEarTop + s.earFrontH;
   for (const [side, edge, outer, roll] of [
     ['l', fl, x.outerL, x.rollL],
     ['r', fr, x.outerR, x.rollR],
   ] as const) {
     const fy0 = y.lidTop + insetsFor(T).lidFlapSetback;
     if (s.lidFlapDepth > 0) vertical(`score-lid-flap-${side}`, edge, fy0, fy0 + s.lidFlapLen);
-    vertical(`score-ear-back-${side}`, edge, y.backTop + earInset, y.floorTop - earInset);
-    scores.push([`score-ear-front-${side}`, edge, y.frontTop + earInset, edge, frontEarEnd]);
+    vertical(`score-ear-back-${side}`, edge, y.backTop + earInset, y.backTop + earInset + s.earBackH);
+    scores.push([`score-ear-front-${side}`, edge, frontEarTop, edge, frontEarEnd]);
     vertical(`score-floor-side-${side}`, edge, y.floorTop, y.frontTop);
     vertical(`score-roll-${side}-1`, outer, y.floorTop + rollInset, y.frontTop - rollInset);
     vertical(`score-roll-${side}-2`, roll, y.floorTop + innerInset, y.frontTop - innerInset);
@@ -506,8 +509,8 @@ export function generateMailerBox(
 ): { panels2D: BoxPanel2D[]; panels3D: Panel3DTransform[]; summary: string } {
   const spans = computeMailerSpans(params, W, D, H);
   return {
-    panels2D: [buildMailerSheet(spans, params, W, D, H)],
-    panels3D: buildMailerRig(spans, params, W, D, H),
+    panels2D: [buildMailerSheet(spans, params)],
+    panels3D: buildMailerRig(spans, H),
     summary: `Roll-end mailer (${fmt(spans.blankW)} × ${fmt(spans.blankH)} mm blank, ${closureLabel(spans)})`,
   };
 }
@@ -540,13 +543,7 @@ function flatPosition(p: Panel3DTransform, byId: Map<string, Panel3DTransform>):
  * with lid flaps, which tuck inside them); the back wall's inner face and the tuck flap's inner
  * face are `D` apart.
  */
-export function buildMailerRig(
-  spans: MailerSpans,
-  params: BoxParameters,
-  W: number,
-  D: number,
-  H: number,
-): Panel3DTransform[] {
+export function buildMailerRig(spans: MailerSpans, H: number): Panel3DTransform[] {
   const s = spans;
   const { T } = s;
   const hp = Math.PI / 2;
@@ -577,7 +574,7 @@ export function buildMailerRig(
     const w = s.innerSideLen;
     const h = s.innerSideH;
     const { len, depth } = s.tab;
-    const ch = Math.min(s.tab.chamfer, depth, len / 2);
+    const ch = s.tab.chamferEff;
     const centers = floorSlotRects(s)
       .filter((r) => r.id.startsWith('l-'))
       .map((r) => {
@@ -658,11 +655,10 @@ export function buildMailerRig(
   });
 
   // Dust ears fold in about a vertical axis, landing between the outer and inner walls.
-  // Each ear is its wall's row less the sheet's ear inset at both creases.
-  const { earInset } = insetsFor(T);
+  // Each ear is as tall as the sheet cuts it: earBackH and earFrontH from the spans.
   for (const [wall, wallName, z, y, dir, earH] of [
-    ['back', 'Back', zBack, yBack, 1, s.backH - 2 * earInset],
-    ['front', 'Front', zFront, yFront, -1, s.frontH - 2 * earInset],
+    ['back', 'Back', zBack, yBack, 1, s.earBackH],
+    ['front', 'Front', zFront, yFront, -1, s.earFrontH],
   ] as const) {
     if (s.earW > 0 && earH > 0) {
       for (const [side, sideName, sx] of sides) {

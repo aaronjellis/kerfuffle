@@ -18,7 +18,9 @@ describe('mailer ply model', () => {
       expect(s.lidD).toBeCloseTo(80 + 3 * T);
       expect(s.tuckW).toBeCloseTo(110 - 2 * T);
       expect(s.lidFlapDepth).toBeCloseTo(55 - T);
-      expect(s.earH).toBeCloseTo(55 - 2 * T);
+      expect(s.earBackH).toBeCloseTo(55 - 2 * T);
+      expect(s.earFrontH).toBeCloseTo(55 + T / 2 - 3 * T);
+      expect(s.tab.chamferEff).toBeCloseTo(4);
       expect(s.slot.centerFromCrease).toBeCloseTo(2 * T);
       expect(s.slot.inset).toBeCloseTo(2 * T - (T + 0.5) / 2);
       expect(s.slot.width).toBeCloseTo(T + 0.5);
@@ -72,7 +74,7 @@ describe('mailer ply model', () => {
     expect(s.blankH).toBeCloseTo(30 + 89 + 58 + 86 + 56.5);
     expect(s.tuckR).toBeCloseTo(8);
     expect(s.earW).toBeCloseTo(37);
-    expect(s.earH).toBeCloseTo(49);
+    expect(s.earBackH).toBeCloseTo(49);
     expect(s.lidFlapLen).toBeCloseTo(77); // D - T
     expect(s.tab.len).toBeCloseTo(20);
     expect(s.tab.centers).toEqual([0.25, 0.75]);
@@ -206,6 +208,81 @@ function parsePathVertices(d: string): { x: number; y: number }[] {
   }
   return out;
 }
+
+describe('mailer sheet creases and insets', () => {
+  /** Endpoints of a solid score path: [x1, y1, x2, y2]. */
+  const score = (m: ReturnType<typeof generateBoxModel>, id: string) => {
+    const p = m.panels2D[0].paths.find((q) => q.id === id);
+    if (!p) throw new Error(`no ${id}`);
+    const [x1, y1, x2, y2] = parsePathVertices(p.d).flatMap((v) => [v.x, v.y]);
+    return { x1, y1, x2, y2, xLen: Math.abs(x2 - x1), yLen: Math.abs(y2 - y1) };
+  };
+  const W = 110;
+  const D = 80;
+  const H = 55;
+  for (const T of [1.5, 3]) {
+    // Expected values come straight from the ply table, never from computeMailerSpans.
+    const sheet = (over = {}) =>
+      generateBoxModel({
+        ...base,
+        widthMm: W,
+        depthMm: D,
+        heightMm: H,
+        materialThicknessMm: T,
+        cardboardLockStyle: 'front-lock',
+        includeLidFlaps: true,
+        scoreLineMode: 'solid-score',
+        ...over,
+      });
+    const m = sheet();
+    const sc = (id: string) => score(m, id);
+    const rows: [string, () => number, number][] = [
+      ['tuck flap height: free edge to score-tuck', () => sc('score-tuck').y1, Math.min(30, H - T)],
+      ['tuck flap width along score-tuck', () => sc('score-tuck').xLen, W - 2 * T],
+      ['lid: score-tuck to score-lid-back', () => sc('score-lid-back').y1 - sc('score-tuck').y1, D + 3 * T],
+      ['back wall: score-lid-back to score-back-floor', () => sc('score-back-floor').y1 - sc('score-lid-back').y1, H + T],
+      ['floor depth: score-back-floor to score-floor-front', () => sc('score-floor-front').y1 - sc('score-back-floor').y1, D + 2 * T],
+      ['front wall: score-floor-front to the bottom edge', () => m.panels2D[0].heightMm - sc('score-floor-front').y1, H + T / 2],
+      ['floor width: floor side creases', () => sc('score-floor-side-r').x1 - sc('score-floor-side-l').x1, W + T + 4 * T + 2 * T],
+      ['floor width along score-back-floor', () => sc('score-back-floor').xLen, W + 7 * T],
+      ['outer side wall: score-floor-side-l to score-roll-l-1', () => sc('score-floor-side-l').x1 - sc('score-roll-l-1').x1, H],
+      ['roll left: score-roll-l-1 to score-roll-l-2', () => sc('score-roll-l-1').x1 - sc('score-roll-l-2').x1, 2 * T],
+      ['roll right: score-roll-r-1 to score-roll-r-2', () => sc('score-roll-r-2').x1 - sc('score-roll-r-1').x1, 2 * T],
+      ['roll strip y-extent (rollLen)', () => sc('score-roll-l-1').yLen, D],
+      ['roll strip starts T below score-back-floor', () => sc('score-roll-l-1').y1 - sc('score-back-floor').y1, T],
+      ['inner wall y-extent (innerSideLen)', () => sc('score-roll-l-2').yLen, D - T],
+      ['inner wall starts 1.5T below score-back-floor', () => sc('score-roll-l-2').y1 - sc('score-back-floor').y1, 1.5 * T],
+      ['back ear crease y-extent', () => sc('score-ear-back-l').yLen, H - 2 * T],
+      ['back ear crease starts 1.5T below score-lid-back', () => sc('score-ear-back-l').y1 - sc('score-lid-back').y1, 1.5 * T],
+      ['front ear crease starts 1.5T below score-floor-front', () => sc('score-ear-front-l').y1 - sc('score-floor-front').y1, 1.5 * T],
+      ['lid flap crease length', () => sc('score-lid-flap-l').yLen, D - T],
+      ['lid flap set back 2T from score-tuck', () => sc('score-lid-flap-l').y1 - sc('score-tuck').y1, 2 * T],
+    ];
+    for (const [name, got, want] of rows) {
+      it(`T=${T}: ${name}`, () => expect(got()).toBeCloseTo(want, 3));
+    }
+    it(`T=${T}: inner wall reaches innerSideH past score-roll-l-2 on the perimeter`, () => {
+      const vs = parsePathVertices(m.panels2D[0].paths.find((p) => p.id === 'mailer-perimeter-cut')!.d);
+      const innerEdgeX = sc('score-roll-l-2').x1 - (H - T / 2);
+      const y0 = sc('score-roll-l-2').y1;
+      expect(vs.some((v) => Math.abs(v.x - innerEdgeX) < 1e-3 && Math.abs(v.y - y0) < 1e-3)).toBe(true);
+    });
+    it(`T=${T}: front ear crease runs frontH − 2·earInset on a tuck top`, () => {
+      const tuck = sheet({ cardboardLockStyle: 'tuck' });
+      expect(score(tuck, 'score-ear-front-l').yLen).toBeCloseTo(H + T / 2 - 3 * T, 3);
+    });
+    it(`T=${T}: front-lock ear crease stops where the slit starts`, () => {
+      const slit = parsePathVertices(m.panels2D[0].paths.find((p) => p.id === 'mailer-slit-l')!.d);
+      const ear = sc('score-ear-front-l');
+      expect(Math.min(...slit.map((v) => v.y))).toBeCloseTo(ear.y2, 3);
+      expect(Math.max(...slit.map((v) => v.y))).toBeCloseTo(m.panels2D[0].heightMm - 1.5 * T, 3);
+    });
+    it(`T=${T}: tuck height takes H − T when that is under tuckFlapMm (H 20)`, () => {
+      const low = sheet({ heightMm: 20 });
+      expect(score(low, 'score-tuck').y1).toBeCloseTo(20 - T, 3);
+    });
+  }
+});
 
 describe('mailer perimeter geometry', () => {
   const m = generateBoxModel({
