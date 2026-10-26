@@ -189,7 +189,10 @@ export interface XcsDeviceTemplate {
   extId: string;
   extName: string;
   deviceId: string;
-  power: number;
+  /** Studio may write one number or one per light source. */
+  power: number | number[];
+  /** True until the identifiers are confirmed against a real Studio file. */
+  placeholder?: boolean;
   /** Extra `device` keys copied from a real Studio file for this machine. */
   extra?: Record<string, unknown>;
 }
@@ -200,6 +203,7 @@ export const XCS_DEVICE_M2: XcsDeviceTemplate = {
   extName: 'xTool M2',
   deviceId: 'M2-1',
   power: 10,
+  placeholder: true,
 };
 
 type XcsProcessingType = 'VECTOR_CUTTING' | 'VECTOR_ENGRAVING';
@@ -328,7 +332,15 @@ export function buildXcsProject(
   };
 }
 
+let warnedPlaceholder = false;
+
 /** The dieline as an xTool Studio `.xcs` project (plain JSON). */
 export function exportXcsProject(model: GeneratedBoxModel): string {
+  if (XCS_DEVICE_M2.placeholder && !warnedPlaceholder) {
+    warnedPlaceholder = true;
+    console.warn(
+      'Kerfuffle: the .xcs device block for the xTool M2 is a placeholder until a real Studio file confirms it.'
+    );
+  }
   return JSON.stringify(buildXcsProject(model, XCS_DEVICE_M2));
 }

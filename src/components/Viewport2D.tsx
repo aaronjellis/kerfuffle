@@ -5,7 +5,7 @@ import {
   GeneratedBoxModel,
 } from '../engine/types';
 import { EXPORT_PROFILES, MACHINE_BED_PRESETS } from '../engine/presets';
-import { resolveSheetArtworks } from '../engine/exporters';
+import { effectiveLayer, resolveSheetArtworks } from '../engine/exporters';
 import { fmt } from '../engine/fingerJointEngine';
 
 interface Viewport2DProps {
@@ -39,6 +39,9 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
 }) => {
   const { params, panels2D, sheetWidthMm, sheetHeightMm } = model;
   const profile = EXPORT_PROFILES[params.exportProfile];
+  // Fold lines follow the same rule as the exports: dashed perforations are cuts.
+  const foldLayer = effectiveLayer({ id: 'fold', layer: 'score', d: '', closed: false, isFoldScore: true }, params);
+  const foldColor = foldLayer === 'cut' ? profile.cutColor : profile.scoreColor;
   const bed =
     MACHINE_BED_PRESETS.find((b) => b.id === params.bedPresetId) || MACHINE_BED_PRESETS[0];
 
@@ -142,8 +145,8 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
           Cut ({profile.cutColor})
         </span>
         <span className="hud-chip">
-          <span className="dot dot-score" style={{ backgroundColor: profile.scoreColor }} />
-          {params.scoreLineMode === 'dashed-perf' ? 'Perforation Score' : 'Vector Score'} ({profile.scoreColor})
+          <span className="dot dot-score" style={{ backgroundColor: foldColor }} />
+          {foldLayer === 'cut' ? 'Perforation (cuts)' : 'Vector Score'} ({foldColor})
         </span>
         <span className="hud-chip">
           Sheet:{' '}
@@ -382,8 +385,9 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
 
               {/* Vector Cut & Score Paths */}
               {panel.paths.map((path) => {
-                if (path.layer === 'guide') return null;
-                const isCut = path.layer === 'cut';
+                const layer = effectiveLayer(path, params);
+                if (layer === 'guide') return null;
+                const isCut = layer === 'cut';
                 return (
                   <path
                     key={path.id}

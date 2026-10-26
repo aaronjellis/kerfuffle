@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_BOX_PARAMETERS,
   EXPORT_PROFILES,
@@ -441,11 +441,40 @@ describe('M2 device block', () => {
     const fixture = JSON.parse(fixtureRaw);
     expect(XCS_DEVICE_M2.extId).toBe(fixture.extId);
     expect(XCS_DEVICE_M2.deviceId).toBe(fixture.device.id);
-    expect(XCS_DEVICE_M2.power).toBe(fixture.device.power);
+    // Studio may write power as a number or an array.
+    expect(XCS_DEVICE_M2.power).toEqual(fixture.device.power);
 
     const exported = JSON.parse(exportXcsProject(fingerModel()));
-    for (const key of Object.keys(fixture.device)) {
-      expect(exported.device).toHaveProperty(key);
+    // Every key the fixture has at these places, the export has at the same place.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const places: [string, (project: any) => Record<string, unknown>][] = [
+      ['top level', (p) => p],
+      ['canvas[0]', (p) => p.canvas[0]],
+      ['device', (p) => p.device],
+      ['device.data.value[0][1].data.LASER_PLANE', (p) => p.device.data.value[0][1].data.LASER_PLANE],
+    ];
+    for (const [where, at] of places) {
+      const actual = at(exported);
+      for (const key of Object.keys(at(fixture))) {
+        expect(actual, `${where} is missing ${key}`).toHaveProperty([key]);
+      }
+    }
+  });
+});
+
+describe('placeholder device warning', () => {
+  it('warns once per session while the M2 device block is a placeholder', async () => {
+    vi.resetModules();
+    const fresh = await import('../src/engine/xcsExporter');
+    expect(fresh.XCS_DEVICE_M2.placeholder).toBe(true);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      fresh.exportXcsProject(fingerModel());
+      fresh.exportXcsProject(mailerModel());
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toContain('placeholder');
+    } finally {
+      warn.mockRestore();
     }
   });
 });
