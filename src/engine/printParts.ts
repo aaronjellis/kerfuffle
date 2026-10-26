@@ -8,8 +8,9 @@ import { buildRoundedRectPoints } from './roundedRect';
  *
  * Print frame (shared by both parts): X runs across the front, 0..outerW. Y runs front to back,
  * with the FRONT face at y = 0 and the BACK face at y = outerD. Z is up from the bed, 0..baseH
- * (or 0..lidH). The hinge axis sits behind the back face (axisY = outerD + R); clasp features sit
- * in front of the front face (y < 0).
+ * (or 0..lidH). The hinge axis sits behind the back face (axisY = outerD + R + 0.3, so each knuckle
+ * clears the other part's back wall by 0.3 mm radially); clasp features sit in front of the front
+ * face (y < 0).
  */
 export interface PrintBoxDims {
   wall: number;
@@ -53,6 +54,8 @@ export interface PrintBoxDims {
 }
 
 const KNUCKLE_GAP = 0.3;
+/** Radial clearance between a knuckle and the other part's back-wall edge as the lid swings. */
+const KNUCKLE_CLEARANCE = 0.3;
 const MIN_HINGE_R = 2.6;
 const PIN_CLEARANCE = 0.25;
 const LIP_HEIGHT = 3;
@@ -83,13 +86,13 @@ export function computePrintBoxDims(
 
   // One lid-height clamp for the whole 3D box. The base interior never drops below 5 mm.
   let lidInner = Math.min(innerH - 8, Math.max(10, params.lidHeightMm));
-  // The knuckle's fill prism reaches 2R below each part's rim, so both lidH and baseH must be at
-  // least 2R + 1 to keep it above the bed. Raise a short lid; cap a tall lid (toward its 10 mm
+  // The knuckle's fill prism reaches 2R + 0.3 below each part's rim, so both lidH and baseH must be
+  // at least 2R + 0.3 + 1 to keep it above the bed. Raise a short lid; cap a tall lid (toward its 10 mm
   // minimum) so the base keeps 2R + 1 and its 5 mm interior. If no lid height satisfies both, the
   // box is too small for the hinge and it is dropped, leaving the lid clamp untouched.
   let hingeFits = params.include3dHinge;
   if (hingeFits) {
-    const hingeH = 2 * R + 1;
+    const hingeH = 2 * R + KNUCKLE_CLEARANCE + 1;
     const lo = hingeH - floor;
     const hi = Math.min(innerH + floor - hingeH, innerH - MIN_BASE_INNER_H);
     const target = Math.min(Math.max(lidInner, lo), hi);
@@ -112,7 +115,7 @@ export function computePrintBoxDims(
       const x0 = start + i * (knuckleW + KNUCKLE_GAP);
       return { x0, x1: x0 + knuckleW, owner: (i % 2 === 0 ? 'base' : 'lid') as 'base' | 'lid' };
     });
-    hinge = { R, hole, runLen, segments, axisY: outerD + R };
+    hinge = { R, hole, runLen, segments, axisY: outerD + R + KNUCKLE_CLEARANCE };
   }
 
   // The clasp sits on the flat front face, so it stays clear of the corner fillets. Below 4 mm
@@ -327,10 +330,13 @@ function extrudeAlongX(shape: THREE.Shape, x0: number, x1: number): THREE.Buffer
 
 /**
  * The knuckles one part owns, in that part's print frame (open side up). Each knuckle is an
- * annulus (outer R, inner hole/2) around the hinge axis (y = axisY, z = rim), plus a fill prism
- * whose Y-Z cross-section is (outerD - wall/2, rim - 2R) -> (outerD, rim - 2R) -> (outerD + 2R, rim)
- * -> along z = rim to the bore, under the bore's lower semicircle, and on along z = rim back to
- * (outerD - wall/2, rim). The prism runs from the back wall out under the
+ * annulus (outer R, inner hole/2) around the hinge axis (y = axisY = outerD + R + 0.3, z = rim),
+ * plus a fill prism whose Y-Z cross-section is (outerD - wall/2, rim - 2R - 0.3) ->
+ * (outerD, rim - 2R - 0.3) -> (axisY + R, rim) -> along z = rim to the bore, under the bore's lower
+ * semicircle, and on along z = rim back to (outerD - wall/2, rim). The annulus stands 0.3 mm off
+ * the back face, so the other part's wall edge (on the rim, at y = outerD) is R + 0.3 from the axis
+ * and clears this knuckle by 0.3 mm as the lid swings; the fill bridges that gap below the rim. The
+ * prism runs from the back wall out under the
  * cylinder at 45 degrees, so nothing overhangs more than 45 degrees and the knuckle prints without
  * supports. Its wall-side edge sits at the wall's mid-thickness line, so the knuckle is embedded
  * in the wall rather than touching its face.
@@ -359,10 +365,12 @@ export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
 
     // The fill's top edge dips under the bore along its lower semicircle (the same vertices as the
     // bore's inscribed 24-gon), so fill and annulus together leave the whole bore open.
+    // The 45 degree face runs from the back face up to the annulus's far side.
+    const fillBottom = rim - (axisY - outerD) - R;
     const fill = new THREE.Shape([
-      new THREE.Vector2(embedY, rim - 2 * R),
-      new THREE.Vector2(outerD, rim - 2 * R),
-      new THREE.Vector2(outerD + 2 * R, rim),
+      new THREE.Vector2(embedY, fillBottom),
+      new THREE.Vector2(outerD, fillBottom),
+      new THREE.Vector2(axisY + R, rim),
       ...boreUnderside(axisY, rim, hole / 2),
       new THREE.Vector2(embedY, rim),
     ]);

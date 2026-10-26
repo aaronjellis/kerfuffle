@@ -35,6 +35,18 @@ function partBox(model: GeneratedBoxModel, part: 'base' | 'lid', id?: string) {
   return bbox(pieces.map((q) => q.geometry));
 }
 
+/** The world hinge axis (y, z) of one part: the centre of its annuli, the hinge pieces that cross the seam. */
+function worldAxis(model: GeneratedBoxModel, part: 'base' | 'lid', seamY: number): { y: number; z: number } {
+  const annuli = buildPrintPartWorldGeometry(model, part).filter((q) => {
+    if (q.partId !== 'hinge') return false;
+    const b = bbox([q.geometry]);
+    return b.min.y < seamY - 0.1 && b.max.y > seamY + 0.1;
+  });
+  expect(annuli.length).toBeGreaterThan(0);
+  const b = bbox(annuli.map((q) => q.geometry));
+  return { y: (b.min.y + b.max.y) / 2, z: (b.min.z + b.max.z) / 2 };
+}
+
 describe('print parts in the world frame', () => {
   it('stands the base on the box bottom with its rim at the seam, front at +Z', () => {
     const { model, dims, totalH, seamY } = setup();
@@ -44,7 +56,7 @@ describe('print parts in the world frame', () => {
     expect(b.max.y).toBeCloseTo(seamY + Math.max(R, dims.lip.height), 3);
     expect(R).toBeGreaterThan(dims.lip.height); // so the knuckle tops are the highest point
     expect(b.max.z).toBeCloseTo(dims.outerD / 2 + 0.8, 3);
-    expect(b.min.z).toBeCloseTo(-dims.outerD / 2 - 2 * R, 3);
+    expect(b.min.z).toBeCloseTo(-dims.outerD / 2 - 0.3 - 2 * R, 3);
     expect(b.min.x).toBeCloseTo(-dims.outerW / 2, 3);
     expect(b.max.x).toBeCloseTo(dims.outerW / 2, 3);
   });
@@ -55,7 +67,7 @@ describe('print parts in the world frame', () => {
     const l = partBox(model, 'lid');
     expect(l.max.y).toBeCloseTo(totalH / 2, 3);
     expect(l.min.y).toBeCloseTo(seamY - 10, 3);
-    expect(l.min.z).toBeCloseTo(-dims.outerD / 2 - 2 * R, 3);
+    expect(l.min.z).toBeCloseTo(-dims.outerD / 2 - 0.3 - 2 * R, 3);
     // The clasp is at the front.
     expect(partBox(model, 'lid', 'clasp').min.z).toBeGreaterThan(dims.outerD / 2 - dims.wall);
   });
@@ -74,7 +86,7 @@ describe('print parts in the world frame', () => {
     const R = dims.hinge!.R;
     for (const part of ['base', 'lid'] as const) {
       const h = partBox(model, part, 'hinge');
-      expect(h.min.z).toBeCloseTo(-dims.outerD / 2 - 2 * R, 3);
+      expect(h.min.z).toBeCloseTo(-dims.outerD / 2 - 0.3 - 2 * R, 3);
       if (part === 'base') expect(h.max.y).toBeCloseTo(seamY + R, 3);
       else expect(h.min.y).toBeCloseTo(seamY - R, 3);
     }
@@ -123,7 +135,44 @@ describe('3D print panels and blueprint', () => {
     const [px, py, pz] = lid.foldRig!.pivotOffset;
     expect(px).toBe(0);
     expect(py).toBeCloseTo(seamY, 6);
-    expect(pz).toBeCloseTo(-dims.outerD / 2 - dims.hinge!.R, 6);
+    expect(pz).toBeCloseTo(-dims.outerD / 2 - dims.hinge!.R - 0.3, 6);
+    // The pivot is the world hinge axis: the centre of the annuli (the hinge pieces that cross the
+    // seam) in both parts.
+    for (const part of ['base', 'lid'] as const) {
+      const axis = worldAxis(model, part, seamY);
+      expect(axis.y).toBeCloseTo(py, 3);
+      expect(axis.z).toBeCloseTo(pz, 3);
+    }
+  });
+
+  it('clears each knuckle from the other part\'s back-wall edge by 0.3 mm in the closed box', () => {
+    for (const params of [p, { ...p, wallThickness3dMm: 6, widthMm: 80, depthMm: 80, heightMm: 40 }]) {
+      const { model, dims, seamY } = setup(params);
+      const R = dims.hinge!.R;
+      const axis = worldAxis(model, 'base', seamY);
+      // The lid's back-face bottom edge and the base's back-face top edge both lie on the seam at
+      // z = -outerD/2; check that against the shells' own geometry.
+      const lidShell = partBox(model, 'lid', 'shell');
+      const baseShell = partBox(model, 'base', 'shell');
+      expect(lidShell.min.z).toBeCloseTo(-dims.outerD / 2, 3);
+      expect(lidShell.min.y).toBeCloseTo(seamY, 3);
+      expect(baseShell.min.z).toBeCloseTo(-dims.outerD / 2, 3);
+      expect(baseShell.max.y).toBeCloseTo(seamY, 3);
+      const edgeToAxis = Math.hypot(seamY - axis.y, -dims.outerD / 2 - axis.z);
+      expect(edgeToAxis).toBeCloseTo(R + 0.3, 3);
+      // No shell vertex of either part comes nearer the axis than R + 0.3, so the other part's
+      // knuckles (radius R) clear every wall edge by 0.3 as the lid swings.
+      for (const part of ['base', 'lid'] as const) {
+        for (const q of buildPrintPartWorldGeometry(model, part)) {
+          if (q.partId !== 'shell') continue;
+          const pos = q.geometry.getAttribute('position');
+          for (let i = 0; i < pos.count; i++) {
+            const r = Math.hypot(pos.getY(i) - axis.y, pos.getZ(i) - axis.z);
+            expect(r).toBeGreaterThan(R + 0.3 - 1e-3);
+          }
+        }
+      }
+    }
   });
 
   it('keeps the back-face pivot when the hinge is off', () => {
@@ -150,6 +199,18 @@ describe('3D print panels and blueprint', () => {
     expect(ids(lid)).toContain('3d-clasp-boss');
     expect(ids(base)).not.toContain('3d-hinge-knuckle');
     const R = dims.hinge!.R;
+    // Knuckles stand 0.3 off the back edge (y outerD + 0.3 .. outerD + 0.3 + 2R in the print frame,
+    // shifted by the plan's front depth); the pin line sits on the axis.
+    const nums = (d: string) => d.match(/-?\d+(\.\d+)?/g)!.map(Number);
+    for (const [panel, oy] of [[base, 0.8], [lid, 2.6]] as const) {
+      for (const q of panel.paths.filter((x) => x.id.startsWith('3d-hinge-knuckle-'))) {
+        const ys = nums(q.d).filter((_, i) => i % 2 === 1);
+        expect(Math.min(...ys) - oy).toBeCloseTo(dims.outerD + 0.3, 2);
+        expect(Math.max(...ys) - oy).toBeCloseTo(dims.outerD + 0.3 + 2 * R, 2);
+      }
+    }
+    const pinY = nums(base.paths.find((q) => q.id === '3d-hinge-pin')!.d)[1];
+    expect(pinY - 0.8).toBeCloseTo(dims.hinge!.axisY, 2);
     expect(base.heightMm).toBeGreaterThanOrEqual(dims.outerD + 2 * R + 0.8 - 1e-6);
     expect(lid.heightMm).toBeGreaterThanOrEqual(dims.outerD + 2 * R + 2.6 - 1e-6);
   });

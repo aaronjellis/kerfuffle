@@ -26,10 +26,12 @@ export function generate3DPrintBox(
 
   // 2D plan blueprints, one per part, each drawn in that part's print frame (plate on the bed):
   // front face at y = 0, back at y = outerD. The lid's hinge segments are mirrored in x, as it
-  // prints. Mechanism footprints sit outside the outline: knuckles behind the back edge
-  // (y outerD..outerD + 2R), clasp in front of the front edge (y < 0). Each plan is shifted down by
-  // its front feature's depth so the whole drawing stays inside the panel's 0..heightMm.
-  const knuckleDepth = hinge ? 2 * hinge.R : 0;
+  // prints. Mechanism footprints sit outside the outline: knuckles behind the back edge, standing
+  // off it by the radial clearance (y outerD + 0.3..outerD + 0.3 + 2R), clasp in front of the front
+  // edge (y < 0). Each plan is shifted down by its front feature's depth so the whole drawing stays
+  // inside the panel's 0..heightMm.
+  const knuckleGap = hinge ? hinge.axisY - outerD - hinge.R : 0;
+  const knuckleDepth = hinge ? knuckleGap + 2 * hinge.R : 0;
   const rectPath = (x0: number, y0: number, x1: number, y1: number) =>
     `M ${fmt(x0)} ${fmt(y0)} L ${fmt(x1)} ${fmt(y0)} L ${fmt(x1)} ${fmt(y1)} L ${fmt(x0)} ${fmt(y1)} Z`;
 
@@ -53,7 +55,7 @@ export function generate3DPrintBox(
         paths.push({
           id: `3d-hinge-knuckle-${i}`,
           layer: 'cut',
-          d: rectPath(x0, outerD + oy, x1, outerD + knuckleDepth + oy),
+          d: rectPath(x0, outerD + knuckleGap + oy, x1, outerD + knuckleDepth + oy),
           closed: true,
         });
       });
@@ -141,8 +143,9 @@ export function generate3DPrintBox(
       explodedPos: [0, explodeDist * 0.55, 0],
       rotation: [0, 0, 0],
       foldRig: {
-        // The real hinge axis sits R behind the back face at the seam; without a hinge, the back edge.
-        pivotOffset: [0, seamY, -outerD / 2 - (hinge ? hinge.R : 0)],
+        // The real hinge axis (axisY - outerD behind the back face, at the seam); without a hinge,
+        // the back edge.
+        pivotOffset: [0, seamY, -outerD / 2 - (hinge ? hinge.axisY - outerD : 0)],
         axis: 'x',
         flatAngleRad: -Math.PI * 0.58,
         foldedAngleRad: 0,

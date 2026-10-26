@@ -53,7 +53,8 @@ describe('print box dims', () => {
   it('puts the hinge axis behind the back face (y = outerD) and gives the base the even knuckles', () => {
     const d = computePrintBoxDims(p, 110, 80, 55);
     const h = d.hinge!;
-    expect(h.axisY).toBeCloseTo(d.outerD + h.R);
+    // R + 0.3: each knuckle clears the other part's back-wall edge by 0.3 mm radially.
+    expect(h.axisY).toBeCloseTo(d.outerD + h.R + 0.3);
     expect(h.segments.map((s) => s.owner)).toEqual(['base', 'lid', 'base', 'lid', 'base']);
     // The run is centred on the box and is symmetric under x -> outerW - x.
     const first = h.segments[0];
@@ -244,9 +245,9 @@ describe('knuckle hinge pieces', () => {
     const rim = d.baseH;
     const b = unionBox(pieces);
     expect(b.min.y).toBeCloseTo(d.outerD - d.wall / 2, 5);
-    expect(b.max.y).toBeCloseTo(d.outerD + 2 * h.R, 5);
+    expect(b.max.y).toBeCloseTo(d.outerD + 0.3 + 2 * h.R, 5);
     expect(b.max.z).toBeCloseTo(rim + h.R, 5);
-    expect(b.min.z).toBeCloseTo(rim - 2 * h.R, 5);
+    expect(b.min.z).toBeCloseTo(rim - 2 * h.R - 0.3, 5);
   });
 
   it('pairs each annulus with a prism over the same X range', () => {
@@ -352,29 +353,29 @@ describe('knuckle hinge pieces', () => {
     }
   });
 
-  it('drops the hinge when the lid cannot be raised to 2R + 1', () => {
-    // wall 8 -> R 9, lid needs 19; a 20 mm interior cannot keep the base's 5 mm.
+  it('drops the hinge when the lid cannot be raised to 2R + 1.3', () => {
+    // wall 8 -> R 9, lid needs 19.3; a 20 mm interior cannot keep the base's 5 mm.
     const t = computePrintBoxDims({ ...p, wallThickness3dMm: 8 }, 30, 30, 20);
     expect(t.hinge).toBeNull();
     expect(buildHingePieces(t, 'lid')).toEqual([]);
   });
 
   it('raises the lid so its knuckle fill stays above the bed', () => {
-    // wall 6 -> R 7, lid needs 15; lidHeightMm 10 gives only 12.
+    // wall 6 -> R 7, lid needs 2R + 0.3 + 1 = 15.3; lidHeightMm 10 gives only 12.
     const t = computePrintBoxDims({ ...p, wallThickness3dMm: 6, lidHeightMm: 10 }, 60, 60, 40);
     expect(t.hinge).not.toBeNull();
-    expect(t.lidH).toBeCloseTo(2 * t.hinge!.R + 1, 6);
+    expect(t.lidH).toBeCloseTo(2 * t.hinge!.R + 1.3, 6);
     expect(t.baseH + t.lidH).toBeCloseTo(40 + 2 * t.floor, 6);
     expect(t.baseH - t.floor).toBeGreaterThanOrEqual(5);
     expect(unionBox(buildHingePieces(t, 'lid')).min.z).toBeGreaterThanOrEqual(-1e-9);
   });
 
   it('caps a tall lid so the base knuckle fill stays above the bed', () => {
-    // wall 4 -> R 5, both parts need 11; lidHeightMm 100 would leave the base only 10.
+    // wall 4 -> R 5, both parts need 11.3; lidHeightMm 100 would leave the base only 10.
     const t = computePrintBoxDims({ ...p, wallThickness3dMm: 4, lidHeightMm: 100 }, 30, 30, 30);
     if (t.hinge) {
-      expect(t.baseH).toBeGreaterThanOrEqual(2 * t.hinge.R + 1 - 1e-9);
-      expect(t.lidH).toBeGreaterThanOrEqual(2 * t.hinge.R + 1 - 1e-9);
+      expect(t.baseH).toBeGreaterThanOrEqual(2 * t.hinge.R + 1.3 - 1e-9);
+      expect(t.lidH).toBeGreaterThanOrEqual(2 * t.hinge.R + 1.3 - 1e-9);
       expect(t.baseH + t.lidH).toBeCloseTo(30 + 2 * t.floor, 6);
     }
     for (const part of ['base', 'lid'] as const) {
