@@ -74,7 +74,7 @@ export const ClosureSection: React.FC<SectionProps> = ({ params, updateParam, di
       {spans.lock && (
         <div className="dims-readout">
           <div>
-            <span>Lock ears:</span>
+            <span>Lock ears</span>
             <strong>
               {fmtDim(spans.lock.tabW)} × {fmtDim(spans.lock.tabLen)} {uLabel}
             </strong>

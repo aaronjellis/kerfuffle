@@ -13,8 +13,8 @@ export const LabelsSection: React.FC<SectionProps> = ({ params, updateParam, dis
   return (
     <>
       <p className="helper-note">
-        Add single-stroke vector names to the inner side of each face on the <strong>Score Layer</strong> so
-        parts are labeled after laser cutting.
+        Single-stroke names on the inner side of each face, on the score layer, so you can tell the parts apart
+        after cutting.
       </p>
 
       <Switch
@@ -29,9 +29,9 @@ export const LabelsSection: React.FC<SectionProps> = ({ params, updateParam, dis
             value={params.faceLabelPosition}
             onChange={(e) => updateParam('faceLabelPosition', e.target.value as FaceLabelPosition)}
           >
-            <option value="center">Center of Face</option>
-            <option value="bottom">Bottom Edge / Corner</option>
-            <option value="top-left">Top Edge</option>
+            <option value="center">Center of the face</option>
+            <option value="bottom">Bottom edge</option>
+            <option value="top-left">Top edge</option>
           </select>
         </Field>
         <Field label={`Text size (${uLabel})`}>
@@ -50,30 +50,30 @@ export const LabelsSection: React.FC<SectionProps> = ({ params, updateParam, dis
       </div>
 
       <Switch
-        label="Also score panel dimensions below name"
+        label="Score panel dimensions under the name"
         checked={params.scoreFaceDimensions}
         onChange={(v) => updateParam('scoreFaceDimensions', v)}
       />
       <Switch
-        label="Mirror text (back-side cut)"
+        label="Mirror text for a back-side cut"
         checked={params.mirrorInnerFaceLabels}
         onChange={(v) => updateParam('mirrorInnerFaceLabels', v)}
       />
       <Switch
-        label="Show screen-only guide names in 2D preview"
+        label="Guide names in the 2D view"
         checked={params.showGuideLabels2D}
         onChange={(v) => updateParam('showGuideLabels2D', v)}
       />
 
       <div className="face-names-editor">
-        <div className="param-label-row" style={{ marginBottom: 4 }}>
-          <span style={{ fontSize: 11, fontWeight: 600 }}>Custom side names (clear to skip a face)</span>
+        <div className="mini-heading-row">
+          <span className="mini-heading">Side names (clear one to skip that face)</span>
           <button
             type="button"
-            className="text-action-btn"
+            className="link-btn"
             onClick={() => updateParam('customFaceLabels', { ...DEFAULT_FACE_LABELS })}
           >
-            <RotateCcw size={10} /> Reset
+            <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" /> Reset
           </button>
         </div>
         <div className="two-col-inputs">

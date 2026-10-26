@@ -18,19 +18,19 @@ export const FlapsSection: React.FC<SectionProps> = ({ params, updateParam, disp
       />
       <div className="dims-readout">
         <div>
-          <span>Dust ears:</span>
+          <span>Dust ears</span>
           <strong>
             {fmtDim(spans.earW)} {uLabel} wide
           </strong>
         </div>
         <div>
-          <span>Floor tabs:</span>
+          <span>Floor tabs</span>
           <strong>
             {spans.tab.centers.length} × {fmtDim(spans.tab.len)} × {fmtDim(spans.tab.depth)} {uLabel}
           </strong>
         </div>
         <div>
-          <span>Slots:</span>
+          <span>Slots</span>
           <strong>
             {fmtDim(spans.slot.len)} × {fmtDim(spans.slot.width)} {uLabel}
           </strong>

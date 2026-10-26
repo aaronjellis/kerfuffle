@@ -3,7 +3,7 @@ import { fmt } from '../../engine/fingerJointEngine';
 import type { PrintDroppedFeature } from '../../engine/printParts';
 
 export const FACE_OPTIONS = [
-  { id: 'top', label: 'Lid / Top' },
+  { id: 'top', label: 'Lid' },
   { id: 'front', label: 'Front' },
   { id: 'back', label: 'Back' },
   { id: 'left', label: 'Left' },

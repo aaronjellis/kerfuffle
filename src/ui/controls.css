@@ -1,0 +1,651 @@
+/* Controls inside the inspector sections: fields, inputs, selects, buttons, chips, readouts.
+   Patterns follow the bathroom planner's style.css (buttons, inputs, selects, chips,
+   segmented, field rows). Tokens only. */
+
+/* ---------- section body ---------- */
+
+/* Two-column rows collapse to one column on a narrow panel. */
+.inspect-fold-body {
+  container-type: inline-size;
+}
+
+.inspect-fold-body p {
+  margin: 0;
+}
+
+/* ---------- segmented ---------- */
+
+/* A sunken pill track; the chosen segment is raised. */
+.segmented-toggle {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  min-width: 0;
+  padding: 3px;
+  background: var(--sunken);
+  border: 0;
+  border-radius: var(--r-pill);
+}
+
+.segmented-toggle button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-width: 0;
+  min-height: calc(var(--control-h) - 6px);
+  padding: 0 0.85rem;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+
+.segmented-toggle button:hover {
+  color: var(--ink);
+}
+
+.segmented-toggle button.active {
+  color: var(--ink);
+  background: var(--raised);
+  box-shadow: var(--raised-shadow);
+}
+
+/* In a section the track spans the row and the segments share it. */
+.inspect-fold-body .segmented-toggle {
+  display: flex;
+}
+
+.inspect-fold-body .segmented-toggle button {
+  flex: 1 1 0;
+}
+
+/* Two segmented controls side by side (units, inner or outer). */
+.seg-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+/* ---------- fields ---------- */
+
+/* A label above its control. */
+.field {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.field-label {
+  color: var(--muted);
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+}
+
+/* Two fields in a row; one column when the panel is under 360 px
+   (328 px of body: the panel less its 1rem gutters). */
+.two-col-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+@container (width < 328px) {
+  .two-col-inputs,
+  .seg-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A number with a slider: the label and the number on one line, the slider under them.
+   The numbers share one column, so a stack of these lines up. */
+.param-row {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.param-label-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.param-label-row > label,
+.param-label-row > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---------- inputs and selects ---------- */
+
+.inspect-fold-body input:is([type='text'], [type='search'], :not([type])),
+.inspect-fold-body textarea,
+.inspect-fold-body select {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-h);
+  padding: 0.4rem 0.65rem;
+  color: var(--ink);
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--field-line);
+  border-radius: var(--r-control);
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.inspect-fold-body textarea {
+  min-height: 0;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.inspect-fold-body select,
+.pop-select {
+  padding-right: 2rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235b6970' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+}
+
+@media (prefers-color-scheme: dark) {
+  .inspect-fold-body select,
+  .pop-select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239baaa9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+}
+
+.inspect-fold-body select option,
+.inspect-fold-body select optgroup {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.inspect-fold-body input:focus-visible,
+.inspect-fold-body textarea:focus-visible,
+.inspect-fold-body select:focus-visible,
+.inspect-search input:focus-visible,
+.pop-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.inspect-fold-body ::placeholder {
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+}
+
+/* Numbers read in tabular figures. */
+.num-field {
+  font-variant-numeric: tabular-nums;
+}
+
+.inspect-fold-body input[type='range'] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.inspect-fold-body input[type='color'] {
+  flex: none;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--field-line);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+
+/* ---------- buttons ---------- */
+
+/* Quiet by default: the surface, a hairline, the ink color. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-width: 0;
+  min-height: var(--control-h);
+  padding: 0 0.85rem;
+  color: var(--ink);
+  font: inherit;
+  font-weight: var(--w-medium);
+  line-height: 1.2;
+  white-space: nowrap;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--sunken);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.btn svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.btn-sm {
+  min-height: 32px;
+  padding: 0 0.6rem;
+  font-size: var(--fs-label);
+}
+
+/* Icon buttons: no frame until you point at them; the accessible name says what they do. */
+.icon-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  color: var(--ink);
+  font: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: var(--sunken);
+}
+
+.icon-btn[aria-pressed='true'] {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.icon-btn-danger {
+  color: var(--danger);
+}
+
+/* An inline text action, like "Reset". */
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+/* ---------- chips ---------- */
+
+/* Pills you toggle; the chosen one takes the soft accent. */
+.chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  padding: 0 0.75rem;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--sunken);
+}
+
+.chip svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.chip[aria-pressed='true'] {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.chip[aria-pressed='true'] svg {
+  color: inherit;
+}
+
+/* A count inside a chip. */
+.count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  color: var(--accent-fg);
+  font-size: 0.75rem;
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+  background: var(--accent);
+  border-radius: var(--r-pill);
+}
+
+/* One row of chips that scrolls sideways instead of wrapping, reaching the panel's edges,
+   with a fade at each end. */
+.chip-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.375rem;
+  min-width: 0;
+  margin-inline: -1rem;
+  padding: 2px 1rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 1rem;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 1rem, #000 calc(100% - 1rem), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 1rem, #000 calc(100% - 1rem), transparent 100%);
+}
+
+.chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------- notes and readouts ---------- */
+
+.helper-note,
+.empty-art-hint {
+  color: var(--muted);
+  font-size: var(--fs-label);
+  line-height: 1.4;
+}
+
+.helper-note strong,
+.empty-art-hint strong {
+  color: var(--ink);
+  font-weight: var(--w-medium);
+}
+
+/* Derived sizes: a label and a value per line, the values in tabular figures. */
+.dims-readout {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--fs-label);
+  background: var(--sunken);
+  border-radius: var(--r-control);
+}
+
+.dims-readout > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dims-readout strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: var(--w-medium);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+/* The export profile's notes, under the Sheet settings. */
+.profile-info-box {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.6rem 0.75rem;
+  color: var(--muted);
+  font-size: var(--fs-label);
+  line-height: 1.4;
+  background: var(--sunken);
+  border-radius: var(--r-control);
+}
+
+.profile-info-box > strong {
+  color: var(--ink);
+  font-weight: var(--w-medium);
+}
+
+.profile-info-box strong {
+  color: var(--ink);
+  font-weight: var(--w-medium);
+}
+
+/* A small heading inside a section, with a trailing action. */
+.mini-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink);
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+}
+
+.mini-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.mini-heading-row > .mini-heading {
+  flex: 1 1 auto;
+}
+
+/* ---------- labels ---------- */
+
+.face-names-editor {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- artwork ---------- */
+
+.sample-stamps-block,
+.face-layer-list {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.layer-chip span {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artwork-inspector,
+.text-config-panel,
+.align-piece-box {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.artwork-inspector {
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.align-piece-box {
+  gap: 0.75rem;
+}
+
+.art-inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.art-inspector-header > strong {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.art-inspector-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.custom-font-row,
+.control-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.margin-inline {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: var(--fs-label);
+  white-space: nowrap;
+}
+
+.inspect-fold-body input.num-field-xs {
+  width: 4.5rem;
+}
+
+.align-controls-layout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+/* Nine snap points: the corners, edges and center of the piece. */
+.anchor-grid-9 {
+  display: grid;
+  grid-template-columns: repeat(3, 32px);
+  grid-auto-rows: 32px;
+  gap: 2px;
+  padding: 2px;
+  background: var(--sunken);
+  border-radius: var(--r-control);
+}
+
+.anchor-dot-btn {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.anchor-dot-btn span {
+  width: 6px;
+  height: 6px;
+  background: var(--muted);
+  border-radius: 50%;
+}
+
+.anchor-dot-btn.center-dot span {
+  width: 9px;
+  height: 9px;
+}
+
+.anchor-dot-btn:hover {
+  background: var(--raised);
+  box-shadow: var(--raised-shadow);
+}
+
+.anchor-dot-btn:hover span {
+  background: var(--accent);
+}
+
+.align-quick-btns {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.align-btn-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.375rem;
+}
+
+.align-btn-row .btn {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.move-piece-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.move-piece-row > span {
+  color: var(--muted);
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+}
+
+/* The hidden file input behind "Upload". */
+.visually-hidden-input {
+  display: none;
+}

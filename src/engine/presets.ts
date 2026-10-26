@@ -24,7 +24,7 @@ export const MACHINE_BED_PRESETS: MachineBedPreset[] = [
   },
   {
     id: 'lightburn-400',
-    name: 'Standard Diode (400 × 400 mm)',
+    name: 'Standard diode (400 × 400 mm)',
     widthMm: 400,
     heightMm: 400,
     description: 'Common 400×400mm open-frame laser bed',
@@ -38,7 +38,7 @@ export const MACHINE_BED_PRESETS: MachineBedPreset[] = [
   },
   {
     id: 'sheet-600x450',
-    name: 'Large Sheet (600 × 450 mm)',
+    name: 'Large sheet (600 × 450 mm)',
     widthMm: 600,
     heightMm: 450,
     description: '24" × 18" laser / flatbed cutter sheet',
@@ -66,7 +66,7 @@ export interface MaterialPreset {
 export const MATERIAL_PRESETS: MaterialPreset[] = [
   {
     id: 'basswood-3mm',
-    name: '3.0 mm Basswood Plywood',
+    name: '3.0 mm basswood plywood',
     category: 'wood-finger',
     thicknessMm: 3.0,
     kerfMm: 0.12,
@@ -76,7 +76,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
   },
   {
     id: 'mdf-3mm',
-    name: '3.0 mm Laser MDF',
+    name: '3.0 mm laser MDF',
     category: 'wood-finger',
     thicknessMm: 3.0,
     kerfMm: 0.14,
@@ -86,7 +86,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
   },
   {
     id: 'basswood-1.6mm',
-    name: '1.6 mm (1/16") Micro Basswood',
+    name: '1.6 mm (1/16") basswood',
     category: 'wood-finger',
     thicknessMm: 1.6,
     kerfMm: 0.10,
@@ -96,7 +96,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
   },
   {
     id: 'plywood-6mm',
-    name: '6.0 mm Baltic Birch / MDF',
+    name: '6.0 mm Baltic birch or MDF',
     category: 'wood-finger',
     thicknessMm: 6.0,
     kerfMm: 0.18,
@@ -106,7 +106,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
   },
   {
     id: 'cardboard-eflute',
-    name: '1.5 mm E-Flute Corrugated Mailer',
+    name: '1.5 mm E-flute corrugated',
     category: 'cardboard-fold',
     thicknessMm: 1.5,
     kerfMm: 0.10,
@@ -116,7 +116,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
   },
   {
     id: 'cardboard-bflute',
-    name: '3.0 mm B-Flute Shipping Cardboard',
+    name: '3.0 mm B-flute shipping cardboard',
     category: 'cardboard-fold',
     thicknessMm: 3.0,
     kerfMm: 0.12,
@@ -126,7 +126,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
   },
   {
     id: 'cardstock-0.6mm',
-    name: '0.6 mm Chipboard / Heavy Cardstock',
+    name: '0.6 mm chipboard or heavy cardstock',
     category: 'cardboard-fold',
     thicknessMm: 0.6,
     kerfMm: 0.08,
@@ -136,7 +136,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
   },
   {
     id: 'pla-petg',
-    name: 'PLA / PETG (0.4mm Nozzle)',
+    name: 'PLA or PETG (0.4 mm nozzle)',
     category: '3d-print',
     thicknessMm: 2.4,
     kerfMm: 0.0,
@@ -189,8 +189,8 @@ export interface TemplateMetadata {
 export const BOX_TEMPLATES: TemplateMetadata[] = [
   {
     id: 'finger-basic',
-    name: '6-Panel Finger-Joint Box',
-    shortName: 'Finger-Joint Box',
+    name: 'Six-panel finger-joint box',
+    shortName: 'Finger-joint box',
     category: 'wood-finger',
     pass: 'Pass 1 (Core)',
     tagline: 'Basswood & MDF box with symmetric odd finger joints & 3-way corner solver.',
@@ -199,8 +199,8 @@ export const BOX_TEMPLATES: TemplateMetadata[] = [
   },
   {
     id: 'finger-clamshell',
-    name: 'Treasure Chest / Clamshell Box',
-    shortName: 'Clamshell Chest',
+    name: 'Treasure chest or clamshell box',
+    shortName: 'Clamshell chest',
     category: 'wood-finger',
     pass: 'Pass 2 (Specialty)',
     tagline: 'Split base & hinged lid with integrated laser-cut knuckle or side-pivot hinges.',
@@ -209,8 +209,8 @@ export const BOX_TEMPLATES: TemplateMetadata[] = [
   },
   {
     id: 'finger-living-hinge',
-    name: 'Living-Hinge Curved Lid Box',
-    shortName: 'Living Hinge Box',
+    name: 'Living-hinge box with a curved lid',
+    shortName: 'Living-hinge box',
     category: 'wood-finger',
     pass: 'Pass 2 (Specialty)',
     tagline: 'Flexible kerf-cut lattice allows rigid wood or MDF to bend around a curved lid.',
@@ -219,8 +219,8 @@ export const BOX_TEMPLATES: TemplateMetadata[] = [
   },
   {
     id: 'finger-organizer',
-    name: 'Slotted Divider Organizer Box',
-    shortName: 'Organizer Grid',
+    name: 'Organizer box with slotted dividers',
+    shortName: 'Organizer grid',
     category: 'wood-finger',
     pass: 'Pass 2 (Specialty)',
     tagline: 'Finger-joint box with parametric interlocking X × Y internal compartment dividers.',
@@ -229,8 +229,8 @@ export const BOX_TEMPLATES: TemplateMetadata[] = [
   },
   {
     id: 'cardboard-mailer',
-    name: 'Roll-End Tuck Top Mailer (RETT)',
-    shortName: 'E-Commerce Mailer',
+    name: 'Roll-end tuck-top mailer (RETT)',
+    shortName: 'Mailer',
     category: 'cardboard-fold',
     pass: 'Pass 1 (Core)',
     tagline: 'Classic 1-piece corrugated mailer box with rollover side walls, dust flaps & tuck lid.',
@@ -239,8 +239,8 @@ export const BOX_TEMPLATES: TemplateMetadata[] = [
   },
   {
     id: 'cardboard-tuck-carton',
-    name: 'Folding Product Carton (RTE / STE)',
-    shortName: 'Retail Tuck Carton',
+    name: 'Folding product carton (RTE or STE)',
+    shortName: 'Tuck carton',
     category: 'cardboard-fold',
     pass: 'Pass 1 (Core)',
     tagline: 'Retail packaging carton with tapered side glue tab, dust flaps & friction tuck closures.',
@@ -249,8 +249,8 @@ export const BOX_TEMPLATES: TemplateMetadata[] = [
   },
   {
     id: 'cardboard-telescope',
-    name: 'Two-Piece Telescoping Box (Shoebox)',
-    shortName: 'Telescoping Lid Box',
+    name: 'Two-piece telescoping box (shoebox)',
+    shortName: 'Telescoping box',
     category: 'cardboard-fold',
     pass: 'Pass 2 (Specialty)',
     tagline: 'Separate folding base tray and slip-over lid with adjustable clearance tolerance.',
@@ -259,8 +259,8 @@ export const BOX_TEMPLATES: TemplateMetadata[] = [
   },
   {
     id: '3d-snap-box',
-    name: 'Parametric 3D-Printed Snap Box',
-    shortName: '3D Print Snap Box',
+    name: '3D-printed snap box',
+    shortName: 'Snap box',
     category: '3d-print',
     pass: 'Pass 3 (3D Print)',
     tagline: 'Watertight 3D-printable enclosure with inner fillets, 45° bed chamfers & snap clasp.',
@@ -285,46 +285,46 @@ export const EXPORT_PROFILES: Record<ExportProfileId, ExportProfileConfig> = {
   'xtool-studio': {
     id: 'xtool-studio',
     name: 'xTool Studio (M2 / P2 / S1)',
-    badge: 'xTool M2 Print & Cut Ready',
+    badge: 'Ready for xTool M2 print and cut',
     cutColor: '#FF0000',
     scoreColor: '#0000FF',
     guideColor: '#00AA00',
     strokeWidthMm: 0.1,
     dpi: 72,
-    notes: 'Maps Red (#FF0000) to Cut, Blue (#0000FF) to Score, and embeds Artwork at 1:1 mm scale for xTool M2 Print + Cut.',
+    notes: 'Red (#FF0000) cuts, blue (#0000FF) scores, and artwork is embedded at 1:1 mm for xTool M2 print and cut.',
   },
   lightburn: {
     id: 'lightburn',
     name: 'LightBurn (C00 / C01 / C02)',
-    badge: 'LightBurn Palette',
+    badge: 'LightBurn palette',
     cutColor: '#FF0000', // C02 Red (Cut)
     scoreColor: '#0000FF', // C01 Blue (Line/Score)
     guideColor: '#00E000', // C03 Green (Tool)
     strokeWidthMm: 0.05,
     dpi: 96,
-    notes: 'Uses official LightBurn layer colors (C02 Red = Cut, C01 Blue = Score) with 96 DPI SVG / R14 DXF units.',
+    notes: 'LightBurn layer colors (C02 red cuts, C01 blue scores), with 96 DPI SVG and R14 DXF units.',
   },
   illustrator: {
     id: 'illustrator',
     name: 'Adobe Illustrator / Inkscape',
-    badge: 'Layered PDF & SVG',
+    badge: 'Layered PDF and SVG',
     cutColor: '#ED1C24',
     scoreColor: '#0071BC',
     guideColor: '#29ABE2',
     strokeWidthMm: 0.08,
     dpi: 72,
-    notes: 'Generates true Optional Content Group (OCG) layers in PDF ("Cut Lines", "Score Lines", "Print Artwork", "Registration Marks").',
+    notes: 'PDF layers (optional content groups) for cut lines, score lines, print artwork and registration marks.',
   },
   glowforge: {
     id: 'glowforge',
     name: 'Glowforge / Craft Cutters',
-    badge: 'Color-Ordered SVG',
+    badge: 'Color-ordered SVG',
     cutColor: '#FF0000',
     scoreColor: '#0000FF',
     guideColor: '#888888',
     strokeWidthMm: 0.1,
     dpi: 96,
-    notes: 'Orders Score steps (#0000FF) before Cut steps (#FF0000) so parts stay flat until scoring finishes.',
+    notes: 'Score steps (#0000FF) run before cut steps (#FF0000), so parts stay flat until scoring finishes.',
   },
 };
 

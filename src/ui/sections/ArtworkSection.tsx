@@ -5,7 +5,9 @@ import {
   AlignRight,
   Copy,
   ImagePlus,
+  Italic,
   RotateCcw,
+  RotateCw,
   Sparkles,
   Trash2,
   Type,
@@ -17,6 +19,13 @@ import type { TextArtworkConfig } from '../../engine/types';
 import { Field, Segmented } from '../Field';
 import { FACE_OPTIONS, unitHelpers } from './shared';
 import type { SectionProps } from './types';
+
+const anchorName = (ax: -1 | 0 | 1, ay: -1 | 0 | 1): string => {
+  if (ax === 0 && ay === 0) return 'Snap to the center';
+  const v = ay === -1 ? 'top' : ay === 1 ? 'bottom' : '';
+  const h = ax === -1 ? 'left' : ax === 1 ? 'right' : '';
+  return `Snap to the ${[v, h].filter(Boolean).join(' ')}${v && h ? ' corner' : ' edge'}`;
+};
 
 /** Text and graphics per face: face picker, upload, Google Font text, and the per-item inspector. */
 export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }) => {
@@ -50,22 +59,23 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
   return (
     <>
       <p className="helper-note">
-        Select a box piece to add <strong>Google Font text</strong> or <strong>SVG / PNG</strong>{' '}
-        graphics, then align or snap them to any edge or center of the piece.
+        Pick a piece, add text in any Google Font or an SVG or PNG graphic, then snap it to an edge or the center.
       </p>
 
-      <div className="face-pills">
+      <div className="chip-row face-pills" role="group" aria-label="Piece">
         {FACE_OPTIONS.map((f) => {
           const count = artworks.filter((a) => a.faceId === f.id).length;
           return (
             <button
               key={f.id}
               type="button"
-              className={`face-pill ${selectedFaceId === f.id ? 'active' : ''}`}
+              className="chip"
+              aria-pressed={selectedFaceId === f.id}
+              data-ph-capture-attribute-face={f.id}
               onClick={() => setSelectedFaceId(f.id)}
             >
               {f.label}
-              {count > 0 && <span className="art-count">{count}</span>}
+              {count > 0 && <span className="count">{count}</span>}
             </button>
           );
         })}
@@ -75,64 +85,69 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
         ref={uploadInputRef}
         type="file"
         accept=".svg,.png,.jpg,.jpeg,.webp"
-        style={{ display: 'none' }}
+        className="visually-hidden-input"
         onChange={uploadArtwork}
       />
 
       <div className="two-col-inputs">
         <button
           type="button"
-          className="upload-art-btn add-text-btn"
+          className="btn"
           onClick={addTextArtwork}
         >
-          <Type size={15} />
-          + Add Text (Font)
+          <Type size={18} strokeWidth={1.75} aria-hidden="true" />
+          Add text
         </button>
         <button
           type="button"
-          className="upload-art-btn"
+          className="btn"
           onClick={() => uploadInputRef.current?.click()}
         >
-          <ImagePlus size={15} />
-          Upload SVG / PNG
+          <ImagePlus size={18} strokeWidth={1.75} aria-hidden="true" />
+          Upload image
         </button>
       </div>
 
       <div className="sample-stamps-block">
         <span className="mini-heading">
-          <Sparkles size={12} /> Quick Sample Graphics
+          <Sparkles size={16} strokeWidth={1.75} aria-hidden="true" /> Sample graphics
         </span>
-        <div className="sample-stamp-btns">
+        <div className="chip-row sample-stamp-btns">
           {SAMPLE_ARTWORK_PRESETS.map((sample) => (
             <button
               key={sample.id}
               type="button"
-              className="sample-btn"
+              className="chip"
               onClick={() => addSampleArtwork(sample)}
             >
-              + {sample.name}
+              {sample.name}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Layer Switcher when multiple items exist on this piece */}
+      {/* With more than one item on the piece, a chip per item picks which one to edit. */}
       {artworks.filter((a) => a.faceId === selectedFaceId).length > 1 && (
         <div className="face-layer-list">
           <span className="mini-heading">
             Items on {FACE_OPTIONS.find((f) => f.id === selectedFaceId)?.label}
           </span>
-          <div className="layer-chips">
+          <div className="chip-row layer-chips">
             {artworks
               .filter((a) => a.faceId === selectedFaceId)
               .map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  className={`layer-chip ${selectedArtwork?.id === item.id ? 'active' : ''}`}
+                  className="chip layer-chip"
+                  aria-pressed={selectedArtwork?.id === item.id}
                   onClick={() => setSelectedArtworkId(item.id)}
                 >
-                  {item.textConfig ? <Type size={11} /> : <ImagePlus size={11} />}
+                  {item.textConfig ? (
+                    <Type size={16} strokeWidth={1.75} aria-hidden="true" />
+                  ) : (
+                    <ImagePlus size={16} strokeWidth={1.75} aria-hidden="true" />
+                  )}
                   <span>{item.name}</span>
                 </button>
               ))}
@@ -144,29 +159,30 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
         <div className="artwork-inspector">
           <div className="art-inspector-header">
             <strong>{selectedArtwork.name}</strong>
-            <div style={{ display: 'flex', gap: 5 }}>
+            <div className="art-inspector-actions">
               <button
                 type="button"
-                className="icon-action-btn"
+                className="icon-btn"
                 onClick={() => duplicateArtwork(selectedArtwork)}
-                title="Duplicate this item"
+                aria-label="Duplicate"
+                title="Duplicate"
               >
-                <Copy size={13} />
+                <Copy size={18} strokeWidth={1.75} aria-hidden="true" />
               </button>
               <button
                 type="button"
-                className="icon-danger-btn"
+                className="icon-btn icon-btn-danger"
                 onClick={() => removeArtwork(selectedArtwork.id)}
-                title="Remove item"
+                aria-label="Remove"
+                title="Remove"
               >
-                <Trash2 size={14} />
+                <Trash2 size={18} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
           </div>
 
           <Segmented
             ariaLabel="Artwork mode"
-            style={{ marginBottom: 8 }}
             value={selectedArtwork.mode}
             onChange={(mode) => {
               if (selectedArtwork.textConfig) {
@@ -176,15 +192,15 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
               }
             }}
             options={[
-              { value: 'print', label: 'Inkjet Print (Color)' },
-              { value: 'engrave', label: 'Laser Engrave' },
+              { value: 'print', label: 'Print in color' },
+              { value: 'engrave', label: 'Engrave' },
             ]}
           />
 
-          {/* GOOGLE FONT TEXT INSPECTOR */}
+          {/* Text: content, font, weight, alignment and color. */}
           {selectedArtwork.textConfig && (
             <div className="text-config-panel">
-              <Field label={"Text content (multi-line supported)"}>
+              <Field label={"Text"}>
                 <textarea
                   rows={2}
                   className="text-area-field"
@@ -192,11 +208,11 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                   onChange={(e) =>
                     updateTextConfig(selectedArtwork, { text: e.target.value })
                   }
-                  placeholder="Enter text..."
+                  placeholder="Your text"
                 />
               </Field>
 
-              <Field label={"Google font family"}>
+              <Field label={"Font"}>
                 <select
                   value={
                     GOOGLE_FONT_CATALOG.some(
@@ -251,7 +267,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 <input
                   type="text"
                   className="text-field"
-                  placeholder="Or type any Google Font (e.g. Lobster, Orbitron)..."
+                  placeholder="Or any Google Font, like Lobster"
                   value={customFontInput}
                   onChange={(e) => setCustomFontInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -265,7 +281,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 />
                 <button
                   type="button"
-                  className="mini-action-btn"
+                  className="btn"
                   disabled={!customFontInput.trim()}
                   onClick={() => {
                     if (customFontInput.trim()) {
@@ -276,13 +292,13 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                     }
                   }}
                 >
-                  Load Font
+                  Load
                 </button>
               </div>
 
               <div className="two-col-inputs">
                 <Field label={"Weight and style"}>
-                  <div style={{ display: 'flex', gap: 4 }}>
+                  <div className="control-pair">
                     <select
                       value={selectedArtwork.textConfig.fontWeight}
                       onChange={(e) =>
@@ -292,15 +308,15 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                       }
                     >
                       <option value="400">Regular (400)</option>
-                      <option value="600">SemiBold (600)</option>
+                      <option value="600">Semibold (600)</option>
                       <option value="700">Bold (700)</option>
-                      <option value="800">ExtraBold (800)</option>
+                      <option value="800">Extra bold (800)</option>
                     </select>
                     <button
                       type="button"
-                      className={`style-toggle-btn ${
-                        selectedArtwork.textConfig.fontStyle === 'italic' ? 'active' : ''
-                      }`}
+                      className="icon-btn"
+                      aria-pressed={selectedArtwork.textConfig.fontStyle === 'italic'}
+                      aria-label="Italic"
                       onClick={() =>
                         updateTextConfig(selectedArtwork, {
                           fontStyle:
@@ -309,24 +325,23 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                               : 'italic',
                         })
                       }
-                      title="Toggle Italic"
+                      title="Italic"
                     >
-                      <em>I</em>
+                      <Italic size={18} strokeWidth={1.75} aria-hidden="true" />
                     </button>
                   </div>
                 </Field>
 
                 <Field label={"Line align and color"}>
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <div className="control-pair">
                     <Segmented
                       ariaLabel="Line align"
-                      style={{ flex: 1 }}
                       value={selectedArtwork.textConfig.textAlign}
                       onChange={(textAlign) => updateTextConfig(selectedArtwork, { textAlign })}
                       options={[
-                        { value: 'left', label: <AlignLeft size={12} />, title: 'Align multi-line text left' },
-                        { value: 'center', label: <AlignCenter size={12} />, title: 'Center multi-line text' },
-                        { value: 'right', label: <AlignRight size={12} />, title: 'Align multi-line text right' },
+                        { value: 'left', label: <AlignLeft size={16} strokeWidth={1.75} />, title: 'Align left' },
+                        { value: 'center', label: <AlignCenter size={16} strokeWidth={1.75} />, title: 'Center' },
+                        { value: 'right', label: <AlignRight size={16} strokeWidth={1.75} />, title: 'Align right' },
                       ]}
                     />
                     {selectedArtwork.mode === 'print' && (
@@ -337,7 +352,8 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                         onChange={(e) =>
                           updateTextConfig(selectedArtwork, { color: e.target.value })
                         }
-                        title="Text print color"
+                        title="Text color"
+                        aria-label="Text color"
                       />
                     )}
                   </div>
@@ -346,12 +362,10 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
             </div>
           )}
 
-          {/* ALIGN & SNAP TO PIECE TOOLBAR */}
+          {/* Snap to the piece: nine anchors, axis alignment, fit and rotate. */}
           <div className="align-piece-box">
-            <div className="param-label-row">
-              <span className="mini-heading">
-                Align to Piece ({FACE_OPTIONS.find((f) => f.id === selectedArtwork.faceId)?.label})
-              </span>
+            <div className="mini-heading-row">
+              <span className="mini-heading">Align on the piece</span>
               <div className="margin-inline">
                 <span>Margin ({uLabel})</span>
                 <NumberField
@@ -363,15 +377,14 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                   inDecimals={2}
                   mmDecimals={1}
                   className="num-field num-field-xs"
-                  ariaLabel="Piece Edge Margin"
+                  ariaLabel="Margin"
                   onChangeMm={(mm) => setAlignMarginMm(mm)}
                 />
               </div>
             </div>
 
             <div className="align-controls-layout">
-              {/* 9-Point Piece Anchor Matrix */}
-              <div className="anchor-grid-9" title="Snap to any corner, edge, or center of the piece">
+              <div className="anchor-grid-9" role="group" aria-label="Snap to">
                 {([-1, 0, 1] as const).map((ay) =>
                   ([-1, 0, 1] as const).map((ax) => (
                     <button
@@ -379,9 +392,8 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                       type="button"
                       className={`anchor-dot-btn ${ax === 0 && ay === 0 ? 'center-dot' : ''}`}
                       onClick={() => alignArtwork(selectedArtwork, ax, ay)}
-                      title={`Snap to ${
-                        ay === -1 ? 'Top' : ay === 1 ? 'Bottom' : 'Middle'
-                      }-${ax === -1 ? 'Left' : ax === 1 ? 'Right' : 'Center'} of piece`}
+                      title={anchorName(ax, ay)}
+                      aria-label={anchorName(ax, ay)}
                     >
                       <span />
                     </button>
@@ -389,95 +401,96 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 )}
               </div>
 
-              {/* Axis Align & Fit to Piece Buttons */}
               <div className="align-quick-btns">
                 <div className="align-btn-row">
                   <button
                     type="button"
-                    className="align-btn"
+                    className="btn btn-sm"
                     onClick={() => alignArtwork(selectedArtwork, -1, undefined)}
-                    title="Align to Left edge of piece"
+                    title="Align to the left edge"
                   >
-                    ⇤ Left
+                    Left
                   </button>
                   <button
                     type="button"
-                    className="align-btn"
+                    className="btn btn-sm"
                     onClick={() => alignArtwork(selectedArtwork, 0, undefined)}
-                    title="Center Horizontally on piece"
+                    title="Center across"
                   >
-                    ↔ Center H
+                    Center
                   </button>
                   <button
                     type="button"
-                    className="align-btn"
+                    className="btn btn-sm"
                     onClick={() => alignArtwork(selectedArtwork, 1, undefined)}
-                    title="Align to Right edge of piece"
+                    title="Align to the right edge"
                   >
-                    Right ⇥
+                    Right
                   </button>
                 </div>
                 <div className="align-btn-row">
                   <button
                     type="button"
-                    className="align-btn"
+                    className="btn btn-sm"
                     onClick={() => alignArtwork(selectedArtwork, undefined, -1)}
-                    title="Align to Top edge of piece"
+                    title="Align to the top edge"
                   >
-                    ⇡ Top
+                    Top
                   </button>
                   <button
                     type="button"
-                    className="align-btn"
+                    className="btn btn-sm"
                     onClick={() => alignArtwork(selectedArtwork, undefined, 0)}
-                    title="Center Vertically on piece"
+                    title="Center up and down"
                   >
-                    ↕ Center V
+                    Middle
                   </button>
                   <button
                     type="button"
-                    className="align-btn"
+                    className="btn btn-sm"
                     onClick={() => alignArtwork(selectedArtwork, undefined, 1)}
-                    title="Align to Bottom edge of piece"
+                    title="Align to the bottom edge"
                   >
-                    Bottom ⇣
+                    Bottom
                   </button>
                 </div>
                 <div className="align-btn-row">
                   <button
                     type="button"
-                    className="align-btn"
+                    className="btn btn-sm"
                     onClick={() => fitArtwork(selectedArtwork, 'width', 0.78)}
-                    title="Scale proportionally to 78% of this piece's width"
+                    title="Scale to 78% of the piece's width"
                   >
-                    Fit Width
+                    Fit width
                   </button>
                   <button
                     type="button"
-                    className="align-btn"
+                    className="btn btn-sm"
                     onClick={() => fitArtwork(selectedArtwork, 'height', 0.5)}
-                    title="Scale proportionally to 50% of this piece's height"
+                    title="Scale to 50% of the piece's height"
                   >
-                    Fit Height
+                    Fit height
                   </button>
                   <button
                     type="button"
-                    className="align-btn"
+                    className="btn btn-sm"
                     onClick={() =>
                       updateArtwork(selectedArtwork.id, {
                         rotationDeg: ((selectedArtwork.rotationDeg + 90 + 180) % 360) - 180,
                       })
                     }
-                    title="Rotate 90 degrees"
+                    title="Rotate 90°"
+                    aria-label="Rotate 90°"
                   >
-                    ↻ 90°
+                    <RotateCw size={16} strokeWidth={1.75} aria-hidden="true" />
+                    90°
                   </button>
                 </div>
               </div>
             </div>
 
             <div className="move-piece-row">
-              <span>Move to Piece:</span>
+              <span>Move to</span>
               <select
                 value={selectedArtwork.faceId}
                 onChange={(e) => {
@@ -509,7 +522,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 displayUnit={displayUnit}
                 inDecimals={2}
                 mmDecimals={1}
-                ariaLabel="Artwork Width"
+                ariaLabel="Artwork width"
                 onChangeMm={(mm) => {
                   if (selectedArtwork.textConfig) {
                     const aspect = Math.max(
@@ -535,7 +548,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 displayUnit={displayUnit}
                 inDecimals={2}
                 mmDecimals={1}
-                ariaLabel="Artwork Height"
+                ariaLabel="Artwork height"
                 onChangeMm={(mm) => {
                   if (selectedArtwork.textConfig) {
                     const aspect = Math.max(
@@ -564,7 +577,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 displayUnit={displayUnit}
                 inDecimals={2}
                 mmDecimals={1}
-                ariaLabel="Artwork Offset X"
+                ariaLabel="Artwork offset X"
                 onChangeMm={(mm) =>
                   updateArtwork(selectedArtwork.id, { xMm: mm })
                 }
@@ -579,7 +592,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 displayUnit={displayUnit}
                 inDecimals={2}
                 mmDecimals={1}
-                ariaLabel="Artwork Offset Y"
+                ariaLabel="Artwork offset Y"
                 onChangeMm={(mm) =>
                   updateArtwork(selectedArtwork.id, { yMm: mm })
                 }
@@ -589,10 +602,10 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
 
           <div className="param-row">
             <div className="param-label-row">
-              <label>Rotation ({selectedArtwork.rotationDeg}°)</label>
+              <label>Rotation {selectedArtwork.rotationDeg}°</label>
               <button
                 type="button"
-                className="text-action-btn"
+                className="link-btn"
                 onClick={() =>
                   updateArtwork(selectedArtwork.id, {
                     xMm: 0,
@@ -601,7 +614,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                   })
                 }
               >
-                <RotateCcw size={11} /> Reset Center
+                <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" /> Reset position
               </button>
             </div>
             <input
@@ -610,6 +623,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
               max={180}
               step={5}
               value={selectedArtwork.rotationDeg}
+              aria-label="Rotation"
               onChange={(e) =>
                 updateArtwork(selectedArtwork.id, {
                   rotationDeg: Number(e.target.value),
@@ -620,8 +634,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
         </div>
       ) : (
         <p className="empty-art-hint">
-          No text or graphic on this piece yet. Click <strong>+ Add Text (Font)</strong> or{' '}
-          <strong>Upload SVG / PNG</strong> above.
+          Nothing on this piece yet. Use <strong>Add text</strong> or <strong>Upload image</strong> above.
         </p>
       )}
     </>

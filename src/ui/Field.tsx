@@ -8,8 +8,8 @@ interface FieldProps {
 
 /** A labeled control: the label above, the control below, an optional hint under it. */
 export const Field: React.FC<FieldProps> = ({ label, hint, children }) => (
-  <label className="field-block">
-    <span>{label}</span>
+  <label className="field">
+    <span className="field-label">{label}</span>
     {children}
     {hint && <small className="field-hint">{hint}</small>}
   </label>

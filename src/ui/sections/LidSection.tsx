@@ -11,15 +11,15 @@ export const LidSection: React.FC<SectionProps> = ({ params, updateParam, displa
   return (
     <>
       {params.templateId === 'finger-basic' && (
-        <Field label="Top / lid construction">
+        <Field label="Lid style">
           <select
             value={params.woodLidStyle}
             onChange={(e) => updateParam('woodLidStyle', e.target.value as BoxParameters['woodLidStyle'])}
           >
-            <option value="flat-lid">Flat Lift-Off Lid</option>
-            <option value="inset-lid">Lift-Off Lid + Inner Retainer Lip</option>
-            <option value="closed">6-Sided Interlocking Finger Box</option>
-            <option value="open">Open-Top 5-Sided Tray</option>
+            <option value="flat-lid">Flat lift-off lid</option>
+            <option value="inset-lid">Lift-off lid with an inner lip</option>
+            <option value="closed">Closed, six sides</option>
+            <option value="open">Open-top tray, five sides</option>
           </select>
         </Field>
       )}

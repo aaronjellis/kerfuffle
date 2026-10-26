@@ -10,22 +10,22 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
   const { isInch, uLabel } = unitHelpers(displayUnit);
   return (
     <>
-      <Field label="Wall attachment mode">
+      <Field label="Attachment">
         <select
           value={params.livingHingeAttachMode}
           onChange={(e) =>
             updateParam('livingHingeAttachMode', e.target.value as BoxParameters['livingHingeAttachMode'])
           }
         >
-          <option value="one-piece-back">1-Piece Integrated Back Wall + Front Catch Slot</option>
-          <option value="side-arch-tabs">1-Piece Back Wall + Top-Deck Side Retainer Tabs</option>
-          <option value="finger-joint-back">2-Piece Finger-Jointed to Back Wall + Front Catch</option>
+          <option value="one-piece-back">One piece with the back wall, front catch slot</option>
+          <option value="side-arch-tabs">One piece with the back wall, side retainer tabs</option>
+          <option value="finger-joint-back">Finger-jointed to the back wall, front catch</option>
         </select>
       </Field>
 
       <div className="param-row">
         <div className="param-label-row">
-          <label>Living hinge kerf pitch ({uLabel})</label>
+          <label>Kerf pitch ({uLabel})</label>
           <NumberField
             valueMm={params.livingHingePitchMm}
             minMm={1.8}

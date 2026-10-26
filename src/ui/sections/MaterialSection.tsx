@@ -27,11 +27,11 @@ export const MaterialSection: React.FC<SectionProps> = ({ params, updateParam, d
           }}
         >
           <option value="" disabled>
-            Choose a stock preset...
+            Choose a preset
           </option>
           {MATERIAL_PRESETS.filter((m) => m.category === params.category).map((mat) => (
             <option key={mat.id} value={mat.id}>
-              {mat.name} (kerf {mat.kerfMm}mm)
+              {mat.name}, kerf {mat.kerfMm} mm
             </option>
           ))}
         </select>

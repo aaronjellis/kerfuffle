@@ -2,7 +2,8 @@
    - the accent family (olive instead of verdigris);
    - the font names ('Figtree Variable', 'Bricolage Grotesque Variable');
    - --brass and the --sketch-* tokens are dropped;
-   - --inspector-w and --inspector-w-narrow are added. */
+   - --inspector-w and --inspector-w-narrow are added;
+   - --stage-accent and --stage-line are added for the HUD on the always-dark stage. */
 
 :root {
   /* Calm porcelain neutrals; the drawing carries the color. */
@@ -27,6 +28,9 @@
   /* Text on the stage, which stays dark in both themes. */
   --stage-ink: rgb(255 255 255 / 0.72);
   --stage-danger: #f2a39c;
+  /* The stage's own accent and hairline: the stage is dark in both themes, so these are too. */
+  --stage-accent: #9fcf52;
+  --stage-line: rgb(255 255 255 / 0.14);
   --danger: #b3261e;
   --ok: #2e7d4f;
 

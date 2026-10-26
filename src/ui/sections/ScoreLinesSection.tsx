@@ -85,13 +85,13 @@ export const ScoreLinesSection: React.FC<SectionProps> = ({ params, updateParam,
             </Field>
           </div>
 
-          <Field label="Carton closure orientation">
+          <Field label="Tuck ends">
             <select
               value={params.tuckCartonStyle}
               onChange={(e) => updateParam('tuckCartonStyle', e.target.value as BoxParameters['tuckCartonStyle'])}
             >
-              <option value="reverse-tuck">Reverse Tuck End (RTE)</option>
-              <option value="straight-tuck">Straight Tuck End (STE)</option>
+              <option value="reverse-tuck">Reverse tuck end (RTE)</option>
+              <option value="straight-tuck">Straight tuck end (STE)</option>
             </select>
           </Field>
         </>

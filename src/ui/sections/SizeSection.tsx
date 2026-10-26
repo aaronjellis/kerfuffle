@@ -8,7 +8,7 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
   const { isInch, uLabel, fmtDim } = unitHelpers(displayUnit);
   return (
     <>
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div className="seg-pair">
         <Segmented
           ariaLabel="Units"
           value={displayUnit}
@@ -31,7 +31,7 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
 
       <div className="param-row">
         <div className="param-label-row">
-          <label>Width (W) [{uLabel}]</label>
+          <label>Width ({uLabel})</label>
           <NumberField
             valueMm={params.widthMm}
             minMm={20}
@@ -57,7 +57,7 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
 
       <div className="param-row">
         <div className="param-label-row">
-          <label>Depth (D) [{uLabel}]</label>
+          <label>Depth ({uLabel})</label>
           <NumberField
             valueMm={params.depthMm}
             minMm={20}
@@ -83,7 +83,7 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
 
       <div className="param-row">
         <div className="param-label-row">
-          <label>Height (H) [{uLabel}]</label>
+          <label>Height ({uLabel})</label>
           <NumberField
             valueMm={params.heightMm}
             minMm={15}
@@ -109,14 +109,14 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
 
       <div className="dims-readout">
         <div>
-          <span>Inner:</span>
+          <span>Inner</span>
           <strong>
             {fmtDim(model.innerDims.widthMm)} × {fmtDim(model.innerDims.depthMm)} ×{' '}
             {fmtDim(model.innerDims.heightMm)} {uLabel}
           </strong>
         </div>
         <div>
-          <span>{params.category === '3d-print' ? 'Shell outside:' : 'Outer:'}</span>
+          <span>{params.category === '3d-print' ? 'Shell outside' : 'Outer'}</span>
           <strong>
             {fmtDim(model.outerDims.widthMm)} × {fmtDim(model.outerDims.depthMm)} ×{' '}
             {fmtDim(model.outerDims.heightMm)} {uLabel}

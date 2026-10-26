@@ -249,50 +249,7 @@ h4 {
 
 /* ---------- shared controls (app bar, stage pill, popovers) ---------- */
 
-/* Segmented: a sunken pill track; the chosen segment is raised. Scoped here until
-   style.css (which styles .segmented-toggle for the sections) is dropped. */
-.app-bar .segmented-toggle,
-.stage-pill .segmented-toggle {
-  display: inline-flex;
-  flex: none;
-  gap: 2px;
-  padding: 3px;
-  background: var(--sunken);
-  border: 0;
-  border-radius: var(--r-pill);
-}
-
-.app-bar .segmented-toggle button,
-.stage-pill .segmented-toggle button {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  min-height: calc(var(--control-h) - 6px);
-  padding: 0 0.85rem;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--fs-label);
-  font-weight: var(--w-medium);
-  white-space: nowrap;
-  background: transparent;
-  border: 0;
-  border-radius: var(--r-pill);
-  cursor: pointer;
-}
-
-.app-bar .segmented-toggle button:hover,
-.stage-pill .segmented-toggle button:hover {
-  color: var(--ink);
-}
-
-.app-bar .segmented-toggle button.active,
-.stage-pill .segmented-toggle button.active {
-  color: var(--ink);
-  background: var(--raised);
-  box-shadow: var(--raised-shadow);
-}
+/* Segmented, buttons, inputs and chips live in controls.css. */
 
 .btn-primary {
   display: inline-flex;
@@ -362,6 +319,24 @@ h4 {
 .stage > .stage-views {
   position: absolute;
   inset: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.stage-views.mode-split {
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.viewport-pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.viewport-3d-canvas {
+  width: 100%;
+  height: 100%;
 }
 
 .stage-views .viewport-pane {

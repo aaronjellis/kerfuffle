@@ -139,75 +139,48 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
 
   return (
     <div className="viewport-2d-wrapper" onWheel={handleWheel}>
-      <div className="viewport-2d-Hud">
-        <span className="hud-chip">
-          <span className="dot dot-cut" style={{ backgroundColor: profile.cutColor }} />
-          Cut ({profile.cutColor})
-        </span>
-        <span className="hud-chip">
-          <span className="dot dot-score" style={{ backgroundColor: foldColor }} />
-          {foldLayer === 'cut' ? 'Perforation (cuts)' : 'Vector Score'} ({foldColor})
-        </span>
-        <span className="hud-chip">
-          Sheet:{' '}
-          {displayUnit === 'in'
-            ? `${(sheetWidthMm / 25.4).toFixed(2)} × ${(sheetHeightMm / 25.4).toFixed(2)} in`
-            : `${Math.round(sheetWidthMm)} × ${Math.round(sheetHeightMm)} mm`}
-        </span>
+      <div className="viewport-2d-hud">
+        <div className="hud-legend">
+          <span className="hud-chip" title={`Cut lines, ${profile.cutColor}`}>
+            <span className="dot" style={{ backgroundColor: profile.cutColor }} />
+            Cut
+          </span>
+          <span className="hud-chip" title={`Fold lines, ${foldColor}`}>
+            <span className="dot" style={{ backgroundColor: foldColor }} />
+            {foldLayer === 'cut' ? 'Perforation (cuts)' : 'Score'}
+          </span>
+          {foldLayer === 'cut' && (
+            <span className="hud-chip" title={`Label engraves, ${profile.scoreColor}`}>
+              <span className="dot" style={{ backgroundColor: profile.scoreColor }} />
+              Labels (score)
+            </span>
+          )}
+          <span className="hud-chip">
+            Sheet{' '}
+            {displayUnit === 'in'
+              ? `${(sheetWidthMm / 25.4).toFixed(2)} × ${(sheetHeightMm / 25.4).toFixed(2)} in`
+              : `${Math.round(sheetWidthMm)} × ${Math.round(sheetHeightMm)} mm`}
+          </span>
+        </div>
 
-        {onToggleParam && (
-          <div className="hud-quick-toggles">
-            <button
-              type="button"
-              className={`hud-toggle-pill ${params.scoreInnerFaceLabels ? 'active' : ''}`}
-              onClick={() => onToggleParam('scoreInnerFaceLabels')}
-              title="Toggle single-stroke vector scoring of each side's name onto the inner face (exported in SVG, PDF & DXF)"
-            >
-              Score Side Names: {params.scoreInnerFaceLabels ? 'ON' : 'OFF'}
-            </button>
-            <button
-              type="button"
-              className={`hud-toggle-pill ${params.showDimensions ? 'active' : ''}`}
-              onClick={() => onToggleParam('showDimensions')}
-              title="Show or hide panel dimensions on the 2D sheet"
-            >
-              Dims
-            </button>
-            <button
-              type="button"
-              className={`hud-toggle-pill ${params.showGuideLabels2D ? 'active' : ''}`}
-              onClick={() => onToggleParam('showGuideLabels2D')}
-              title="Show or hide on-screen guide face names in the 2D preview"
-            >
-              Guides
-            </button>
-            <button
-              type="button"
-              className={`hud-toggle-pill ${params.includeRegistrationMarks ? 'active' : ''}`}
-              onClick={() => onToggleParam('includeRegistrationMarks')}
-              title="Toggle corner registration marks for Print+Cut"
-            >
-              Reg Marks
-            </button>
-          </div>
-        )}
-
-        <div className="hud-zoom-controls">
+        <div className="hud-zoom" role="group" aria-label="Zoom">
           <button
             type="button"
             className="hud-btn"
-            onClick={() => setZoom((z) => Math.min(6, Number((z * 1.25).toFixed(2))))}
-            title="Zoom in"
+            onClick={() => setZoom((z) => Math.max(0.35, Number((z * 0.8).toFixed(2))))}
+            aria-label="Zoom out"
+            title="Zoom out"
           >
-            +
+            −
           </button>
           <button
             type="button"
-            className="hud-btn"
+            className="hud-btn hud-btn-reset"
             onClick={() => {
               setZoom(1);
               setPan({ x: 0, y: 0 });
             }}
+            aria-label={`Reset view (${Math.round(zoom * 100)}%)`}
             title="Reset view"
           >
             {Math.round(zoom * 100)}%
@@ -215,12 +188,54 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
           <button
             type="button"
             className="hud-btn"
-            onClick={() => setZoom((z) => Math.max(0.35, Number((z * 0.8).toFixed(2))))}
-            title="Zoom out"
+            onClick={() => setZoom((z) => Math.min(6, Number((z * 1.25).toFixed(2))))}
+            aria-label="Zoom in"
+            title="Zoom in"
           >
-            −
+            +
           </button>
         </div>
+
+        {onToggleParam && (
+          <div className="hud-toggles" role="group" aria-label="Sheet layers">
+            <button
+              type="button"
+              className="hud-toggle"
+              aria-pressed={params.scoreInnerFaceLabels}
+              onClick={() => onToggleParam('scoreInnerFaceLabels')}
+              title="Score each side's name onto its inner face (in the SVG, PDF and DXF)"
+            >
+              Side names
+            </button>
+            <button
+              type="button"
+              className="hud-toggle"
+              aria-pressed={params.showDimensions}
+              onClick={() => onToggleParam('showDimensions')}
+              title="Show panel dimensions on the 2D sheet"
+            >
+              Dimensions
+            </button>
+            <button
+              type="button"
+              className="hud-toggle"
+              aria-pressed={params.showGuideLabels2D}
+              onClick={() => onToggleParam('showGuideLabels2D')}
+              title="Show screen-only face names in the 2D view"
+            >
+              Guides
+            </button>
+            <button
+              type="button"
+              className="hud-toggle"
+              aria-pressed={params.includeRegistrationMarks}
+              onClick={() => onToggleParam('includeRegistrationMarks')}
+              title="Corner registration marks for print-then-cut"
+            >
+              Registration marks
+            </button>
+          </div>
+        )}
       </div>
 
       <svg

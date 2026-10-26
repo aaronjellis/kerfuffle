@@ -13,7 +13,7 @@ function svgToDataUrl(svg: string): string {
 export const SAMPLE_ARTWORK_PRESETS: SampleArtworkPreset[] = [
   {
     id: 'stamp-maker',
-    name: 'Maker Crest Badge',
+    name: 'Maker crest',
     defaultWidthMm: 45,
     defaultHeightMm: 45,
     svgText: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
@@ -26,7 +26,7 @@ export const SAMPLE_ARTWORK_PRESETS: SampleArtworkPreset[] = [
   },
   {
     id: 'stamp-fragile',
-    name: 'Fragile / This Side Up Stamp',
+    name: 'Fragile stamp',
     defaultWidthMm: 56,
     defaultHeightMm: 34,
     svgText: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96">
@@ -40,7 +40,7 @@ export const SAMPLE_ARTWORK_PRESETS: SampleArtworkPreset[] = [
   },
   {
     id: 'stamp-compass',
-    name: 'Treasure Compass Rose',
+    name: 'Compass rose',
     defaultWidthMm: 50,
     defaultHeightMm: 50,
     svgText: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">

@@ -29,7 +29,7 @@ export const ShellSection: React.FC<SectionProps> = ({ params, updateParam, disp
             onChangeMm={(mm) => updateParam('wallThickness3dMm', mm)}
           />
         </Field>
-        <Field label={`Floor / lid (${uLabel})`}>
+        <Field label={`Floor and lid (${uLabel})`}>
           <NumberField
             valueMm={params.floorThickness3dMm}
             minMm={1.2}

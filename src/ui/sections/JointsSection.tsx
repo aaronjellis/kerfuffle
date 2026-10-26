@@ -10,7 +10,7 @@ export const JointsSection: React.FC<SectionProps> = ({ params, updateParam, dis
     <>
       <div className="param-row">
         <div className="param-label-row">
-          <label>Target finger size ({uLabel})</label>
+          <label>Finger size ({uLabel})</label>
           <NumberField
             valueMm={params.fingerWidthMm}
             minMm={4}

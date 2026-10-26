@@ -6,12 +6,12 @@ import type { SectionProps } from './types';
 export const PrintExportSection: React.FC<SectionProps> = ({ handlers }) => (
   <>
     <div className="two-col-inputs">
-      <button type="button" className="export-btn export-btn-3d" onClick={handlers.downloadStl}>
-        <Printer size={14} />
+      <button type="button" className="btn" onClick={handlers.downloadStl}>
+        <Printer size={18} strokeWidth={1.75} aria-hidden="true" />
         One STL
       </button>
-      <button type="button" className="export-btn export-btn-3d" onClick={handlers.downloadStlParts}>
-        <Printer size={14} />
+      <button type="button" className="btn" onClick={handlers.downloadStlParts}>
+        <Printer size={18} strokeWidth={1.75} aria-hidden="true" />
         Two STLs
       </button>
     </div>

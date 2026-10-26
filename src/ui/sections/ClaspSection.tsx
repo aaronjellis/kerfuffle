@@ -21,7 +21,7 @@ export const ClaspSection: React.FC<SectionProps> = ({ params, updateParam, disp
           {dims.clasp && (
             <div className="dims-readout">
               <div>
-                <span>Clasp width:</span>
+                <span>Clasp width</span>
                 <strong>
                   {fmtDim(dims.clasp.width)} {uLabel}
                 </strong>

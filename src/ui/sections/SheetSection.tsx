@@ -12,7 +12,7 @@ export const SheetSection: React.FC<SectionProps> = ({ params, updateParam, disp
   const activeProfile = EXPORT_PROFILES[params.exportProfile];
   return (
     <>
-      <Field label="Laser / cutter bed size">
+      <Field label="Bed size">
         <select value={params.bedPresetId} onChange={(e) => updateParam('bedPresetId', e.target.value)}>
           {MACHINE_BED_PRESETS.map((b) => (
             <option key={b.id} value={b.id}>
@@ -64,50 +64,48 @@ export const SheetSection: React.FC<SectionProps> = ({ params, updateParam, disp
         </select>
       </Field>
 
-      <Field label="SVG scale / unit coordinate system">
+      <Field label="SVG units">
         <select
           value={params.svgUnitMode}
           onChange={(e) => updateParam('svgUnitMode', e.target.value as BoxParameters['svgUnitMode'])}
         >
-          <option value="mm">1:1 Millimeters (xTool Studio / LightBurn Default)</option>
-          <option value="in">1:1 Inches (width="...in" / Imperial CAD)</option>
-          <option value="96dpi">96 DPI CSS Pixels (Inkscape / Web SVG)</option>
-          <option value="72dpi">72 DPI Points (Illustrator Legacy)</option>
+          <option value="mm">Millimeters, 1:1 (xTool Studio, LightBurn)</option>
+          <option value="in">Inches, 1:1 (imperial CAD)</option>
+          <option value="96dpi">CSS pixels, 96 DPI (Inkscape, web)</option>
+          <option value="72dpi">Points, 72 DPI (older Illustrator)</option>
         </select>
       </Field>
 
-      <Field label="SVG grouping structure">
+      <Field label="SVG grouping">
         <select
           value={params.svgGroupingMode || 'by-layer'}
           onChange={(e) => updateParam('svgGroupingMode', e.target.value as BoxParameters['svgGroupingMode'])}
         >
-          <option value="flat-2-objects">
-            xTool Flat (1 Joined Score + 1 Joined Cut Object — 1 Ungroup separates them)
-          </option>
-          <option value="by-piece">Group by Piece (Locked Cut + Score per Box Piece)</option>
-          <option value="by-layer">Group by Layer (Score_Lines Group + Cut_Lines Group)</option>
+          <option value="flat-2-objects">Flat: one score object and one cut object</option>
+          <option value="by-piece">By piece: cut and score grouped per piece</option>
+          <option value="by-layer">By layer: a score group and a cut group</option>
         </select>
       </Field>
 
       <Switch
-        label="Embed sheet frame and 50 mm scale bar"
+        label="Sheet frame and 50 mm scale bar"
         checked={params.includeScaleBar}
         onChange={(v) => updateParam('includeScaleBar', v)}
       />
       <Switch
-        label="Print-then-cut corner registration marks"
+        label="Registration marks for print-then-cut"
         checked={params.includeRegistrationMarks}
         onChange={(v) => updateParam('includeRegistrationMarks', v)}
       />
       <Switch
-        label="Show panel dimensions on 2D sheet"
+        label="Panel dimensions on the 2D sheet"
         checked={params.showDimensions}
         onChange={(v) => updateParam('showDimensions', v)}
       />
 
       <div className="dims-readout">
         <div>
-          <span>Target import size:</span>
+          <span>Import size</span>
           <strong>
             {fmtDim(model.sheetWidthMm)} × {fmtDim(model.sheetHeightMm)} {uLabel}
           </strong>
@@ -117,12 +115,12 @@ export const SheetSection: React.FC<SectionProps> = ({ params, updateParam, disp
       <div className="profile-info-box">
         <strong>{activeProfile.badge}</strong>
         <p>{activeProfile.notes}</p>
-        <p style={{ marginTop: 4, color: 'var(--accent-hover)', fontSize: 10.5 }}>
-          💡 <strong>xTool Studio Pro Tip:</strong> Look at the <em>Layer list</em> at the bottom-left of xTool Studio:
-          click the <strong>Blue (#0000FF)</strong> swatch → set to <strong>Score</strong>, and the{' '}
-          <strong>Red (#FF0000)</strong> swatch → set to <strong>Cut</strong>. No ungrouping needed! Or click{' '}
-          <strong>Split (Cut+Score)</strong> above for 2 separate files.
-        </p>
+        {params.exportProfile === 'xtool-studio' && (
+          <p>
+            In xTool Studio's layer list, set the {activeProfile.scoreColor} swatch to <strong>Score</strong> and the{' '}
+            {activeProfile.cutColor} swatch to <strong>Cut</strong>. No ungrouping needed.
+          </p>
+        )}
       </div>
     </>
   );

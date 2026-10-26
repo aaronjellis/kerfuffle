@@ -49,16 +49,16 @@ export const HingeSection: React.FC<SectionProps> = ({ params, updateParam, disp
   const printed = params.clamshellHingeType === 'printed-hinge';
   return (
     <>
-      <Field label="Rear hinge seam joinery">
+      <Field label="Hinge type">
         <select
           value={params.clamshellHingeType}
           onChange={(e) =>
             updateParam('clamshellHingeType', e.target.value as BoxParameters['clamshellHingeType'])
           }
         >
-          <option value="butt-hardware">Flat Butt Seam (No Fingers — Add Hardware Hinge)</option>
-          <option value="side-pivot">Flat Rear Seam + Side-Wall Pivot Pin Holes</option>
-          <option value="knuckle-pin">Interlocking Finger Seam (Custom Hinge Fingers)</option>
+          <option value="butt-hardware">Butt seam for a hardware hinge</option>
+          <option value="side-pivot">Pivot pin holes in the side walls</option>
+          <option value="knuckle-pin">Interlocking hinge fingers</option>
           <option value="printed-hinge">Printed hinge (STL)</option>
         </select>
       </Field>
@@ -103,8 +103,8 @@ export const HingeSection: React.FC<SectionProps> = ({ params, updateParam, disp
 
       {printed && (
         <>
-          <button type="button" className="export-btn export-btn-3d" onClick={handlers.exportHingeStl}>
-            <Printer size={14} />
+          <button type="button" className="btn" onClick={handlers.exportHingeStl}>
+            <Printer size={18} strokeWidth={1.75} aria-hidden="true" />
             Export hinge STL
           </button>
           <p className="helper-note">Print two of these; a drop of glue holds each leaf.</p>
