@@ -1,7 +1,9 @@
 import {
+  BoxDims,
   BoxPanel2D,
   BoxParameters,
   GeneratedBoxModel,
+  Panel3DTransform,
 } from './types';
 import { DEFAULT_FACE_LABELS, MACHINE_BED_PRESETS } from './presets';
 import { fmt, generateWoodFingerBox } from './fingerJointEngine';
@@ -153,49 +155,44 @@ function applyFaceLabelsAndVectorScores(
   });
 }
 
-export function generateBoxModel(params: BoxParameters): GeneratedBoxModel {
-  const T =
-    params.category === '3d-print' ? params.wallThickness3dMm : params.materialThicknessMm;
-
-  const innerW =
-    params.dimensionReference === 'inner'
-      ? Math.max(15, params.widthMm)
-      : Math.max(15, params.widthMm - 2 * T);
-  const innerD =
-    params.dimensionReference === 'inner'
-      ? Math.max(15, params.depthMm)
-      : Math.max(15, params.depthMm - 2 * T);
-  const innerH =
-    params.dimensionReference === 'inner'
-      ? Math.max(15, params.heightMm)
-      : Math.max(15, params.heightMm - 2 * T);
-
-  const outerW = innerW + 2 * T;
-  const outerD = innerD + 2 * T;
-  const outerH = innerH + (params.woodLidStyle === 'open' && params.category === 'wood-finger' ? T : 2 * T);
-
-  let panels2D: BoxPanel2D[] = [];
-  let panels3D = [];
-  let summary = '';
-
+/** Runs the template's generator for an inner size. */
+function generateForInner(
+  params: BoxParameters,
+  inner: BoxDims
+): { panels2D: BoxPanel2D[]; panels3D: Panel3DTransform[]; summary: string; outerDims: BoxDims } {
+  const { widthMm: w, depthMm: d, heightMm: h } = inner;
   if (params.category === 'wood-finger') {
-    const res = generateWoodFingerBox(params, innerW, innerD, innerH);
-    panels2D = res.panels2D;
-    panels3D = res.panels3D;
-    summary = res.fingerCountSummary;
-  } else if (params.category === 'cardboard-fold') {
-    const res = generateCardboardBox(params, innerW, innerD, innerH);
-    panels2D = res.panels2D;
-    panels3D = res.panels3D;
-    summary = res.summary;
-  } else {
-    const res = generate3DPrintBox(params, innerW, innerD, innerH);
-    panels2D = res.panels2D;
-    panels3D = res.panels3D;
-    summary = res.summary;
+    const res = generateWoodFingerBox(params, w, d, h);
+    return { ...res, summary: res.fingerCountSummary };
   }
+  if (params.category === 'cardboard-fold') return generateCardboardBox(params, w, d, h);
+  return generate3DPrintBox(params, w, d, h);
+}
 
-  panels2D = applyFaceLabelsAndVectorScores(panels2D, params);
+export function generateBoxModel(params: BoxParameters): GeneratedBoxModel {
+  const MIN_INNER_MM = 15;
+  const typed: BoxDims = {
+    widthMm: Math.max(MIN_INNER_MM, params.widthMm),
+    depthMm: Math.max(MIN_INNER_MM, params.depthMm),
+    heightMm: Math.max(MIN_INNER_MM, params.heightMm),
+  };
+
+  let inner = typed;
+  let res = generateForInner(params, typed);
+  if (params.dimensionReference !== 'inner') {
+    // Each template's outside size is its inner size plus a fixed allowance, so one run with the
+    // typed size as inner gives the allowance, and a second run cuts the box that has that outside size.
+    const allowance = (k: keyof BoxDims) => res.outerDims[k] - typed[k];
+    inner = {
+      widthMm: Math.max(MIN_INNER_MM, params.widthMm - allowance('widthMm')),
+      depthMm: Math.max(MIN_INNER_MM, params.depthMm - allowance('depthMm')),
+      heightMm: Math.max(MIN_INNER_MM, params.heightMm - allowance('heightMm')),
+    };
+    res = generateForInner(params, inner);
+  }
+  const { panels3D, summary, outerDims } = res;
+
+  const panels2D = applyFaceLabelsAndVectorScores(res.panels2D, params);
 
   const bedPreset =
     MACHINE_BED_PRESETS.find((b) => b.id === params.bedPresetId) || MACHINE_BED_PRESETS[0];
@@ -224,8 +221,8 @@ export function generateBoxModel(params: BoxParameters): GeneratedBoxModel {
 
   return {
     params,
-    innerDims: { widthMm: innerW, depthMm: innerD, heightMm: innerH },
-    outerDims: { widthMm: outerW, depthMm: outerD, heightMm: outerH },
+    innerDims: inner,
+    outerDims,
     panels2D: nested.panels,
     panels3D,
     sheetWidthMm: nested.sheetWidthMm,

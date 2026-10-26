@@ -205,10 +205,18 @@ export interface Panel3DTransform {
   };
 }
 
+/** A box's size along its three axes, in millimeters. */
+export interface BoxDims {
+  widthMm: number;
+  depthMm: number;
+  heightMm: number;
+}
+
 export interface GeneratedBoxModel {
   params: BoxParameters;
-  innerDims: { widthMm: number; depthMm: number; heightMm: number };
-  outerDims: { widthMm: number; depthMm: number; heightMm: number };
+  innerDims: BoxDims;
+  /** The real outside size, as reported by the template's generator. */
+  outerDims: BoxDims;
   panels2D: BoxPanel2D[];
   panels3D: Panel3DTransform[];
   sheetWidthMm: number;

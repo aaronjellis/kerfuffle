@@ -5,6 +5,7 @@
  * The roll-end mailer lives in `mailerEngine.ts` (ply model, 2D sheet and 3D rig).
  */
 import {
+  BoxDims,
   BoxPanel2D,
   BoxParameters,
   DielinePath,
@@ -79,6 +80,7 @@ export function generateCardboardBox(
   panels2D: BoxPanel2D[];
   panels3D: Panel3DTransform[];
   summary: string;
+  outerDims: BoxDims;
 } {
   if (params.templateId === 'cardboard-tuck-carton') {
     return generateTuckCarton(params, innerW, innerD, innerH);
@@ -101,6 +103,7 @@ function generateTuckCarton(
   panels2D: BoxPanel2D[];
   panels3D: Panel3DTransform[];
   summary: string;
+  outerDims: BoxDims;
 } {
   const T = params.materialThicknessMm;
   const glueW = Math.max(10, params.glueFlapMm);
@@ -619,6 +622,8 @@ function generateTuckCarton(
     panels2D: [panel2D],
     panels3D: carton3D,
     summary: `${isReverse ? 'Reverse' : 'Straight'} Tuck Carton (${fmt(x5)} × ${fmt(y5)} mm flat blank)`,
+    // Spans are mid-plane to mid-plane; each outside face adds half a ply.
+    outerDims: { widthMm: wSpan + T, depthMm: dSpan + T, heightMm: hSpan + T },
   };
 }
 
@@ -634,6 +639,7 @@ function generateTelescopingBox(
   panels2D: BoxPanel2D[];
   panels3D: Panel3DTransform[];
   summary: string;
+  outerDims: BoxDims;
 } {
   const T = params.materialThicknessMm;
   const clearance = params.telescopeClearanceMm;
@@ -1071,5 +1077,8 @@ function generateTelescopingBox(
     panels2D: [baseTray, topLid],
     panels3D: telescope3D,
     summary: `2-Piece Telescoping Box (Lid +${fmt(2 * T + 2 * clearance)}mm clearance over base)`,
+    // The slip lid is outermost across and front to back: its span (lidW + T) plus half a ply each side.
+    // Height runs from the base floor's underside to the lid roof's top: the base span (H + T) plus a ply.
+    outerDims: { widthMm: lidW + 2 * T, depthMm: lidD + 2 * T, heightMm: H + 2 * T },
   };
 }

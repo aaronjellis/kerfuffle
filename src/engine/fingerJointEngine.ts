@@ -1,4 +1,5 @@
 import {
+  BoxDims,
   BoxPanel2D,
   BoxParameters,
   DielinePath,
@@ -441,22 +442,29 @@ export function generateWoodFingerBox(
   panels2D: BoxPanel2D[];
   panels3D: Panel3DTransform[];
   fingerCountSummary: string;
+  outerDims: BoxDims;
 } {
   const T = params.materialThicknessMm;
   const kerf = params.kerfMm;
   const countW = computeOddFingerCount(innerW, params.fingerWidthMm);
   const countD = computeOddFingerCount(innerD, params.fingerWidthMm);
   const countH = computeOddFingerCount(innerH, params.fingerWidthMm);
+  // One ply each side; an open box has no lid ply on top.
+  const outerDims: BoxDims = {
+    widthMm: innerW + 2 * T,
+    depthMm: innerD + 2 * T,
+    heightMm: innerH + (params.woodLidStyle === 'open' ? T : 2 * T),
+  };
 
   const panels2D: BoxPanel2D[] = [];
   const panels3D: Panel3DTransform[] = [];
 
   if (params.templateId === 'finger-clamshell') {
-    return generateClamshellBox(params, innerW, innerD, innerH, countW, countD);
+    return { ...generateClamshellBox(params, innerW, innerD, innerH, countW, countD), outerDims };
   }
 
   if (params.templateId === 'finger-living-hinge') {
-    return generateLivingHingeBox(params, innerW, innerD, innerH, countW, countD, countH);
+    return { ...generateLivingHingeBox(params, innerW, innerD, innerH, countW, countD, countH), outerDims };
   }
 
   const isOrganizer = params.templateId === 'finger-organizer';
@@ -869,6 +877,7 @@ export function generateWoodFingerBox(
     panels2D,
     panels3D,
     fingerCountSummary: `${countW} (W) × ${countD} (D) × ${countH} (H) symmetric odd fingers`,
+    outerDims,
   };
 }
 

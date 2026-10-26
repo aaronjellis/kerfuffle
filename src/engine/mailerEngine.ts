@@ -1,4 +1,4 @@
-import type { BoxPanel2D, BoxParameters, DielinePath, Panel3DTransform, Point2D } from './types';
+import type { BoxDims, BoxPanel2D, BoxParameters, DielinePath, Panel3DTransform, Point2D } from './types';
 import { buildScoreLinePaths } from './cardboardEngine';
 import { fmt, pointsToSvgPath } from './fingerJointEngine';
 
@@ -495,6 +495,16 @@ export function buildMailerSheet(spans: MailerSpans, params: BoxParameters): Box
   };
 }
 
+/**
+ * The closed mailer's outside size: the floor span plus half an outer wall each side across;
+ * the lid (D + 3T) front to back; floor mid-plane to lid mid-plane (backH) plus half a ply each, top and bottom.
+ */
+const mailerOuterDims = (s: MailerSpans): BoxDims => ({
+  widthMm: s.floorW + s.T,
+  depthMm: s.lidD,
+  heightMm: s.backH + s.T,
+});
+
 /** The closure the sheet actually cuts: `front lock, 4.5 mm ears` or `tuck top (board too thin for lock ears)`. */
 function closureLabel(s: MailerSpans): string {
   if (s.lock) return `front lock, ${fmt(s.lock.tabW)} mm ears`;
@@ -506,12 +516,13 @@ export function generateMailerBox(
   W: number,
   D: number,
   H: number,
-): { panels2D: BoxPanel2D[]; panels3D: Panel3DTransform[]; summary: string } {
+): { panels2D: BoxPanel2D[]; panels3D: Panel3DTransform[]; summary: string; outerDims: BoxDims } {
   const spans = computeMailerSpans(params, W, D, H);
   return {
     panels2D: [buildMailerSheet(spans, params)],
     panels3D: buildMailerRig(spans, H),
     summary: `Roll-end mailer (${fmt(spans.blankW)} × ${fmt(spans.blankH)} mm blank, ${closureLabel(spans)})`,
+    outerDims: mailerOuterDims(spans),
   };
 }
 

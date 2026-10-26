@@ -508,3 +508,48 @@ describe('other cardboard templates', () => {
     });
   }
 });
+
+describe('outside size', () => {
+  it('mailer outer mode cuts the box whose outside is the typed size (120 × 90 × 60, T 3, flaps on)', () => {
+    const m = generateBoxModel({ ...base, dimensionReference: 'outer', widthMm: 120, depthMm: 90, heightMm: 60, materialThicknessMm: 3, includeLidFlaps: true });
+    expect(m.outerDims.widthMm).toBeCloseTo(120, 6);
+    expect(m.outerDims.depthMm).toBeCloseTo(90, 6);
+    expect(m.outerDims.heightMm).toBeCloseTo(60, 6);
+    const { widthMm, depthMm, heightMm } = m.innerDims;
+    const s = computeMailerSpans(m.params, widthMm, depthMm, heightMm);
+    expect(s.floorW + s.T).toBeCloseTo(120, 6);
+    expect(m.innerDims).toEqual({ widthMm: 96, depthMm: 81, heightMm: 54 });
+  });
+  it('mailer inner mode reports floorW + T wide, D + 3T deep, H + 2T tall', () => {
+    const m = generateBoxModel({ ...base });
+    const s = computeMailerSpans(m.params, 110, 80, 55);
+    expect(m.outerDims.widthMm).toBeCloseTo(s.floorW + s.T, 6);
+    expect(m.outerDims.depthMm).toBeCloseTo(80 + 3 * 3, 6);
+    expect(m.outerDims.heightMm).toBeCloseTo(55 + 2 * 3, 6);
+  });
+  it('finger box outside size is unchanged: inner + 2T, open lid + T on height', () => {
+    const p = { ...DEFAULT_BOX_PARAMETERS, widthMm: 120, depthMm: 80, heightMm: 50, materialThicknessMm: 3 };
+    expect(generateBoxModel({ ...p, woodLidStyle: 'closed' }).outerDims).toEqual({ widthMm: 126, depthMm: 86, heightMm: 56 });
+    expect(generateBoxModel({ ...p, woodLidStyle: 'open' }).outerDims).toEqual({ widthMm: 126, depthMm: 86, heightMm: 53 });
+    const outer = generateBoxModel({ ...p, woodLidStyle: 'closed', dimensionReference: 'outer', widthMm: 126, depthMm: 86, heightMm: 56 });
+    expect(outer.innerDims).toEqual({ widthMm: 120, depthMm: 80, heightMm: 50 });
+  });
+  const templates = [
+    { category: 'wood-finger', templateId: 'finger-basic' },
+    { category: 'wood-finger', templateId: 'finger-clamshell' },
+    { category: 'wood-finger', templateId: 'finger-living-hinge' },
+    { category: 'wood-finger', templateId: 'finger-organizer' },
+    { category: 'cardboard-fold', templateId: 'cardboard-mailer' },
+    { category: 'cardboard-fold', templateId: 'cardboard-tuck-carton' },
+    { category: 'cardboard-fold', templateId: 'cardboard-telescope' },
+    { category: '3d-print', templateId: '3d-snap-box' },
+  ] as const;
+  for (const t of templates) {
+    it(`${t.templateId} outer mode reports the typed outside size`, () => {
+      const m = generateBoxModel({ ...DEFAULT_BOX_PARAMETERS, ...t, dimensionReference: 'outer', widthMm: 160, depthMm: 120, heightMm: 90 });
+      expect(m.outerDims.widthMm).toBeCloseTo(160, 6);
+      expect(m.outerDims.depthMm).toBeCloseTo(120, 6);
+      expect(m.outerDims.heightMm).toBeCloseTo(90, 6);
+    });
+  }
+});
