@@ -55,10 +55,10 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
         {
           format: 'stl-two-files',
           label: 'STL, two files',
-          hint: 'Base and lid apart',
+          hint: 'Two downloads: base and lid',
           icon: Printer,
           run: handlers.stlParts,
-          title: 'Two downloads; allow them if the browser asks',
+          title: 'Your browser may ask to allow both downloads',
         },
       ]
     : [
@@ -66,10 +66,10 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
         {
           format: 'svg-split',
           label: 'SVG, cut and score apart',
-          hint: 'A cut file and a score file',
+          hint: 'Two downloads: cut and score',
           icon: Scissors,
           run: handlers.splitSvg,
-          title: 'Two downloads; allow them if the browser asks',
+          title: 'Your browser may ask to allow both downloads',
         },
         {
           format: 'pdf',

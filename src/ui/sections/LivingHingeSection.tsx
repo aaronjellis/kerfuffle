@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { NumberField } from '../../components/NumberField';
 import type { BoxParameters } from '../../engine/types';
 import { Field } from '../Field';
@@ -8,6 +8,7 @@ import type { SectionProps } from './types';
 /** Living-hinge box: how the flex panel attaches, and its kerf pitch. */
 export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam, displayUnit }) => {
   const { isInch, uLabel } = unitHelpers(displayUnit);
+  const pitchId = useId();
   return (
     <>
       <Field label="Attachment">
@@ -25,7 +26,7 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
 
       <div className="param-row">
         <div className="param-label-row">
-          <label>Kerf pitch ({uLabel})</label>
+          <label htmlFor={pitchId}>Kerf pitch ({uLabel})</label>
           <NumberField
             valueMm={params.livingHingePitchMm}
             minMm={1.8}
@@ -34,6 +35,7 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
             displayUnit={displayUnit}
             inDecimals={3}
             mmDecimals={2}
+            id={pitchId}
             ariaLabel="Living hinge pitch"
             onChangeMm={(mm) => updateParam('livingHingePitchMm', mm)}
           />

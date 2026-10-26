@@ -23,6 +23,8 @@ interface NumberFieldProps {
   onChangeMm: (nextMm: number) => void;
   className?: string;
   ariaLabel?: string;
+  /** For a visible `<label htmlFor>` beside the field. */
+  id?: string;
 }
 
 export const NumberField: React.FC<NumberFieldProps> = ({
@@ -37,6 +39,7 @@ export const NumberField: React.FC<NumberFieldProps> = ({
   onChangeMm,
   className,
   ariaLabel,
+  id,
 }) => {
   const unit: DraftUnit = { displayUnit, inDecimals, mmDecimals, isRawCount, minMm, maxMm };
   const formatFromMm = (mm: number): string => formatDraft(mm, unit);
@@ -108,6 +111,7 @@ export const NumberField: React.FC<NumberFieldProps> = ({
 
   return (
     <input
+      id={id}
       type="text"
       inputMode="decimal"
       className={className || 'num-field'}

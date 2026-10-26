@@ -261,7 +261,7 @@ function generateTuckCarton(
   const panel2D: BoxPanel2D = {
     id: 'tuck-carton-sheet',
     name: `Folding Carton (${isReverse ? 'Reverse Tuck RTE' : 'Straight Tuck STE'})`,
-    faceLabel: 'CARTON DIELINE',
+    faceLabel: 'Carton dieline',
     widthMm: x5,
     heightMm: y5,
     safeRect: { x: x2 + T / 2, y: y2 + T, width: W, height: H },

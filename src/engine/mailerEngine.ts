@@ -494,7 +494,7 @@ export function buildMailerSheet(spans: MailerSpans, params: BoxParameters): Box
   return {
     id: 'mailer-sheet',
     name: '1-piece mailer dieline (roll end)',
-    faceLabel: 'MAILER DIELINE',
+    faceLabel: 'Mailer dieline',
     widthMm: s.blankW,
     heightMm: s.blankH,
     safeRect: { x: top.x, y: top.y, width: top.width, height: top.height },

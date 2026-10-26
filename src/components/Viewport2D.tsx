@@ -12,6 +12,13 @@ import { STAGE_ACCENT_HEX } from '../ui/stageColors';
 /** "Front Face" reads as "Front face": accessible names in sentence case. */
 const sentenceCase = (name: string) => name.charAt(0) + name.slice(1).toLowerCase();
 
+/**
+ * A guide name on the sheet in sentence case: "LID / TOP" reads as "Lid / top". A divider's
+ * grid id ("X1", "Y2") keeps its capital.
+ */
+const guideName = (name: string) =>
+  (name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()).replace(/\b[xy]\d+\b/g, (id) => id.toUpperCase());
+
 /** Enter and Space on an SVG button do what a click does. */
 const onActivate = (run: () => void) => (e: React.KeyboardEvent) => {
   if (e.key === 'Enter' || e.key === ' ') {
@@ -464,7 +471,7 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
                         textAnchor="middle"
                         dominantBaseline="middle"
                       >
-                        {sf.name.toUpperCase()}
+                        {guideName(sf.name)}
                       </text>
                     )}
                   </g>
@@ -505,7 +512,7 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
                     dominantBaseline="middle"
                     pointerEvents="none"
                   >
-                    {panel.faceLabel}
+                    {guideName(panel.faceLabel)}
                   </text>
                 )}
 

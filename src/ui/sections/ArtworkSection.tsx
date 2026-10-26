@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import {
   AlignCenter,
   AlignLeft,
@@ -51,6 +51,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
     customFontInput,
     setCustomFontInput,
   } = handlers;
+  const rotationId = useId();
   const selectedArtwork =
     artworks.find((a) => a.id === selectedArtworkId) ||
     artworks.find((a) => a.faceId === selectedFaceId) ||
@@ -603,7 +604,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
 
           <div className="param-row">
             <div className="param-label-row">
-              <label>Rotation {selectedArtwork.rotationDeg}°</label>
+              <label htmlFor={rotationId}>Rotation {selectedArtwork.rotationDeg}°</label>
               <button
                 type="button"
                 className="link-btn"
@@ -623,6 +624,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
               min={-180}
               max={180}
               step={5}
+              id={rotationId}
               value={selectedArtwork.rotationDeg}
               aria-label="Rotation"
               onChange={(e) =>

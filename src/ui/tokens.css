@@ -1,7 +1,8 @@
 /* Design tokens, copied from the bathroom planner. What differs:
    - the accent family (olive instead of verdigris);
    - the font names ('Figtree Variable', 'Bricolage Grotesque Variable');
-   - --brass and the --sketch-* tokens are dropped;
+   - --brass and the --sketch-* tokens are dropped, and so are --ok, --radius, --fs-h1 and
+     --fs-h4, which nothing here uses;
    - --inspector-w and --inspector-w-narrow are added;
    - --stage-accent and --stage-line are added for the HUD on the always-dark stage. */
 
@@ -32,16 +33,13 @@
   --stage-accent: #9fcf52;
   --stage-line: rgb(255 255 255 / 0.14);
   --danger: #b3261e;
-  --ok: #2e7d4f;
 
   --font-ui: 'Figtree Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Bricolage Grotesque Variable', var(--font-ui);
   --fs-label: 0.8125rem;
   --fs-body: 0.875rem;
-  --fs-h4: 0.9375rem;
   --fs-h3: 1.0625rem;
   --fs-h2: 1.25rem;
-  --fs-h1: 1.5rem;
   --w-regular: 450;
   --w-medium: 550;
   --w-bold: 650;
@@ -49,7 +47,6 @@
   --r-control: 8px;
   --r-panel: 12px;
   --r-pill: 999px;
-  --radius: var(--r-control);
   --shadow-float: 0 1px 2px rgb(23 36 43 / 0.08), 0 6px 20px rgb(23 36 43 / 0.12);
   --shadow-pop: 0 2px 6px rgb(23 36 43 / 0.08), 0 16px 40px rgb(23 36 43 / 0.18);
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -82,7 +79,6 @@
     --accent-fg: #142007;
     --accent-soft: #2a3a16;
     --danger: #f2a39c;
-    --ok: #86d3a3;
     --shadow-float: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.35);
     --shadow-pop: 0 2px 6px rgb(0 0 0 / 0.3), 0 16px 40px rgb(0 0 0 / 0.45);
   }

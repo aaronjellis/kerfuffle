@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { NumberField } from '../../components/NumberField';
 import { unitHelpers } from './shared';
 import type { SectionProps } from './types';
@@ -6,11 +6,12 @@ import type { SectionProps } from './types';
 /** Wood: finger size. Kerf lives in Material. */
 export const JointsSection: React.FC<SectionProps> = ({ params, updateParam, displayUnit, model }) => {
   const { isInch, uLabel } = unitHelpers(displayUnit);
+  const fingerId = useId();
   return (
     <>
       <div className="param-row">
         <div className="param-label-row">
-          <label>Finger size ({uLabel})</label>
+          <label htmlFor={fingerId}>Finger size ({uLabel})</label>
           <NumberField
             valueMm={params.fingerWidthMm}
             minMm={4}
@@ -19,6 +20,7 @@ export const JointsSection: React.FC<SectionProps> = ({ params, updateParam, dis
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
+            id={fingerId}
             ariaLabel="Target finger size"
             onChangeMm={(mm) => updateParam('fingerWidthMm', mm)}
           />

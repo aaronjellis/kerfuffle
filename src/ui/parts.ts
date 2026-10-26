@@ -51,7 +51,7 @@ const DEFS: Record<PartId, PartDef> = {
   size: {
     id: 'size',
     label: 'Size',
-    keywords: 'template style box model architecture preset dimensions width depth height size inner outer mm in inches',
+    keywords: 'template style box model architecture preset dimensions width depth height size inner outer units mm in inches',
     icon: Ruler
   },
   material: {
@@ -112,12 +112,24 @@ const DEFS: Record<PartId, PartDef> = {
     keywords: 'side labels inner name score text font mirror position top bottom front back left right',
     icon: Tag
   },
-  artwork: { id: 'artwork', label: 'Artwork', keywords: 'artwork image logo graphic face', icon: Image },
-  sheet: { id: 'sheet', label: 'Sheet', keywords: 'sheet layout nesting export', icon: Sheet },
+  artwork: {
+    id: 'artwork',
+    label: 'Artwork',
+    keywords:
+      'artwork image logo graphic face piece upload picture png jpg svg sample text font weight italic color engrave print align snap fit rotate rotation offset',
+    icon: Image
+  },
+  sheet: {
+    id: 'sheet',
+    label: 'Sheet',
+    keywords:
+      'sheet layout nesting export bed size machine margin part gap spacing profile svg units grouping frame scale bar registration marks panel dimensions',
+    icon: Sheet
+  },
   'print-export': {
     id: 'print-export',
     label: 'Export options',
-    keywords: 'print export stl 3mf',
+    keywords: 'print export stl one two files',
     icon: Printer
   }
 };

@@ -93,8 +93,12 @@ export const Stage: React.FC<StageProps> = ({
   const onTogglePlay = () => setIsPlaying((p) => !p);
 
   const bed = MACHINE_BED_PRESETS.find((b) => b.id === params.bedPresetId) ?? MACHINE_BED_PRESETS[0];
-  // "xTool M2 / M1 (385 × 300 mm)" reads as "xTool M2".
-  const bedName = bed.name.replace(/\s*\(.*\)$/, '').replace(/\s*\/.*$/, '');
+  // "xTool M2 / M1 (385 × 300 mm)" reads as "xTool M2". Mid-sentence, a generic name drops its
+  // capital ("Fits standard diode bed"); a brand keeps its own ("xTool", "Glowforge").
+  const shortBedName = bed.name.replace(/\s*\(.*\)$/, '').replace(/\s*\/.*$/, '');
+  const bedName = /^(xTool|Glowforge)\b/.test(shortBedName)
+    ? shortBedName
+    : shortBedName.charAt(0).toLowerCase() + shortBedName.slice(1);
   const { totalCutLengthMm, totalScoreLengthMm } = model.stats;
   const isLaser = params.category !== '3d-print';
   const pct = Math.round(assemblyProgress * 100);

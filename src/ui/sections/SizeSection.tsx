@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { NumberField } from '../../components/NumberField';
 import { Segmented } from '../Field';
 import { unitHelpers } from './shared';
@@ -6,6 +6,7 @@ import type { SectionProps } from './types';
 
 export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displayUnit, model, handlers }) => {
   const { isInch, uLabel, fmtDim } = unitHelpers(displayUnit);
+  const ids = { width: useId(), depth: useId(), height: useId() };
   return (
     <>
       <div className="seg-pair">
@@ -31,7 +32,7 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
 
       <div className="param-row">
         <div className="param-label-row">
-          <label>Width ({uLabel})</label>
+          <label htmlFor={ids.width}>Width ({uLabel})</label>
           <NumberField
             valueMm={params.widthMm}
             minMm={20}
@@ -40,6 +41,7 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
+            id={ids.width}
             ariaLabel="Width"
             onChangeMm={(mm) => updateParam('widthMm', mm)}
           />
@@ -57,7 +59,7 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
 
       <div className="param-row">
         <div className="param-label-row">
-          <label>Depth ({uLabel})</label>
+          <label htmlFor={ids.depth}>Depth ({uLabel})</label>
           <NumberField
             valueMm={params.depthMm}
             minMm={20}
@@ -66,6 +68,7 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
+            id={ids.depth}
             ariaLabel="Depth"
             onChangeMm={(mm) => updateParam('depthMm', mm)}
           />
@@ -83,7 +86,7 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
 
       <div className="param-row">
         <div className="param-label-row">
-          <label>Height ({uLabel})</label>
+          <label htmlFor={ids.height}>Height ({uLabel})</label>
           <NumberField
             valueMm={params.heightMm}
             minMm={15}
@@ -92,6 +95,7 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
+            id={ids.height}
             ariaLabel="Height"
             onChangeMm={(mm) => updateParam('heightMm', mm)}
           />
