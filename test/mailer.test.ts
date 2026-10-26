@@ -167,3 +167,68 @@ describe('mailer 2D sheet', () => {
     expect(m.panels2D[0].paths.every((p) => typeof p.d === 'string')).toBe(true);
   });
 });
+
+/** Endpoints of M/L/Q/A commands, skipping control points and arc parameters. */
+function parsePathVertices(d: string): { x: number; y: number }[] {
+  const tokens = d.match(/[MLQAZ]|-?\d+(\.\d+)?/g) ?? [];
+  const take: Record<string, number> = { M: 2, L: 2, Q: 4, A: 7 };
+  const out: { x: number; y: number }[] = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (cmd === 'Z') continue;
+    const n = take[cmd];
+    const args = tokens.slice(i, i + n).map(Number);
+    out.push({ x: args[n - 2], y: args[n - 1] });
+    i += n;
+  }
+  return out;
+}
+
+describe('mailer perimeter geometry', () => {
+  const m = generateBoxModel({
+    ...base,
+    widthMm: 110,
+    depthMm: 80,
+    heightMm: 55,
+    materialThicknessMm: 1.5,
+    cardboardLockStyle: 'front-lock',
+    includeLidFlaps: true,
+  });
+  const s = computeMailerSpans(m.params, 110, 80, 55);
+  const sheetPaths = m.panels2D[0].paths;
+  const vs = parsePathVertices(sheetPaths.find((p) => p.id === 'mailer-perimeter-cut')!.d);
+  const has = (x: number, y: number, tol = 0.01) => vs.some((v) => Math.abs(v.x - x) <= tol && Math.abs(v.y - y) <= tol);
+
+  it('closes on its starting vertex', () => {
+    const first = vs[0];
+    const last = vs[vs.length - 1];
+    expect(Math.abs(first.x - last.x)).toBeLessThanOrEqual(1e-6);
+    expect(Math.abs(first.y - last.y)).toBeLessThanOrEqual(1e-6);
+  });
+  it('mirrors left to right', () => {
+    for (const v of vs) expect(has(s.blankW - v.x, v.y)).toBe(true);
+  });
+  it('puts the lid flap lead-in chamfer at the front end', () => {
+    const fx = s.x.floorR + s.lidFlapDepth;
+    const fy0 = s.y.lidTop + s.T;
+    expect(has(fx - 4, fy0)).toBe(true);
+    expect(has(fx, fy0 + 4)).toBe(true);
+    expect(has(fx - 4, fy0 + s.lidFlapLen)).toBe(false);
+  });
+  it('drops the lock tab root by tabW · tan 15°', () => {
+    const tx0 = s.x.floorL + (s.floorW - s.tuckW) / 2;
+    const drop = s.lock!.tabW * Math.tan((15 * Math.PI) / 180);
+    expect(has(tx0 - s.lock!.tabW, s.y.lidTop - drop)).toBe(true);
+    expect(has(tx0, s.y.lidTop)).toBe(true);
+  });
+  it('centres each inner-wall tab on its floor slot', () => {
+    const tabYs = vs.filter((v) => Math.abs(v.x - s.x.tabR) < 0.01).map((v) => v.y).sort((a, b) => a - b);
+    expect(tabYs).toHaveLength(4);
+    const tabCenters = [(tabYs[0] + tabYs[1]) / 2, (tabYs[2] + tabYs[3]) / 2];
+    [1, 2].forEach((n, i) => {
+      const ys = parsePathVertices(sheetPaths.find((p) => p.id === `mailer-slot-r-${n}`)!.d).map((v) => v.y);
+      expect(tabCenters[i]).toBeCloseTo((Math.min(...ys) + Math.max(...ys)) / 2, 6);
+    });
+  });
+});

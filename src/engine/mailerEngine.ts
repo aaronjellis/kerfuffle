@@ -117,7 +117,7 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     const tabW = upper >= 8 ? Math.max(8, capped) : Math.max(0, capped);
     // Keep at least 3 mm of front ear crease attached above the slit on low boxes.
     const slitLen = Math.min(clamp(params.lockTabDepthMm, 12, tuckH) + 1, frontH - 1.5 * T - 3);
-    const tabLen = Math.min(clamp(params.lockTabDepthMm, 12, tuckH), slitLen - 1);
+    const tabLen = Math.max(0, Math.min(clamp(params.lockTabDepthMm, 12, tuckH), slitLen - 1));
     lock = { tabW, tabLen, slitLen };
   }
   const notchR = params.thumbNotch && lock === null ? Math.min(12, W / 8) : 0;
@@ -186,6 +186,9 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   };
 }
 
+/** Crease insets shared by the perimeter and the creases: ears and inner wall 1.5T, roll strip T. */
+const insetsFor = (T: number) => ({ earInset: 1.5 * T, innerInset: 1.5 * T, rollInset: T });
+
 /** A perimeter vertex; `q` is the control point of a quadratic arriving at it, `arc` an arc arriving at it. */
 interface PerimNode {
   x: number;
@@ -200,24 +203,26 @@ interface PerimNode {
  */
 function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
   const { T, x, y } = s;
+  const { earInset, innerInset, rollInset } = insetsFor(T);
   const fr = x.floorR;
   const tx1 = fr - (s.floorW - s.tuckW) / 2;
   const nodes: PerimNode[] = [];
 
-  // Tuck flap, with a lock tab on its side edge for the front lock.
-  const tabTop = s.lock ? y.lidTop - s.lock.tabLen : y.lidTop;
-  const rc = s.lock ? Math.max(0, Math.min(s.tuckR, tabTop - y.tuckTop)) : s.tuckR;
+  // Tuck flap, with a lock tab on its side edge for the front lock (omitted when too small to cut).
+  const lockTab = s.lock && s.lock.tabLen >= 4 && s.lock.tabW >= 2 ? s.lock : null;
+  const tabTop = lockTab ? y.lidTop - lockTab.tabLen : y.lidTop;
+  const rc = lockTab ? Math.max(0, Math.min(s.tuckR, tabTop - y.tuckTop)) : s.tuckR;
   nodes.push({ x: tx1 - rc, y: y.tuckTop });
   if (rc > 0) nodes.push({ x: tx1, y: y.tuckTop + rc, q: { x: tx1, y: y.tuckTop } });
-  if (s.lock) {
-    const { tabW, tabLen } = s.lock;
+  if (lockTab) {
+    const { tabW, tabLen } = lockTab;
     // Root edge tilts 15° off the perpendicular to the flap's side edge.
     const rootDrop = tabW * Math.tan((15 * Math.PI) / 180);
     const rt = Math.max(0, Math.min(4, tabW, tabLen - rootDrop));
     const ox = tx1 + tabW;
     nodes.push({ x: tx1, y: tabTop });
     nodes.push({ x: ox - rt, y: tabTop });
-    nodes.push({ x: ox, y: tabTop + rt, q: { x: ox, y: tabTop } });
+    if (rt > 0) nodes.push({ x: ox, y: tabTop + rt, q: { x: ox, y: tabTop } });
     nodes.push({ x: ox, y: y.lidTop - rootDrop });
   }
   nodes.push({ x: tx1, y: y.lidTop });
@@ -229,14 +234,15 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
     const fy1 = fy0 + s.lidFlapLen;
     const fx = fr + s.lidFlapDepth;
     const ch = Math.min(4, s.lidFlapDepth, s.lidFlapLen);
-    nodes.push({ x: fr, y: fy0 }, { x: fx, y: fy0 }, { x: fx, y: fy1 - ch }, { x: fx - ch, y: fy1 }, { x: fr, y: fy1 });
+    // Lead-in chamfer on the flap's front end (nearest lidTop), which swings into the box first.
+    nodes.push({ x: fr, y: fy0 }, { x: fx - ch, y: fy0 }, { x: fx, y: fy0 + ch }, { x: fx, y: fy1 }, { x: fr, y: fy1 });
   }
   nodes.push({ x: fr, y: y.backTop });
 
-  // Dust ear on a wall row, inset 1.5T from both creases, 3 mm chamfers on the free corners.
+  // Dust ear on a wall row, inset earInset from both creases, 3 mm chamfers on the free corners.
   const ear = (rowTop: number, rowBottom: number) => {
-    const e0 = rowTop + 1.5 * T;
-    const e1 = rowBottom - 1.5 * T;
+    const e0 = rowTop + earInset;
+    const e1 = rowBottom - earInset;
     if (s.earW <= 0 || e1 <= e0) return;
     const ex = fr + s.earW;
     const ch = Math.min(3, s.earW, (e1 - e0) / 2);
@@ -255,10 +261,10 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
   // Side column: outer wall full floorD, roll inset T, inner wall inset 1.5T, two chamfered tabs.
   nodes.push(
     { x: x.outerR, y: y.floorTop },
-    { x: x.outerR, y: y.floorTop + T },
-    { x: x.rollR, y: y.floorTop + T },
-    { x: x.rollR, y: y.floorTop + 1.5 * T },
-    { x: x.innerR, y: y.floorTop + 1.5 * T },
+    { x: x.outerR, y: y.floorTop + rollInset },
+    { x: x.rollR, y: y.floorTop + rollInset },
+    { x: x.rollR, y: y.floorTop + innerInset },
+    { x: x.innerR, y: y.floorTop + innerInset },
   );
   const ch = Math.min(s.tab.chamfer, s.tab.depth, s.tab.len / 2);
   for (const c of s.tab.centers) {
@@ -275,10 +281,10 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
     );
   }
   nodes.push(
-    { x: x.innerR, y: y.frontTop - 1.5 * T },
-    { x: x.rollR, y: y.frontTop - 1.5 * T },
-    { x: x.rollR, y: y.frontTop - T },
-    { x: x.outerR, y: y.frontTop - T },
+    { x: x.innerR, y: y.frontTop - innerInset },
+    { x: x.rollR, y: y.frontTop - innerInset },
+    { x: x.rollR, y: y.frontTop - rollInset },
+    { x: x.outerR, y: y.frontTop - rollInset },
     { x: x.outerR, y: y.frontTop },
     { x: fr, y: y.frontTop },
   );
@@ -333,6 +339,7 @@ export function buildMailerSheet(
 ): BoxPanel2D {
   const s = spans;
   const { T, x, y } = s;
+  const { earInset, innerInset, rollInset } = insetsFor(T);
   const fl = x.floorL;
   const fr = x.floorR;
   const paths: DielinePath[] = [{ id: 'mailer-perimeter-cut', layer: 'cut', d: perimeterPath(s), closed: true }];
@@ -354,11 +361,11 @@ export function buildMailerSheet(
   });
 
   // Front lock: a slit down each front ear crease, starting where the perimeter leaves the crease.
-  if (s.lock && s.lock.slitLen > 1.5 * T) {
+  if (s.lock && s.lock.slitLen > earInset) {
     const slit = (sx: number) =>
       pointsToSvgPath(
         [
-          { x: sx, y: y.frontBottom - 1.5 * T },
+          { x: sx, y: y.frontBottom - earInset },
           { x: sx, y: y.frontBottom - s.lock!.slitLen },
         ],
         false,
@@ -377,17 +384,17 @@ export function buildMailerSheet(
   const vertical = (id: string, sx: number, y0: number, y1: number) => {
     if (y1 > y0) scores.push([id, sx, y0, sx, y1]);
   };
-  const frontEarEnd = s.lock ? y.frontBottom - s.lock.slitLen : y.frontBottom - 1.5 * T;
+  const frontEarEnd = s.lock ? y.frontBottom - s.lock.slitLen : y.frontBottom - earInset;
   for (const [side, edge, outer, roll] of [
     ['l', fl, x.outerL, x.rollL],
     ['r', fr, x.outerR, x.rollR],
   ] as const) {
     if (s.lidFlapDepth > 0) vertical(`score-lid-flap-${side}`, edge, y.lidTop + T, y.lidTop + T + s.lidFlapLen);
-    vertical(`score-ear-back-${side}`, edge, y.backTop + 1.5 * T, y.floorTop - 1.5 * T);
-    scores.push([`score-ear-front-${side}`, edge, y.frontTop + 1.5 * T, edge, frontEarEnd]);
+    vertical(`score-ear-back-${side}`, edge, y.backTop + earInset, y.floorTop - earInset);
+    scores.push([`score-ear-front-${side}`, edge, y.frontTop + earInset, edge, frontEarEnd]);
     vertical(`score-floor-side-${side}`, edge, y.floorTop, y.frontTop);
-    vertical(`score-roll-${side}-1`, outer, y.floorTop + T, y.frontTop - T);
-    vertical(`score-roll-${side}-2`, roll, y.floorTop + 1.5 * T, y.frontTop - 1.5 * T);
+    vertical(`score-roll-${side}-1`, outer, y.floorTop + rollInset, y.frontTop - rollInset);
+    vertical(`score-roll-${side}-2`, roll, y.floorTop + innerInset, y.frontTop - innerInset);
   }
   for (const [id, x1, y1, x2, y2] of scores) {
     paths.push(...buildScoreLinePaths(id, x1, y1, x2, y2, params));
