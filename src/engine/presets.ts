@@ -52,6 +52,14 @@ export interface MaterialPreset {
   thicknessMm: number;
   kerfMm: number;
   scoreNote: string;
+  /** Laser settings: power in %, speed in mm/s. Starting values; confirm with a test cut. */
+  laser: {
+    cutPower: number;
+    cutSpeed: number;
+    cutPasses: number;
+    scorePower: number;
+    scoreSpeed: number;
+  };
   colorHex: string;
 }
 
@@ -62,7 +70,8 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
     category: 'wood-finger',
     thicknessMm: 3.0,
     kerfMm: 0.12,
-    scoreNote: 'xTool M2: 100% power, 5 mm/s (1 pass) cut; 25% power, 80 mm/s score',
+    scoreNote: 'Starting values for the xTool M2; confirm with a test cut',
+    laser: { cutPower: 100, cutSpeed: 5, cutPasses: 1, scorePower: 25, scoreSpeed: 80 },
     colorHex: '#d6b384',
   },
   {
@@ -71,7 +80,8 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
     category: 'wood-finger',
     thicknessMm: 3.0,
     kerfMm: 0.14,
-    scoreNote: 'xTool M2: 100% power, 4 mm/s cut; 30% power, 70 mm/s score',
+    scoreNote: 'Starting values for the xTool M2; confirm with a test cut',
+    laser: { cutPower: 100, cutSpeed: 4, cutPasses: 1, scorePower: 30, scoreSpeed: 70 },
     colorHex: '#a8845c',
   },
   {
@@ -81,6 +91,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
     thicknessMm: 1.6,
     kerfMm: 0.10,
     scoreNote: 'Ideal for small jewelry boxes and tight living hinges',
+    laser: { cutPower: 100, cutSpeed: 8, cutPasses: 1, scorePower: 20, scoreSpeed: 90 },
     colorHex: '#dfc195',
   },
   {
@@ -90,6 +101,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
     thicknessMm: 6.0,
     kerfMm: 0.18,
     scoreNote: 'Heavy-duty crates and large organizer boxes',
+    laser: { cutPower: 100, cutSpeed: 3, cutPasses: 2, scorePower: 30, scoreSpeed: 70 },
     colorHex: '#c79f6d',
   },
   {
@@ -98,7 +110,8 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
     category: 'cardboard-fold',
     thicknessMm: 1.5,
     kerfMm: 0.10,
-    scoreNote: 'Fine corrugated mailer board; score at 18% power or use 3mm/2mm perforation',
+    scoreNote: 'Fine corrugated mailer board; or use 3mm/2mm perforation',
+    laser: { cutPower: 90, cutSpeed: 10, cutPasses: 1, scorePower: 18, scoreSpeed: 100 },
     colorHex: '#c69c6d',
   },
   {
@@ -108,6 +121,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
     thicknessMm: 3.0,
     kerfMm: 0.12,
     scoreNote: 'Standard shipping box flute; dashed perforation score recommended for crisp folds',
+    laser: { cutPower: 100, cutSpeed: 6, cutPasses: 1, scorePower: 22, scoreSpeed: 90 },
     colorHex: '#b38756',
   },
   {
@@ -117,6 +131,7 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
     thicknessMm: 0.6,
     kerfMm: 0.08,
     scoreNote: 'Retail product cartons; works great with xTool M2 Inkjet Print + Blade/Laser Cut',
+    laser: { cutPower: 80, cutSpeed: 15, cutPasses: 1, scorePower: 15, scoreSpeed: 120 },
     colorHex: '#e6dec8',
   },
   {
@@ -126,9 +141,23 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
     thicknessMm: 2.4,
     kerfMm: 0.0,
     scoreNote: '6 perimeters (2.4mm walls), 0.2mm layer height, no supports needed',
+    laser: { cutPower: 0, cutSpeed: 0, cutPasses: 0, scorePower: 0, scoreSpeed: 0 },
     colorHex: '#6366f1',
   },
 ];
+
+/**
+ * Laser settings for the preset matching the box's category and material
+ * thickness (within 0.01 mm), else the first preset of that category.
+ */
+export function laserSettingsFor(params: BoxParameters): MaterialPreset['laser'] {
+  const inCategory = MATERIAL_PRESETS.filter((m) => m.category === params.category);
+  const match =
+    inCategory.find((m) => Math.abs(m.thicknessMm - params.materialThicknessMm) <= 0.01) ??
+    inCategory[0] ??
+    MATERIAL_PRESETS[0];
+  return match.laser;
+}
 
 export interface TemplateMetadata {
   id: BoxTemplateId;

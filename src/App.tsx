@@ -41,6 +41,7 @@ import {
   EXPORT_PROFILES,
   MACHINE_BED_PRESETS,
   MATERIAL_PRESETS,
+  laserSettingsFor,
 } from './engine/presets';
 import { generateBoxModel } from './engine/boxGenerator';
 import { exportPrintedHingeStl } from './engine/printedHinge';
@@ -864,6 +865,25 @@ export const App: React.FC = () => {
                     )}
                   </select>
                 </label>
+
+                {(() => {
+                  const preset = MATERIAL_PRESETS.find(
+                    (m) =>
+                      m.category === params.category &&
+                      Math.abs(m.thicknessMm - params.materialThicknessMm) <= 0.01
+                  );
+                  const laser = laserSettingsFor(params);
+                  return (
+                    <>
+                      {preset && <p className="helper-note">{preset.scoreNote}</p>}
+                      <p className="helper-note">
+                        Cut {laser.cutPower}% at {laser.cutSpeed} mm/s, {laser.cutPasses}{' '}
+                        {laser.cutPasses === 1 ? 'pass' : 'passes'} · Score {laser.scorePower}% at{' '}
+                        {laser.scoreSpeed} mm/s
+                      </p>
+                    </>
+                  );
+                })()}
 
                 <div className="two-col-inputs">
                   <label className="field-block">
