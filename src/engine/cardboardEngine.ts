@@ -1,3 +1,9 @@
+/**
+ * Cardboard score-and-fold templates: the retail tuck carton and the telescoping tray and lid,
+ * plus the shared score-line helper and the template dispatcher.
+ *
+ * The roll-end mailer lives in `mailerEngine.ts` (ply model, 2D sheet and 3D rig).
+ */
 import {
   BoxPanel2D,
   BoxParameters,

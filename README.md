@@ -10,7 +10,7 @@ Browser-based parametric laser-cutting, cardboard packaging, and 3D-printed encl
   - Living-Hinge Curved Lid Box (parametric kerf-cut lattice)
   - Slotted Organizer Grid Box (interlocking $X \times Y$ compartment dividers)
 - **Score-and-Fold Cardboard Packaging**:
-  - Roll-End Tuck Top Mailer (`RETT`) with rollover side walls, dust flaps, and cherry-lock tuck flap
+  - Roll-End Tuck Top Mailer (`RETT`) with rollover side walls, a tuck top or front-lock closure, lid side flaps, and inner-wall tabs into floor slots; spans come from a written ply model
   - Standard Folding Carton (`RTE` / `STE`) with tapered glue tab and dust flaps
   - Two-Piece Telescoping Tray & Slip Lid Box
   - Supports both **Continuous Vector Score** and **Dashed Perforation (`Cut / Bridge`)** for thick corrugated flutes
