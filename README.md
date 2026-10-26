@@ -19,6 +19,12 @@ Browser-based parametric laser-cutting, cardboard packaging, and 3D-printed encl
 - **Face Artwork & 1:1 Print-Then-Cut Export**:
   - Place and scale SVG/PNG graphics on any box face, preview in 3D and 2D, and export 1:1 millimeter **Layered SVG**, **Layered PDF (`pdf-lib`)**, **DXF**, or **STL** with presets for **xTool Studio (xTool M2 Print + Cut)**, **LightBurn**, **Adobe Illustrator**, and **Glowforge**.
 
+## Exports
+
+- **SVG** is the known-good path for any laser. It uses three colors (cut, score, guide) and, for the xTool Studio profile, groups each piece in its own `<g>`. Perforation lines export as cuts.
+- **xTool project (`.xcs`)** opens in xTool Studio with cut and score settings already assigned. It is hidden by default: set `VITE_XCS_EXPORT=1` (see `.env.example`) to show it.
+- The `.xcs` format is reverse-engineered, so an xTool Studio update can break it and may need a fix.
+
 ## Development
 
 ```bash
