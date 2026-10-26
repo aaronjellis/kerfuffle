@@ -348,3 +348,115 @@ export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
 
   return pieces;
 }
+
+/** Hook height along the tongue, print z (rim + hang - HOOK_H .. rim + hang). */
+const HOOK_H = 1.5;
+/** How far the boss reaches down the lid's front face from the rim, print z. */
+const BOSS_H = 4;
+/** Thumb lip: the tongue's last THUMB_LEN mm flare THUMB_FLARE mm away from the box. */
+const THUMB_LEN = 2;
+const THUMB_FLARE = 1;
+
+/** A Y-Z polygon (shape x -> world y, shape y -> world z) extruded across x0..x1. */
+function yzPrism(pts: [number, number][], x0: number, x1: number): PrintPiece {
+  const shape = new THREE.Shape(pts.map(([y, z]) => new THREE.Vector2(y, z)));
+  return { partId: 'clasp', geometry: extrudeAlongX(shape, x0, x1) };
+}
+
+/**
+ * The cantilever snap clasp on the front face (y = 0), in the part's print frame (open side up),
+ * centred on x = outerW / 2 (so the lid's x mirror into the world leaves it in place).
+ *
+ * Base: a catch ridge, y -hookProud..wall/2 (embedded into the wall to its mid-thickness line),
+ * z rim - ridgeTop - ridgeH .. rim - ridgeTop. Its outer top edge is chamfered 45 degrees (the
+ * lead-in the descending hook rides over); its flat underside is the catch face.
+ *
+ * Lid: a boss on the front face (z rim - 4..rim, y -(standoff + tongueT)..wall/2), its underside
+ * chamfered so nothing overhangs past 45 degrees; a tongue rising from the rim to rim + hang + 2
+ * with its inner face `standoff` off the front face; a hook on the tongue's inner face, proud
+ * `hookProud` toward the box, at z rim + hang - 1.5 .. rim + hang; and a thumb lip on the tongue's
+ * outer face over its last 2 mm. The lid prints rim-down in the world, so print "up" is world
+ * "down": the hook's flat face at z = rim + hang - 1.5 is its top in the world, and its 45 degree
+ * face at the far end is the underside lead-in.
+ */
+export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): PrintPiece[] {
+  const { clasp, outerW, wall } = dims;
+  if (!clasp) return [];
+  const { width, tongueT, hang, hookProud, standoff, ridgeH, ridgeTop } = clasp;
+  const cx = outerW / 2;
+  const embedY = wall / 2;
+
+  if (part === 'base') {
+    const rim = dims.baseH;
+    const top = rim - ridgeTop;
+    const bottom = top - ridgeH;
+    return [
+      yzPrism(
+        [
+          [embedY, bottom],
+          [-hookProud, bottom],
+          [-hookProud, top - hookProud],
+          [0, top],
+          [embedY, top],
+        ],
+        cx - (width + 1) / 2,
+        cx + (width + 1) / 2
+      ),
+    ];
+  }
+
+  const rim = dims.lidH;
+  const outY = -(standoff + tongueT);
+  const inY = -standoff;
+  const tipZ = rim + hang + THUMB_LEN;
+  const hookZ0 = rim + hang - HOOK_H;
+  const hookZ1 = rim + hang;
+  const x0 = cx - width / 2;
+  const x1 = cx + width / 2;
+  return [
+    // Boss: full height at the wall, chamfered 45 degrees underneath toward the tongue.
+    yzPrism(
+      [
+        [embedY, rim - BOSS_H],
+        [0, rim - BOSS_H],
+        [outY, rim - BOSS_H - outY],
+        [outY, rim],
+        [embedY, rim],
+      ],
+      cx - (width + 2) / 2,
+      cx + (width + 2) / 2
+    ),
+    // Tongue, overlapping the boss by OVERLAP.
+    yzPrism(
+      [
+        [outY, rim - OVERLAP],
+        [inY, rim - OVERLAP],
+        [inY, tipZ],
+        [outY, tipZ],
+      ],
+      x0,
+      x1
+    ),
+    // Hook: flat catch face at hookZ0, 45 degree lead-in ending at the tongue at hookZ1.
+    yzPrism(
+      [
+        [inY, hookZ0],
+        [inY + hookProud, hookZ0],
+        [inY + hookProud, hookZ1 - hookProud],
+        [inY, hookZ1],
+      ],
+      x0,
+      x1
+    ),
+    // Thumb lip on the tongue's outer face.
+    yzPrism(
+      [
+        [outY, tipZ - THUMB_LEN],
+        [outY, tipZ],
+        [outY - THUMB_FLARE, tipZ],
+      ],
+      x0,
+      x1
+    ),
+  ];
+}

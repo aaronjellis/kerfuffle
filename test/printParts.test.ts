@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import * as THREE from 'three';
-import { buildHingePieces, buildShellPieces, computePrintBoxDims, type PrintPiece } from '../src/engine/printParts';
+import { buildClaspPieces, buildHingePieces, buildShellPieces, computePrintBoxDims, type PrintPiece } from '../src/engine/printParts';
 const p = { ...DEFAULT_BOX_PARAMETERS, category: '3d-print' as const, templateId: '3d-snap-box' as const };
 describe('print box dims', () => {
   it('derives shells, lip, hinge and clasp from the spec values', () => {
@@ -87,6 +87,18 @@ function unionBox(pieces: PrintPiece[]): THREE.Box3 {
   const b = new THREE.Box3();
   for (const piece of pieces) b.union(bbox(piece.geometry));
   return b;
+}
+
+/** Signed volume of a closed non-indexed triangle soup; positive when faces point outward. */
+function signedVolume(g: THREE.BufferGeometry): number {
+  const pos = g.getAttribute('position');
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  let vol = 0;
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2);
+    vol += a.dot(b.clone().cross(c)) / 6;
+  }
+  return vol;
 }
 
 describe('shell and lip pieces', () => {
@@ -273,14 +285,7 @@ describe('knuckle hinge pieces', () => {
   it('keeps faces pointing outward after the axis swap (positive signed volume)', () => {
     for (const part of ['base', 'lid'] as const) {
       for (const piece of buildHingePieces(d, part)) {
-        const pos = piece.geometry.getAttribute('position');
-        const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-        let vol = 0;
-        for (let i = 0; i < pos.count; i += 3) {
-          a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2);
-          vol += a.dot(b.clone().cross(c)) / 6;
-        }
-        expect(vol).toBeGreaterThan(0);
+        expect(signedVolume(piece.geometry)).toBeGreaterThan(0);
       }
     }
   });
@@ -321,5 +326,98 @@ describe('knuckle hinge pieces', () => {
     const off = computePrintBoxDims({ ...p, include3dHinge: false }, 60, 60, 40);
     expect(buildHingePieces(off, 'base')).toEqual([]);
     expect(buildHingePieces(off, 'lid')).toEqual([]);
+  });
+});
+
+describe('snap clasp pieces', () => {
+  const d = computePrintBoxDims(p, 110, 80, 55);
+  const c = d.clasp!;
+  // Positions are float32, so coordinates near 100 mm carry ~1e-5 of rounding.
+
+  it('builds the lid tongue rising above the rim with a thumb lip, standing off the front face', () => {
+    const lid = buildClaspPieces(d, 'lid');
+    expect(lid.length).toBeGreaterThan(0);
+    for (const piece of lid) expect(piece.partId).toBe('clasp');
+    const u = unionBox(lid);
+    expect(u.max.z).toBeCloseTo(d.lidH + c.hang + 2, 4);
+    expect(u.min.y).toBeCloseTo(-(c.standoff + c.tongueT + 1), 4); // thumb lip at -3.6
+    expect(u.max.y).toBeCloseTo(d.wall / 2, 4); // boss embedded into the wall
+    expect(u.min.z).toBeCloseTo(d.lidH - 4, 4);
+    // Centred on the front face, boss the widest piece.
+    expect(u.min.x + u.max.x).toBeCloseTo(d.outerW, 4);
+    expect(u.max.x - u.min.x).toBeCloseTo(c.width + 2, 4);
+    // The tongue: its inner face stands `standoff` off the front face.
+    const tongue = lid.find((piece) => {
+      const b = bbox(piece.geometry);
+      return Math.abs(b.max.y + c.standoff) < 1e-6 && Math.abs(b.min.y + c.standoff + c.tongueT) < 1e-6;
+    });
+    expect(tongue).toBeDefined();
+    const tb = bbox(tongue!.geometry);
+    expect(tb.max.z).toBeCloseTo(d.lidH + c.hang + 2, 4);
+    expect(tb.max.x - tb.min.x).toBeCloseTo(c.width, 4);
+  });
+
+  it('builds the base catch ridge on the outer front face, embedded into the wall', () => {
+    const base = buildClaspPieces(d, 'base');
+    expect(base.length).toBe(1);
+    expect(base[0].partId).toBe('clasp');
+    const b = bbox(base[0].geometry);
+    expect(b.min.y).toBeCloseTo(-c.hookProud, 4);
+    expect(b.max.y).toBeCloseTo(d.wall / 2, 4);
+    expect(b.min.z).toBeCloseTo(d.baseH - 7.1, 4);
+    expect(b.max.z).toBeCloseTo(d.baseH - 5.6, 4);
+    expect(b.max.x - b.min.x).toBeCloseTo(c.width + 1, 4);
+    expect(b.min.x + b.max.x).toBeCloseTo(d.outerW, 4);
+  });
+
+  it('overlaps the hook and the ridge in the closed box', () => {
+    // The hook: the lid piece that lies between the tongue and the front face.
+    const hook = buildClaspPieces(d, 'lid').find((piece) => {
+      const b = bbox(piece.geometry);
+      return b.max.y < 0 && b.min.y > -c.standoff - 1e-6;
+    });
+    expect(hook).toBeDefined();
+    const hb = bbox(hook!.geometry);
+    const ridge = bbox(buildClaspPieces(d, 'base')[0].geometry);
+    // World distances below the seam: the lid prints rim-down, so print z = lidH + k is k below.
+    const hookTopBelowSeam = hb.min.z - d.lidH;
+    const ridgeBottomBelowSeam = d.baseH - ridge.min.z;
+    expect(hookTopBelowSeam).toBeCloseTo(6.5, 4);
+    expect(ridgeBottomBelowSeam).toBeCloseTo(7.1, 4);
+    expect(hookTopBelowSeam).toBeLessThan(ridgeBottomBelowSeam);
+    // Engagement is 0.6 mm in Y (hook -1.0..-0.2 vs ridge -0.8..0) and 0.6 mm in Z.
+    const yOverlap = Math.min(hb.max.y, ridge.max.y) - Math.max(hb.min.y, ridge.min.y);
+    expect(yOverlap).toBeCloseTo(0.6, 6);
+    expect(ridgeBottomBelowSeam - hookTopBelowSeam).toBeCloseTo(0.6, 4);
+  });
+
+  it('keeps the clasp between the corner fillets on a small, round box', () => {
+    const t = computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 20);
+    if (t.clasp) expect(t.clasp.width).toBeLessThanOrEqual(t.outerW - 2 * (8 + 2) + 1e-9);
+    else expect(buildClaspPieces(t, 'lid')).toEqual([]);
+    for (const part of ['base', 'lid'] as const) {
+      const pieces = buildClaspPieces(t, part);
+      if (pieces.length) {
+        const u = unionBox(pieces);
+        expect(u.min.x).toBeGreaterThanOrEqual(8 - 1e-9);
+        expect(u.max.x).toBeLessThanOrEqual(t.outerW - 8 + 1e-9);
+      }
+    }
+  });
+
+  it('returns no pieces when the clasp is off', () => {
+    const off = computePrintBoxDims({ ...p, includeSnapClasp: false }, 60, 60, 40);
+    expect(buildClaspPieces(off, 'base')).toEqual([]);
+    expect(buildClaspPieces(off, 'lid')).toEqual([]);
+  });
+
+  it('keeps faces pointing outward (positive signed volume) and non-indexed', () => {
+    for (const part of ['base', 'lid'] as const) {
+      for (const piece of buildClaspPieces(d, part)) {
+        expect(piece.geometry.index).toBeNull();
+        expect(piece.geometry.getAttribute('position').count % 3).toBe(0);
+        expect(signedVolume(piece.geometry)).toBeGreaterThan(0);
+      }
+    }
   });
 });
