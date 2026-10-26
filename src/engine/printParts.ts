@@ -51,7 +51,16 @@ export interface PrintBoxDims {
     /** Distance below the rim of the ridge's top edge. */
     ridgeTop: number;
   } | null;
+  /**
+   * Why a switched-on feature came out null: `hinge-height` (no lid height keeps both parts 2R + 1.3
+   * tall), `clasp-width` (the flat front face leaves under 4 mm for the clasp), `clasp-height` (the
+   * base cannot reach the tongue's 10.5 mm without pushing the lid under its minimum). Empty when
+   * every switched-on feature is present.
+   */
+  dropped: PrintDroppedFeature[];
 }
+
+export type PrintDroppedFeature = 'clasp-height' | 'clasp-width' | 'hinge-height';
 
 const KNUCKLE_GAP = 0.3;
 /** Radial clearance between a knuckle and the other part's back-wall edge as the lid swings. */
@@ -64,6 +73,8 @@ const CLASP_HANG = 8;
 /** The tongue runs this far past the hook (the thumb lip). */
 const CLASP_TIP = 2;
 const CATCH_CLEARANCE = 0.3;
+/** The lid's tongue reaches hang + tip below the seam; the base must be 0.5 mm taller than that. */
+const CLASP_MIN_BASE_H = CLASP_HANG + CLASP_TIP + 0.5;
 
 /** Smallest odd integer >= n. */
 function oddUp(n: number): number {
@@ -84,21 +95,53 @@ export function computePrintBoxDims(
   const hole = params.hingePinDiameterMm + PIN_CLEARANCE;
   const R = Math.max(MIN_HINGE_R, hole / 2 + wall);
 
+  const dropped: PrintDroppedFeature[] = [];
   // One lid-height clamp for the whole 3D box. The base interior never drops below 5 mm.
   let lidInner = Math.min(innerH - 8, Math.max(10, params.lidHeightMm));
   // The knuckle's fill prism reaches 2R + 0.3 below each part's rim, so both lidH and baseH must be
-  // at least 2R + 0.3 + 1 to keep it above the bed. Raise a short lid; cap a tall lid (toward its 10 mm
-  // minimum) so the base keeps 2R + 1 and its 5 mm interior. If no lid height satisfies both, the
-  // box is too small for the hinge and it is dropped, leaving the lid clamp untouched.
+  // at least 2R + 0.3 + 1 to keep it above the bed. Raise a short lid; cap a tall lid (toward its
+  // 10 mm minimum) so the base keeps 2R + 1.3 and its 5 mm interior. If no lid height satisfies
+  // both, the box is too small for the hinge and it is dropped, leaving the lid clamp untouched.
   let hingeFits = params.include3dHinge;
+  let hingeLidMin = -Infinity;
   if (hingeFits) {
     const hingeH = 2 * R + KNUCKLE_CLEARANCE + 1;
     const lo = hingeH - floor;
     const hi = Math.min(innerH + floor - hingeH, innerH - MIN_BASE_INNER_H);
     const target = Math.min(Math.max(lidInner, lo), hi);
-    if (target >= lo && target >= Math.min(10, lidInner)) lidInner = target;
-    else hingeFits = false;
+    if (target >= lo && target >= Math.min(10, lidInner)) {
+      lidInner = target;
+      hingeLidMin = lo;
+    } else {
+      hingeFits = false;
+      dropped.push('hinge-height');
+    }
   }
+
+  // The clasp sits on the flat front face, so it stays clear of the corner fillets. Below 4 mm
+  // wide it is dropped, the same as when the toggle is off. The lid's tongue reaches hang + 2 below
+  // the seam, so the base must be at least that plus 0.5 mm tall or the tongue would pass the bed:
+  // cap a tall lid the way the hinge does (not under its 10 mm minimum, nor under the hinge's
+  // minimum). If that cannot be done, the clasp is dropped and the lid stays as it was.
+  const claspWidth = Math.max(
+    0,
+    Math.min(Math.min(18, Math.max(10, outerW * 0.25)), outerW - 2 * (params.outerFilletMm + 2))
+  );
+  let claspFits = params.includeSnapClasp;
+  if (claspFits && claspWidth < 4) {
+    claspFits = false;
+    dropped.push('clasp-width');
+  }
+  if (claspFits) {
+    const target = Math.min(lidInner, innerH + floor - CLASP_MIN_BASE_H);
+    if (target >= Math.min(10, lidInner) && target >= hingeLidMin) {
+      lidInner = target;
+    } else {
+      claspFits = false;
+      dropped.push('clasp-height');
+    }
+  }
+
   const baseH = Math.max(innerH - lidInner + floor, floor + MIN_BASE_INNER_H);
   const lidH = lidInner + floor;
 
@@ -118,15 +161,7 @@ export function computePrintBoxDims(
     hinge = { R, hole, runLen, segments, axisY: outerD + R + KNUCKLE_CLEARANCE };
   }
 
-  // The clasp sits on the flat front face, so it stays clear of the corner fillets. Below 4 mm
-  // wide it is dropped, the same as when the toggle is off. The lid's tongue reaches hang + 2 below
-  // the seam, so a base shorter than that plus 0.5 mm drops it too: the tongue would pass the bed.
-  const claspWidth = Math.max(
-    0,
-    Math.min(Math.min(18, Math.max(10, outerW * 0.25)), outerW - 2 * (params.outerFilletMm + 2))
-  );
-  const claspFits = baseH >= CLASP_HANG + CLASP_TIP + 0.5;
-  const clasp: PrintBoxDims['clasp'] = params.includeSnapClasp && claspWidth >= 4 && claspFits
+  const clasp: PrintBoxDims['clasp'] = claspFits
     ? {
         width: claspWidth,
         tongueT: 1.6,
@@ -154,6 +189,7 @@ export function computePrintBoxDims(
     lip: { height: LIP_HEIGHT, thickness: Math.max(1, wall / 2), clearance: 0.2 },
     hinge,
     clasp,
+    dropped,
   };
 }
 

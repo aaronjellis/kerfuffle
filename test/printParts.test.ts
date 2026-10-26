@@ -73,11 +73,46 @@ describe('print box dims', () => {
     expect(d.lidH).toBeCloseTo(18 + d.floor);
     expect(d.baseH).toBeCloseTo(55 - 18 + d.floor);
     expect(d.baseH + d.lidH).toBeCloseTo(55 + 2 * d.floor);
+    // A tall lid clamps to innerH - 8, then yields to the clasp: the base must reach 10.5 mm.
     const tall = computePrintBoxDims({ ...p, lidHeightMm: 100 }, 60, 60, 40);
-    expect(tall.lidH).toBeCloseTo(40 - 8 + tall.floor);
+    expect(tall.lidH).toBeCloseTo(40 + tall.floor - 10.5 + tall.floor);
+    expect(tall.baseH).toBeCloseTo(10.5);
+    expect(tall.clasp).not.toBeNull();
+    const tallNoClasp = computePrintBoxDims({ ...p, lidHeightMm: 100, includeSnapClasp: false }, 60, 60, 40);
+    expect(tallNoClasp.lidH).toBeCloseTo(40 - 8 + tallNoClasp.floor);
     const small = computePrintBoxDims({ ...p, lidHeightMm: 2 }, 60, 60, 40);
     expect(small.lidH).toBeCloseTo(10 + small.floor);
   });
+  it('caps the lid so the clasp fits, and reports why a feature was dropped', () => {
+    // 30 x 30 x 20: the 12 mm lid would leave a 10 mm base; it yields to 11.5 so the base is 10.5.
+    const t = computePrintBoxDims(p, 30, 30, 20);
+    expect(t.clasp).not.toBeNull();
+    expect(t.baseH).toBeCloseTo(10.5, 6);
+    expect(t.lidH - t.floor).toBeCloseTo(11.5, 6);
+    expect(t.lidH - t.floor).toBeGreaterThanOrEqual(10);
+    expect(t.baseH + t.lidH).toBeCloseTo(20 + 2 * t.floor, 6);
+    expect(t.dropped).toEqual([]);
+    // Every box 18.5 to 30 mm tall keeps its clasp with the default floor.
+    for (let h = 18.5; h <= 30; h += 0.5) {
+      const b = computePrintBoxDims(p, 30, 30, h);
+      expect(b.clasp).not.toBeNull();
+      expect(b.baseH).toBeGreaterThanOrEqual(10.5 - 1e-9);
+    }
+    // Under 18.5 mm the lid would have to drop below its 10 mm minimum (it is already innerH - 8).
+    const tooShort = computePrintBoxDims(p, 30, 30, 18);
+    expect(tooShort.clasp).toBeNull();
+    expect(tooShort.dropped).toEqual(['clasp-height']);
+    // A narrow, round box has no flat front wide enough.
+    expect(computePrintBoxDims({ ...p, outerFilletMm: 6 }, 15, 15, 30).dropped).toContain('clasp-width');
+    // wall 8 -> R 9: no lid height keeps both parts 2R + 1.3 tall.
+    const thick = computePrintBoxDims({ ...p, wallThickness3dMm: 8 }, 30, 30, 20);
+    expect(thick.hinge).toBeNull();
+    expect(thick.dropped).toContain('hinge-height');
+    expect(computePrintBoxDims(p, 110, 80, 55).dropped).toEqual([]);
+    // Switched-off features are not "dropped".
+    expect(computePrintBoxDims({ ...p, include3dHinge: false, includeSnapClasp: false }, 15, 15, 15).dropped).toEqual([]);
+  });
+
   it('sets the clasp constants and ridge position', () => {
     const c = computePrintBoxDims(p, 110, 80, 55).clasp!;
     expect(c).toMatchObject({ tongueT: 1.6, hang: 8, hookProud: 0.8, standoff: 1.0, ridgeH: 1.5 });
@@ -518,7 +553,10 @@ describe('snap clasp pieces', () => {
       expect(u.min.x).toBeGreaterThanOrEqual(8 - 1e-4);
       expect(u.max.x).toBeLessThanOrEqual(t.outerW - 8 + 1e-4);
     }
-    expect(computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 20).clasp).toBeNull();
+    // At 20 mm the lid yields 0.5 mm so the base reaches the clasp's 10.5 mm.
+    const short = computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 20);
+    expect(short.clasp).not.toBeNull();
+    expect(short.baseH).toBeCloseTo(10.5, 6);
   });
 
   it('drops the clasp when the base is too short for the tongue', () => {
