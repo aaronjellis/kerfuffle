@@ -370,7 +370,7 @@ describe('snap clasp pieces', () => {
     expect(b.min.x + b.max.x).toBeCloseTo(d.outerW, 4);
   });
 
-  it('overlaps the hook and the ridge in the closed box', () => {
+  it('seats the hook just under the ridge in the closed box', () => {
     // The hook: the lid piece that lies between the tongue and the front face.
     const hook = buildClaspPieces(d, 'lid').find((piece) => {
       const b = bbox(piece.geometry);
@@ -382,13 +382,14 @@ describe('snap clasp pieces', () => {
     // World distances below the seam: the lid prints rim-down, so print z = lidH + k is k below.
     const hookTopBelowSeam = hb.min.z - d.lidH;
     const ridgeBottomBelowSeam = d.baseH - ridge.min.z;
-    expect(hookTopBelowSeam).toBeCloseTo(6.5, 4);
+    expect(hookTopBelowSeam).toBeCloseTo(7.2, 4);
     expect(ridgeBottomBelowSeam).toBeCloseTo(7.1, 4);
-    expect(hookTopBelowSeam).toBeLessThan(ridgeBottomBelowSeam);
-    // Engagement is 0.6 mm in Y (hook -1.0..-0.2 vs ridge -0.8..0) and 0.6 mm in Z.
+    expect(hb.max.z - d.lidH).toBeCloseTo(c.hang, 4);
+    // Engagement is 0.6 mm in Y (hook -1.0..-0.2 vs ridge -0.8..0), with 0.1 mm Z clearance
+    // between the ridge's underside and the hook's catch face after the snap.
     const yOverlap = Math.min(hb.max.y, ridge.max.y) - Math.max(hb.min.y, ridge.min.y);
     expect(yOverlap).toBeCloseTo(0.6, 6);
-    expect(ridgeBottomBelowSeam - hookTopBelowSeam).toBeCloseTo(0.6, 4);
+    expect(hookTopBelowSeam - ridgeBottomBelowSeam).toBeCloseTo(0.1, 6);
   });
 
   it('keeps the clasp between the corner fillets on a small, round box', () => {

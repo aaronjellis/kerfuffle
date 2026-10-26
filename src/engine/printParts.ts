@@ -349,8 +349,6 @@ export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
   return pieces;
 }
 
-/** Hook height along the tongue, print z (rim + hang - HOOK_H .. rim + hang). */
-const HOOK_H = 1.5;
 /** How far the boss reaches down the lid's front face from the rim, print z. */
 const BOSS_H = 4;
 /** Thumb lip: the tongue's last THUMB_LEN mm flare THUMB_FLARE mm away from the box. */
@@ -374,10 +372,10 @@ function yzPrism(pts: [number, number][], x0: number, x1: number): PrintPiece {
  * Lid: a boss on the front face (z rim - 4..rim, y -(standoff + tongueT)..wall/2), its underside
  * chamfered so nothing overhangs past 45 degrees; a tongue rising from the rim to rim + hang + 2
  * with its inner face `standoff` off the front face; a hook on the tongue's inner face, proud
- * `hookProud` toward the box, at z rim + hang - 1.5 .. rim + hang; and a thumb lip on the tongue's
- * outer face over its last 2 mm. The lid prints rim-down in the world, so print "up" is world
- * "down": the hook's flat face at z = rim + hang - 1.5 is its top in the world, and its 45 degree
- * face at the far end is the underside lead-in.
+ * `hookProud` toward the box, a 45 degree triangle at z rim + hang - hookProud .. rim + hang; and a
+ * thumb lip on the tongue's outer face over its last 2 mm. The lid prints rim-down in the world, so
+ * print "up" is world "down": the hook's flat face at z = rim + hang - hookProud is its top in the
+ * world (it seats 0.1 mm under the ridge's underside), and its 45 degree ramp is the lead-in.
  */
 export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): PrintPiece[] {
   const { clasp, outerW, wall } = dims;
@@ -409,7 +407,7 @@ export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
   const outY = -(standoff + tongueT);
   const inY = -standoff;
   const tipZ = rim + hang + THUMB_LEN;
-  const hookZ0 = rim + hang - HOOK_H;
+  const hookZ0 = rim + hang - hookProud;
   const hookZ1 = rim + hang;
   const x0 = cx - width / 2;
   const x1 = cx + width / 2;
@@ -437,12 +435,14 @@ export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
       x0,
       x1
     ),
-    // Hook: flat catch face at hookZ0, 45 degree lead-in ending at the tongue at hookZ1.
+    // Hook: a 45 degree triangle, flat catch face at hookZ0, ramp back to the tongue at hookZ1.
+    // Engagement is hookProud - (standoff - hookProud) = 0.6 mm in Y (hook -1.0..-0.2 vs ridge
+    // -0.8..0), with 0.1 mm Z clearance under the ridge after the snap: the catch face is
+    // hang - hookProud = 7.2 below the seam in the world, the ridge underside 7.1.
     yzPrism(
       [
         [inY, hookZ0],
         [inY + hookProud, hookZ0],
-        [inY + hookProud, hookZ1 - hookProud],
         [inY, hookZ1],
       ],
       x0,
