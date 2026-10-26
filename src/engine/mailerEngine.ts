@@ -12,8 +12,8 @@ import { fmt, pointsToSvgPath } from './fingerJointEngine';
  */
 export interface MailerSpans {
   T: number;
-  roll: number; // 2T, or 3T when includeLidFlaps
-  floorW: number; // W + T + 2*roll
+  roll: number; // 2T, mid-plane to mid-plane: half the outer wall, the dust ear, half the inner wall
+  floorW: number; // W + T + 2*roll, plus 2T when includeLidFlaps (room for the flaps inside the inner walls)
   floorD: number; // D + 2T
   backH: number; // H + T
   frontH: number; // H + T
@@ -30,8 +30,11 @@ export interface MailerSpans {
   earW: number; // min(H, D/2 - T)
   earH: number; // H - 2T
   tab: { len: number; depth: number; centers: [number, number]; chamfer: 4 };
-  /** inset = T/2 + roll from the side crease */
-  slot: { len: number; width: number; inset: number };
+  /**
+   * centerFromCrease = roll: the inner wall's mid-plane, measured from the floor's side crease.
+   * inset = centerFromCrease - width/2: the slot's edge nearest the side crease.
+   */
+  slot: { len: number; width: number; centerFromCrease: number; inset: number };
   /** null for the 'tuck' lock style */
   lock: { tabW: number; tabLen: number; slitLen: number } | null;
   /** 0 when off or when a lock is set */
@@ -81,9 +84,9 @@ export function applySideOverflow(
 
 export function computeMailerSpans(params: BoxParameters, W: number, D: number, H: number): MailerSpans {
   const T = params.materialThicknessMm;
-  const roll = params.includeLidFlaps ? 3 * T : 2 * T;
+  const roll = 2 * T;
 
-  const floorW = W + T + 2 * roll;
+  const floorW = W + T + 2 * roll + (params.includeLidFlaps ? 2 * T : 0);
   const floorD = D + 2 * T;
   const backH = H + T;
   const frontH = H + T;
@@ -98,14 +101,17 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
 
   const tab: MailerSpans['tab'] = {
     len: clamp(D / 4, 14, 26),
-    depth: Math.min(2 * T + 6, innerSideH - 2),
+    depth: Math.min(T + 5, innerSideH - 2),
     centers: [0.25, 0.75],
     chamfer: 4,
   };
+  // The slot is centred under the inner wall's mid-plane, which sits `roll` in from the side crease.
+  const slotWidth = T + 0.5;
   const slot: MailerSpans['slot'] = {
     len: tab.len + 1,
-    width: T + 0.5,
-    inset: T / 2 + roll,
+    width: slotWidth,
+    centerFromCrease: roll,
+    inset: roll - slotWidth / 2,
   };
 
   let lock: MailerSpans['lock'] = null;
@@ -469,14 +475,24 @@ function flatPosition(p: Panel3DTransform, byId: Map<string, Panel3DTransform>):
   return [x, y, z];
 }
 
+/** Euler XYZ angles (three.js order) for a turn of `beta` about Y followed by `phi` about world Z. */
+function eulerYThenZ(beta: number, phi: number): [number, number, number] {
+  const [cb, sb, cf, sf] = [Math.cos(beta), Math.sin(beta), Math.cos(phi), Math.sin(phi)];
+  const m13 = cf * sb;
+  const y = Math.asin(Math.max(-1, Math.min(1, m13)));
+  if (Math.abs(m13) < 0.9999999) return [Math.atan2(-sf * sb, cb), y, Math.atan2(sf, cf * cb)];
+  return [Math.atan2(0, cf), y, 0];
+}
+
 /**
  * The roll-end mailer's 3D fold rig, built from the same ply-model spans as the 2D sheet.
  *
  * Every pivot sits where the parent's and the child's mid-planes meet, so with every fold
  * at `flatAngleRad` the whole rig lies in the floor's mid-plane. The floor's mid-plane is at
  * `y = −H/2` (the plane the flat blank lies in); the floor top is `T/2` above it and the lid
- * underside is `H` above the floor top. Inner walls' inner faces sit at `x = ±W/2`, the back
- * wall's inner face and the tuck flap's inner face are `D` apart.
+ * underside is `H` above the floor top. Inner walls' inner faces sit at `x = ±W/2` (±(W/2 + T)
+ * with lid flaps, which tuck inside them); the back wall's inner face and the tuck flap's inner
+ * face are `D` apart.
  */
 export function buildMailerRig(
   spans: MailerSpans,
@@ -497,8 +513,7 @@ export function buildMailerRig(
   const yFront = yFloor + s.frontH / 2;
   const xOuter = s.floorW / 2; // outer wall straddles the floor's side crease
   const xEar = xOuter - T; // dust ear, just inside the outer wall
-  const xLidFlap = xOuter - 2 * T; // lid flap, between the ear and the inner wall
-  const xInner = xOuter - s.roll; // inner wall: W/2 + T/2
+  const xInner = xOuter - s.roll; // inner wall: W/2 + T/2, or W/2 + 3T/2 with lid flaps
   const zBack = -s.floorD / 2;
   const zFront = s.floorD / 2;
   const zTuck = zFront - T; // tuck flap, just inside the front wall
@@ -688,24 +703,30 @@ export function buildMailerRig(
     },
   });
 
-  // Lid side flaps start T behind the lid's front edge, as on the sheet, and hang inside the roll.
+  // Lid side flaps hinge on the lid's side edges, start T behind its front edge as on the sheet,
+  // and fold past vertical by θ so their free ends land inside the inner walls.
   if (s.lidFlapDepth > 0) {
+    const L = s.lidFlapDepth;
+    const theta = Math.atan((s.roll + T) / L);
     const z = zLidFront - T - s.lidFlapLen / 2;
     for (const [side, sideName, sx] of sides) {
+      // Hanging direction: down, tilted θ toward the centre.
+      const dx = -sx * Math.sin(theta);
+      const dy = -Math.cos(theta);
       add({
         id: `lid-flap-${side}`,
         name: `${sideName} Lid Flap`,
         faceId: `lid-flap-${side}`,
         widthMm: s.lidFlapLen,
-        heightMm: s.lidFlapDepth,
+        heightMm: L,
         color: '#c9a073',
-        closedPos: [sx * xLidFlap, yLid - s.lidFlapDepth / 2, z],
-        rotation: [0, sx * hp, 0],
+        closedPos: [sx * xOuter + (dx * L) / 2, yLid + (dy * L) / 2, z],
+        rotation: eulerYThenZ(sx * hp, -sx * theta),
         foldRig: {
           parentId: 'top',
-          pivotOffset: [sx * xLidFlap, yLid, z],
+          pivotOffset: [sx * xOuter, yLid, z],
           axis: 'z',
-          flatAngleRad: sx * hp,
+          flatAngleRad: sx * (hp + theta),
           foldedAngleRad: 0,
           stage: [0.5, 0.64],
         },
