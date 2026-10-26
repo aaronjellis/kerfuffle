@@ -7,13 +7,14 @@ import { geometriesToAsciiStl } from './stl';
  * A 3D-printed flat offset hinge for the laser-cut clamshell. Each leaf prints flat with its bed
  * face as the mounting face against the wood; the knuckle stands proud beyond the plate's edge, so
  * its axis sits on the seam 2.5 mm off the wood. Separate printed pins pass through the leaf's
- * holes into the 3.0 mm holes the laser cuts 5 mm from the seam; a 1.75 mm filament pin runs
- * through the knuckles.
+ * holes into the 3.0 mm holes the laser cuts 5 mm from the seam. A filament pin runs through the
+ * knuckles; the bore follows `hingePinDiameterMm` (default 1.75 mm filament) plus 0.25 clearance,
+ * with the pin capped at 3.0 mm.
  */
 export interface PrintedHingeSpec {
   /** Distance between a hinge's two laser-cut holes (centre to centre). */
   spacing: number;
-  /** Filament pin diameter. */
+  /** Filament pin diameter; values above MAX_PIN_MM are clamped. */
   pinMm: number;
   /** Board thickness: the press-fit pins are plate + board long. */
   boardT: number;
@@ -36,6 +37,8 @@ const PIN_PITCH = 6;
 /** Gap between pieces laid out side by side in the STL. */
 const LAYOUT_GAP = 8;
 const SEGMENTS = 24;
+/** Ø5 knuckle keeps >= 0.85 mm wall at a 3.25 bore. */
+const MAX_PIN_MM = 3.0;
 
 function circlePoints(cx: number, cy: number, r: number, n: number): THREE.Vector2[] {
   return Array.from({ length: n }, (_, i) => {
@@ -111,7 +114,7 @@ function knuckle(x0: number, x1: number, boreR: number): THREE.BufferGeometry[] 
  */
 export function buildPrintedHingeLeaves(spec: PrintedHingeSpec): THREE.BufferGeometry[] {
   const L = spec.spacing + 8;
-  const boreR = (spec.pinMm + 0.25) / 2;
+  const boreR = (Math.min(spec.pinMm, MAX_PIN_MM) + 0.25) / 2;
   const seg = (L - 2 * KNUCKLE_GAP) / 3;
   const ranges: [number, number][] = [
     [0, seg],

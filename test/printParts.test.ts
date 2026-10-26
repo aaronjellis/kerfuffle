@@ -621,6 +621,26 @@ describe('printed hinge', () => {
     }
   });
 
+  it('clamps a fat pin to 3 mm so the bore leaves a knuckle wall', () => {
+    const leaves = buildPrintedHingeLeaves({ spacing: 8.8, pinMm: 6, boardT: 3 });
+    const boreR = (3.0 + 0.25) / 2;
+    expect(boreR).toBeCloseTo(1.625);
+    for (const leaf of leaves) {
+      const pos = leaf.getAttribute('position');
+      let onBore = 0;
+      for (let i = 0; i < pos.count; i++) {
+        const r = Math.hypot(pos.getY(i) + 2.5, pos.getZ(i) - 2.5);
+        expect(r).toBeGreaterThan(boreR - 1e-4);
+        if (Math.abs(r - boreR) < 1e-4) onBore++;
+      }
+      expect(onBore).toBeGreaterThan(0);
+      expect(signedVolume(leaf)).toBeGreaterThan(0);
+    }
+    for (const pin of buildPrintedHingePins({ spacing: 8.8, pinMm: 6, boardT: 3 })) {
+      expect(signedVolume(pin)).toBeGreaterThan(0);
+    }
+  });
+
   it('builds four 3.1 mm pins, plate plus board long, standing on the bed', () => {
     const pins = buildPrintedHingePins(spec);
     expect(pins.length).toBe(4);

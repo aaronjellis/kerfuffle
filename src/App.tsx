@@ -1009,7 +1009,7 @@ export const App: React.FC = () => {
                       ) : (
                         <label className="field-block">
                           <span>
-                            {params.clamshellHingeType === 'printed-hinge' ? 'Pin Ø' : 'Hole Ø'} (
+                            {params.clamshellHingeType === 'printed-hinge' ? 'Filament pin Ø' : 'Hole Ø'} (
                             {uLabel})
                           </span>
                           <NumberField
@@ -1020,7 +1020,11 @@ export const App: React.FC = () => {
                             displayUnit={displayUnit}
                             inDecimals={3}
                             mmDecimals={2}
-                            ariaLabel="Hinge Hole Diameter"
+                            ariaLabel={
+                              params.clamshellHingeType === 'printed-hinge'
+                                ? 'Filament pin diameter'
+                                : 'Hinge Hole Diameter'
+                            }
                             onChangeMm={(mm) => updateParam('hingePinDiameterMm', mm)}
                           />
                         </label>
