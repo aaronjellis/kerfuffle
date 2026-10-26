@@ -50,7 +50,19 @@ export interface XcsDisplay {
 
 export type XcsIdGenerator = () => string;
 
-const randomId: XcsIdGenerator = () => crypto.randomUUID();
+/**
+ * A v4 UUID. `crypto.randomUUID` exists only in secure contexts, so plain-http LAN dev
+ * falls back to a `Math.random` v4 UUID. Ids only need to be unique within one project file.
+ */
+export function uuidV4(cryptoLike: { randomUUID?: () => string } | undefined = globalThis.crypto): string {
+  if (typeof cryptoLike?.randomUUID === 'function') return cryptoLike.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.floor(Math.random() * 16);
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+const randomId: XcsIdGenerator = () => uuidV4();
 
 /** Rounds to 1/1000 mm so the file stays readable and free of float noise. */
 const mm = (n: number) => Math.round(n * 1000) / 1000;

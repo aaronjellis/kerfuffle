@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS, MATERIAL_PRESETS, laserSettingsFor } from '../src/engine/presets';
 import { generateBoxModel } from '../src/engine/boxGenerator';
-import { XCS_DEVICE_M2, buildXcsDisplays, buildXcsProject } from '../src/engine/xcsExporter';
+import { XCS_DEVICE_M2, buildXcsDisplays, buildXcsProject, uuidV4 } from '../src/engine/xcsExporter';
 import { exportXcsProject } from '../src/engine/exporters';
 import type { BoxParameters, GeneratedBoxModel } from '../src/engine/types';
 
@@ -300,5 +300,46 @@ describe('perforation processing', () => {
     const scores = displays.filter((d) => layerOf.get(d.id) === 'score');
     expect(scores.length).toBeGreaterThan(0);
     for (const d of scores) expect(map.get(d.id)!.processingType).toBe('VECTOR_ENGRAVING');
+  });
+});
+
+describe('M2 device block', () => {
+  // Aaron supplies this file from xTool Studio with an M2 connected; the test skips until it exists.
+  const fixtures = import.meta.glob('./fixtures/m2-empty.xcs', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  }) as Record<string, string>;
+  const fixtureRaw = Object.values(fixtures)[0];
+
+  it.skipIf(fixtureRaw === undefined)('matches the device block of a real Studio file', () => {
+    const fixture = JSON.parse(fixtureRaw);
+    expect(XCS_DEVICE_M2.extId).toBe(fixture.extId);
+    expect(XCS_DEVICE_M2.deviceId).toBe(fixture.device.id);
+    expect(XCS_DEVICE_M2.power).toBe(fixture.device.power);
+
+    const exported = JSON.parse(exportXcsProject(fingerModel()));
+    for (const key of Object.keys(fixture.device)) {
+      expect(exported.device).toHaveProperty(key);
+    }
+  });
+});
+
+describe('uuidV4', () => {
+  const V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  it('falls back to a v4 UUID when crypto.randomUUID is unavailable', () => {
+    const ids = new Set<string>();
+    for (let i = 0; i < 50; i++) {
+      const id = uuidV4({});
+      expect(id).toMatch(V4);
+      ids.add(id);
+    }
+    expect(ids.size).toBe(50);
+    expect(uuidV4(undefined as unknown as undefined)).toMatch(V4);
+  });
+
+  it('uses crypto.randomUUID when present', () => {
+    expect(uuidV4({ randomUUID: () => 'fixed' })).toBe('fixed');
   });
 });

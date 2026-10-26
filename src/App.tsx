@@ -51,6 +51,7 @@ import {
   exportBoxDxf,
   exportBoxPdf,
   exportBoxSvg,
+  exportXcsProject,
 } from './engine/exporters';
 import {
   createSampleArtworkDataUrl,
@@ -384,6 +385,16 @@ export const App: React.FC = () => {
     );
   };
 
+  const showXcsExport =
+    params.exportProfile === 'xtool-studio' && import.meta.env.VITE_XCS_EXPORT === '1';
+
+  const handleDownloadXcs = () => {
+    triggerDownload(
+      new Blob([exportXcsProject(model)], { type: 'application/json' }),
+      `${slugBase}.xcs`
+    );
+  };
+
   const handleDownloadSplitSvg = () => {
     handleDownloadSvg('score-only');
     setTimeout(() => {
@@ -556,6 +567,17 @@ export const App: React.FC = () => {
             <Scissors size={14} />
             Split (Cut+Score)
           </button>
+          {showXcsExport && (
+            <button
+              type="button"
+              className="export-btn"
+              onClick={handleDownloadXcs}
+              title="Download an xTool Studio project with cut and score settings assigned (beta)"
+            >
+              <FileCode size={14} />
+              xTool project (.xcs) · beta
+            </button>
+          )}
           <button
             type="button"
             className="export-btn export-btn-accent"
