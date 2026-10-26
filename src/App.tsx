@@ -33,7 +33,7 @@ import {
   renderTextArtworkToDataUrl,
   resolvePieceDimensions,
 } from './engine/googleFonts';
-import { partsForTemplate, reconcileSelection, type PartId } from './ui/parts';
+import { partForMesh, partsForTemplate, reconcileSelection, type PartId } from './ui/parts';
 import type { SectionHandlers } from './ui/sections';
 import { AppBar } from './ui/AppBar';
 import { Inspector } from './ui/Inspector';
@@ -111,6 +111,15 @@ export const App: React.FC = () => {
   const handleSelectPart = (id: PartId) => {
     setSettingQuery('');
     setSelectedPart(id);
+  };
+
+  /** A click on a 3D mesh opens the part it belongs to; a face also becomes the artwork target. */
+  const handleSelectMeshPart = (meshPartId: string) => {
+    const part = partForMesh(meshPartId, params.templateId);
+    if (!part) return;
+    handleSelectPart(part);
+    if (part === 'artwork') setSelectedFaceId(meshPartId);
+    window.posthog?.capture('part_selected', { part, template: params.templateId, project: 'kerfuffle' });
   };
 
   // Switch category & pick first template in that category
@@ -505,6 +514,8 @@ export const App: React.FC = () => {
           onToggleWireframe={() => setShowWireframe((w) => !w)}
           selectedFaceId={selectedFaceId}
           onSelectFace={setSelectedFaceId}
+          selectedPart={selectedPart}
+          onSelectMeshPart={handleSelectMeshPart}
           selectedArtworkId={selectedArtworkId}
           onSelectArtwork={setSelectedArtworkId}
           onUpdateArtwork={updateArtwork}

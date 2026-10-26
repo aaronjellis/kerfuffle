@@ -8,6 +8,8 @@ import {
 } from '../engine/types';
 import { buildPrintPartWorldGeometry } from '../engine/printWorld';
 import type { PrintPartId } from '../engine/printParts';
+import { partForMesh, type PartId } from '../ui/parts';
+import { meshPartIdFor } from '../ui/meshParts';
 
 interface Viewport3DProps {
   model: GeneratedBoxModel;
@@ -15,12 +17,27 @@ interface Viewport3DProps {
   assemblyProgress: number; // 0 = flat/exploded, 1 = closed/assembled
   selectedFaceId: string;
   onSelectFace: (faceId: string) => void;
+  /** The open inspector part; every mesh that maps to it glows with `accent`. */
+  selectedPart: PartId | null;
+  /** Called with the clicked mesh's part id (or its face id); `partForMesh` resolves it. */
+  onSelectPart: (meshPartId: string) => void;
+  /** The selection highlight color. */
+  accent: string;
   showWireframe: boolean;
   /** The scene's clear color; the stage passes its own so the canvas and the stage match. */
   background?: string;
 }
 
 const DEFAULT_BACKGROUND = '#0f141c';
+const EDGE_COLOR = '#452c16';
+const EDGES_NAME = 'panel-edges';
+
+type PanelEntry = {
+  wrapper: THREE.Group;
+  /** One mesh per panel; the 3D box has one per print piece group. */
+  meshes: THREE.Mesh[];
+  spec: Panel3DTransform;
+};
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
   model,
@@ -28,25 +45,22 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   assemblyProgress,
   selectedFaceId,
   onSelectFace,
+  selectedPart,
+  onSelectPart,
+  accent,
   showWireframe,
   background = DEFAULT_BACKGROUND,
 }) => {
+  // The click handler is bound once; read the latest callbacks through a ref.
+  const callbacksRef = useRef({ onSelectFace, onSelectPart });
+  callbacksRef.current = { onSelectFace, onSelectPart };
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const boxGroupRef = useRef<THREE.Group | null>(null);
-  const panelMeshesRef = useRef<
-    Map<
-      string,
-      {
-        wrapper: THREE.Group;
-        mesh: THREE.Mesh;
-        spec: Panel3DTransform;
-      }
-    >
-  >(new Map());
+  const panelMeshesRef = useRef<Map<string, PanelEntry>>(new Map());
 
   // 1. Initialize Three.js Scene once
   useEffect(() => {
@@ -127,7 +141,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
       const meshes: THREE.Object3D[] = [];
-      panelMeshesRef.current.forEach((v) => meshes.push(v.mesh));
+      panelMeshesRef.current.forEach((v) => meshes.push(...v.meshes));
       const hits = raycaster.intersectObjects(meshes, true);
       if (hits.length > 0) {
         let obj: THREE.Object3D | null = hits[0].object;
@@ -135,7 +149,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           obj = obj.parent;
         }
         if (obj?.userData?.faceId) {
-          onSelectFace(obj.userData.faceId);
+          const { faceId, partId } = obj.userData as { faceId: string; partId?: string };
+          callbacksRef.current.onSelectFace(faceId);
+          callbacksRef.current.onSelectPart(partId ?? faceId);
         }
       }
     };
@@ -194,17 +210,56 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     }
     panelMeshesRef.current.clear();
 
+    const isPrint = model.params.category === '3d-print';
+
     for (const spec of model.panels3D) {
       const wrapper = new THREE.Group();
-      let geometry: THREE.BufferGeometry;
-      let printParts: PrintPartId[] | undefined;
+      const faceArts = artworks.filter(
+        (a) => a.faceId === spec.faceId || a.faceId === spec.id
+      );
+      const makeMaterial = () =>
+        new THREE.MeshStandardMaterial({
+          color: spec.color,
+          roughness: isPrint ? 0.35 : 0.72,
+          metalness: isPrint ? 0.12 : 0.04,
+          wireframe: showWireframe,
+        });
 
-      if (model.params.category === '3d-print') {
-        // One mesh per part for now; the pieces are already placed in the world frame.
+      if (isPrint) {
+        // One mesh per print piece group (shell, lip, hinge, clasp), already placed in the
+        // world frame; the shared wrapper keeps them moving together.
         const pieces = buildPrintPartWorldGeometry(model, spec.id === '3d-lid' ? 'lid' : 'base');
-        geometry = mergeBufferGeometries(pieces.map((p) => p.geometry));
-        printParts = pieces.map((p) => p.partId);
-      } else if (spec.id === 'living-hinge-lid') {
+        const groups = new Map<PrintPartId, THREE.BufferGeometry[]>();
+        for (const p of pieces) {
+          const list = groups.get(p.partId) ?? [];
+          list.push(p.geometry);
+          groups.set(p.partId, list);
+        }
+        const meshes: THREE.Mesh[] = [];
+        groups.forEach((geoms, partId) => {
+          const geometry = mergeBufferGeometries(geoms);
+          const mesh = new THREE.Mesh(geometry, makeMaterial());
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          mesh.userData = { faceId: spec.faceId, panelId: spec.id, partId };
+          // Outlines show only while the piece is selected.
+          const edges = new THREE.LineSegments(
+            new THREE.EdgesGeometry(geometry, 30),
+            new THREE.LineBasicMaterial({ color: accent, transparent: true, opacity: 0.95 })
+          );
+          edges.name = EDGES_NAME;
+          edges.visible = false;
+          mesh.add(edges);
+          wrapper.add(mesh);
+          meshes.push(mesh);
+        });
+        boxGroup.add(wrapper);
+        panelMeshesRef.current.set(spec.id, { wrapper, meshes, spec });
+        continue;
+      }
+
+      let geometry: THREE.BufferGeometry;
+      if (spec.id === 'living-hinge-lid') {
         geometry = buildLivingHingeLidGeometry(model, spec);
       } else if (spec.outlinePoints && spec.outlinePoints.length >= 3) {
         const shape = new THREE.Shape(
@@ -234,40 +289,25 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         geometry = new THREE.BoxGeometry(spec.widthMm, spec.heightMm, spec.thicknessMm);
       }
 
-      const isSelected = spec.faceId === selectedFaceId || spec.id === selectedFaceId;
-      const faceArts = artworks.filter(
-        (a) => a.faceId === spec.faceId || a.faceId === spec.id
-      );
-
-      const baseMat = new THREE.MeshStandardMaterial({
-        color: spec.color,
-        roughness: model.params.category === '3d-print' ? 0.35 : 0.72,
-        metalness: model.params.category === '3d-print' ? 0.12 : 0.04,
-        wireframe: showWireframe,
-        emissive: isSelected ? new THREE.Color('#f59e0b') : new THREE.Color('#000000'),
-        emissiveIntensity: isSelected ? 0.14 : 0,
-      });
-
-      const mesh = new THREE.Mesh(geometry, baseMat);
+      const mesh = new THREE.Mesh(geometry, makeMaterial());
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.userData = { faceId: spec.faceId, panelId: spec.id };
-      if (printParts) mesh.userData.parts = printParts;
+      mesh.userData = {
+        faceId: spec.faceId,
+        panelId: spec.id,
+        partId: meshPartIdFor(spec, model.params),
+      };
 
       // Dark laser-charred edge highlight for wood & cardboard panels
-      if (model.params.category !== '3d-print') {
-        const edgesGeom = new THREE.EdgesGeometry(geometry, 20);
-        const edgeMat = new THREE.LineBasicMaterial({
-          color: isSelected ? '#f59e0b' : '#452c16',
-          transparent: true,
-          opacity: isSelected ? 0.95 : 0.65,
-        });
-        const edgeLines = new THREE.LineSegments(edgesGeom, edgeMat);
-        mesh.add(edgeLines);
-      }
+      const edgeLines = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry, 20),
+        new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.65 })
+      );
+      edgeLines.name = EDGES_NAME;
+      mesh.add(edgeLines);
 
       // Render user SVG / PNG Artwork decals directly onto the 3D panel face!
-      if (faceArts.length > 0 && model.params.category !== '3d-print') {
+      if (faceArts.length > 0) {
         const decalPlane = createFaceArtworkDecalMesh(spec, faceArts);
         if (decalPlane) {
           if (spec.id === 'living-hinge-lid') {
@@ -284,11 +324,40 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
       wrapper.add(mesh);
       boxGroup.add(wrapper);
-      panelMeshesRef.current.set(spec.id, { wrapper, mesh, spec });
+      panelMeshesRef.current.set(spec.id, { wrapper, meshes: [mesh], spec });
     }
 
     applyAssemblyTransform(panelMeshesRef.current, assemblyProgress, model.params.templateId);
-  }, [model, artworks, selectedFaceId, showWireframe]);
+  }, [model, artworks, showWireframe]);
+
+  // 2b. Highlight the selected part (or, for Artwork, the selected face) without rebuilding.
+  //     Runs after 2 so freshly built meshes pick up the current selection.
+  useEffect(() => {
+    const templateId = model.params.templateId;
+    panelMeshesRef.current.forEach(({ meshes, spec }) => {
+      for (const mesh of meshes) {
+        const { partId, faceId } = mesh.userData as { partId?: string; faceId: string };
+        const on =
+          selectedPart === 'artwork'
+            ? spec.faceId === selectedFaceId || spec.id === selectedFaceId
+            : selectedPart !== null && partForMesh(partId ?? faceId, templateId) === selectedPart;
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        mat.emissive.set(on ? accent : '#000000');
+        mat.emissiveIntensity = on ? 0.22 : 0;
+        const edges = mesh.getObjectByName(EDGES_NAME) as THREE.LineSegments | undefined;
+        if (edges) {
+          const edgeMat = edges.material as THREE.LineBasicMaterial;
+          if (model.params.category === '3d-print') {
+            edges.visible = on;
+            edgeMat.color.set(accent);
+          } else {
+            edgeMat.color.set(on ? accent : EDGE_COLOR);
+            edgeMat.opacity = on ? 0.95 : 0.65;
+          }
+        }
+      }
+    });
+  }, [model, artworks, showWireframe, selectedPart, selectedFaceId, accent]);
 
   // 3. Smoothly update panel positions/rotations when assemblyProgress slider moves
   useEffect(() => {
@@ -299,14 +368,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 };
 
 function applyAssemblyTransform(
-  map: Map<
-    string,
-    {
-      wrapper: THREE.Group;
-      mesh: THREE.Mesh;
-      spec: Panel3DTransform;
-    }
-  >,
+  map: Map<string, PanelEntry>,
   progress: number,
   templateId?: string
 ) {

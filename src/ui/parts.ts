@@ -168,7 +168,9 @@ const MESH_TO_PART: Record<string, PartId> = {
   tabs: 'flaps',
   closure: 'closure',
   shell: 'shell',
-  lip: 'shell'
+  lip: 'shell',
+  dividers: 'dividers',
+  'living-hinge': 'living-hinge'
 };
 
 /** Maps a clicked 3D mesh id to an inspector part, or `null` if the template has no such part. */
