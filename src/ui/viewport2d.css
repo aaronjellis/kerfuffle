@@ -193,25 +193,3 @@
 .viewport-2d-wrapper :focus-visible {
   outline-color: var(--stage-accent);
 }
-
-/* Phone: the HUD's buttons keep their size but take 44 px taps. The scroll row grows by the
-   same amount, inside a negative margin, so the taller hit areas aren't clipped by its overflow. */
-@media (max-width: 719px) {
-  .hud-scroll,
-  .hud-toggles {
-    margin-block: -8px;
-    padding-block: 8px;
-  }
-
-  .hud-toggle,
-  .hud-btn {
-    position: relative;
-  }
-
-  .hud-toggle::before,
-  .hud-btn::before {
-    content: '';
-    position: absolute;
-    inset: -9px 0;
-  }
-}

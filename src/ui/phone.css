@@ -1,0 +1,207 @@
+/* Phone (< 720 px) and touch-target rules. This file loads after app.css, controls.css and
+   viewport2d.css (see main.tsx), so a rule here wins over a base rule of the same specificity
+   without raising specificity. Keep every phone override here. */
+
+@media (max-width: 719px) {
+  /* The bar and the stage take the top 55%; the inspector is a sheet over the rest. */
+  .app-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: calc(55dvh - var(--bar-h) - env(safe-area-inset-top, 0px));
+  }
+
+  /* The bar: wordmark, categories, Export. Units move to the Size section. */
+  .app-bar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+    padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  }
+
+  .app-bar-units {
+    display: none;
+  }
+
+  .app-bar .segmented-toggle button,
+  .app-bar .btn-primary {
+    min-height: 44px;
+  }
+
+  /* The inspector becomes a bottom sheet that scrolls on its own; the head scrolls with it
+     and the parts chips stay pinned at its top. */
+  .inspector {
+    position: fixed;
+    z-index: 10;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: block;
+    max-height: 45dvh;
+    padding-right: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    border-radius: 12px 12px 0 0;
+    box-shadow: var(--shadow-float);
+  }
+
+  .inspector > .inspect-scroll {
+    height: auto;
+    overflow: visible;
+  }
+
+  .parts-row {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding-top: 0.25rem;
+    background: var(--surface);
+  }
+
+  /* A chip scrolls its section to just under the pinned chips. */
+  .inspect-fold {
+    scroll-margin-top: calc(44px + 1.25rem);
+  }
+
+  /* 44 px touch targets across the sheet: the control height lifts buttons, icon buttons,
+     switches, inputs, selects and the search; the rest are set here. */
+  .inspector {
+    --control-h: 44px;
+  }
+
+  .part-chip,
+  .chip,
+  .btn-sm,
+  .link-btn {
+    min-height: 44px;
+  }
+
+  /* A segment is 38 px inside its 3 px track; its hit area reaches the track's edges. */
+  .inspector .segmented-toggle button {
+    position: relative;
+  }
+
+  .inspector .segmented-toggle button::after {
+    content: '';
+    position: absolute;
+    inset: -3px 0;
+  }
+
+  .inspect-search-clear {
+    right: 0;
+    width: 44px;
+    height: 44px;
+  }
+
+  .anchor-grid-9 {
+    grid-template-columns: repeat(3, 44px);
+    grid-auto-rows: 44px;
+  }
+
+  .stage {
+    --pill-bottom: 0.75rem;
+    --pill-row: 50px; /* a 44 px segment in its 3 px track */
+    --pill-range-h: 44px; /* the fold range with its padded hit area */
+    --pill-h: calc(var(--pill-row) + var(--pill-range-h) + 2 * var(--pill-pad));
+  }
+
+  .stage-pill .segmented-toggle button,
+  .stage-icon-btn,
+  .stage-toggle {
+    min-height: 44px;
+  }
+
+  .stage-pill .segmented-toggle button {
+    min-width: 44px;
+  }
+
+  .stage-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* The pill: view, play and wireframe on the first row, the fold range across the second. */
+  .stage-pill {
+    display: grid;
+    grid-template-columns: repeat(4, auto);
+    grid-template-rows: var(--pill-row) var(--pill-range-h);
+    align-items: center;
+    row-gap: 0;
+    left: 0.75rem;
+    max-width: calc(100% - 1.5rem);
+    border-radius: var(--r-panel);
+  }
+
+  .stage-pill input.stage-range {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    width: auto;
+    margin: 0 0.75rem;
+  }
+
+  /* Sliders take 44 px taps: vertical padding around the native 16 px track and thumb. */
+  .inspector input[type='range'],
+  .stage-pill input.stage-range {
+    box-sizing: content-box;
+    height: 16px;
+    padding-block: 14px;
+  }
+
+  /* Clear of the feedback tab on the right edge (moved up 60 px by its data-offset). */
+  .stage-caption {
+    right: calc(0.75rem + 32px);
+  }
+}
+
+/* Narrow phone: the categories show icons only; their names stay as accessible names. */
+@media (max-width: 479px) {
+  .app-bar .seg-label {
+    display: none;
+  }
+
+  .app-bar .segmented-toggle button {
+    min-width: 44px;
+    padding: 0 0.75rem;
+  }
+
+  .app-bar .btn-caret {
+    display: none;
+  }
+
+  .app-bar .btn-primary {
+    padding: 0 0.75rem;
+  }
+}
+
+/* Smallest phones: the wordmark drops its icon and a size so the bar holds one row. */
+@media (max-width: 419px) {
+  .app-brand-icon {
+    display: none;
+  }
+
+  .app-wordmark {
+    font-size: var(--fs-h3);
+  }
+}
+
+/* The 2D HUD's buttons keep their size but take 44 px taps. The scroll row grows by the
+   same amount, inside a negative margin, so the taller hit areas aren't clipped by its overflow. */
+@media (max-width: 719px) {
+  .hud-scroll,
+  .hud-toggles {
+    margin-block: -8px;
+    padding-block: 8px;
+  }
+
+  .hud-toggle,
+  .hud-btn {
+    position: relative;
+  }
+
+  .hud-toggle::before,
+  .hud-btn::before {
+    content: '';
+    position: absolute;
+    inset: -9px 0;
+  }
+}
