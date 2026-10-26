@@ -163,8 +163,9 @@
   }
 }
 
-/* Narrow phone: the categories show icons only; their names stay as accessible names. */
-@media (max-width: 479px) {
+/* Narrow phone (the three labels need about 280 px, which a 480–560 px bar does not have):
+   the categories show icons only; their names stay as accessible names. */
+@media (max-width: 559px) {
   .app-bar .seg-label {
     display: none;
   }
