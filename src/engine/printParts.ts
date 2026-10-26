@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { BoxParameters } from './types';
-import { buildRoundedRectPoints } from './print3dEngine';
+import { buildRoundedRectPoints } from './roundedRect';
 
 /**
  * Dimensions of the 3D-printed box: two shells, a registration lip, a filament-pin knuckle
