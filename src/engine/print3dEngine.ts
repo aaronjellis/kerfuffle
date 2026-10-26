@@ -8,6 +8,7 @@ import {
   Point2D,
 } from './types';
 import { fmt, pointsToSvgPath } from './fingerJointEngine';
+import { computePrintBoxDims } from './printParts';
 
 export function buildRoundedRectPoints(
   w: number,
@@ -60,9 +61,7 @@ export function generate3DPrintBox(
   const floor = Math.max(1.2, params.floorThickness3dMm);
   const outerW = innerW + 2 * wall;
   const outerD = innerD + 2 * wall;
-  const lidH = Math.min(innerH - 8, Math.max(10, params.lidHeightMm));
-  const baseH = innerH - lidH + floor;
-  const lidTotalH = lidH + floor;
+  const { baseH, lidH: lidTotalH } = computePrintBoxDims(params, innerW, innerD, innerH);
 
   const rOut = Math.min(params.outerFilletMm, Math.min(outerW, outerD) * 0.25);
   const rIn = Math.min(params.innerFilletMm, Math.max(0.5, rOut - wall * 0.5));
@@ -214,8 +213,7 @@ export function export3DPrintBoxStl(params: BoxParameters): string {
 
   const outerW = innerW + 2 * T;
   const outerD = innerD + 2 * T;
-  const lidH = Math.min(innerH - 6, Math.max(8, params.lidHeightMm));
-  const baseH = innerH - lidH + floor;
+  const { baseH, lidH } = computePrintBoxDims(params, innerW, innerD, innerH);
 
   const group = new THREE.Group();
 
@@ -275,7 +273,7 @@ export function export3DPrintBoxStl(params: BoxParameters): string {
   };
 
   buildShellMesh(baseH, 0, false);
-  buildShellMesh(lidH + floor, outerW + 12, true);
+  buildShellMesh(lidH, outerW + 12, true);
 
   // Serialize all triangles in group to ASCII STL
   const lines: string[] = ['solid BoxerTool_3DPrint_Box'];

@@ -82,6 +82,8 @@ describe('Boxer Parametric Geometry & Export Engine', () => {
     expect(model.outerDims.heightMm).toBeCloseTo(
       model.innerDims.heightMm + 2 * DEFAULT_BOX_PARAMETERS.floorThickness3dMm
     );
+    const body = model.panels3D.reduce((sum, panel) => sum + panel.thicknessMm, 0);
+    expect(body).toBeCloseTo(model.outerDims.heightMm);
   });
 
   it('gives the finger organizer no top ply whatever the lid style', () => {
