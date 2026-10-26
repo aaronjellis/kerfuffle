@@ -226,7 +226,7 @@ body,
 /* STUDIO BODY */
 .studio-body {
   display: grid;
-  grid-template-columns: 310px 1fr 310px;
+  grid-template-columns: 360px 1fr;
   flex: 1;
   min-height: 0;
 }
