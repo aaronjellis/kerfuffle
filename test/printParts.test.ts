@@ -41,7 +41,13 @@ describe('print box dims', () => {
     expect(small.outerW).toBeCloseTo(19.8);
     expect(small.clasp!.width).toBeLessThanOrEqual(19.8 - 12 + 1e-9);
     expect(small.clasp!.width).toBeCloseTo(7.8);
-    const none = computePrintBoxDims({ ...p, outerFilletMm: 6 }, 15, 15, 30);
+    // The bound uses the real corner radius rOut (clamped to a quarter of the footprint): a 6 mm
+    // fillet on a 19.8 mm box is only 4.95, leaving 19.8 - 2 * (4.95 + 2) = 5.9 for the clasp.
+    const round = computePrintBoxDims({ ...p, outerFilletMm: 6 }, 15, 15, 30);
+    expect(round.rOut).toBeCloseTo(4.95);
+    expect(round.clasp!.width).toBeCloseTo(5.9);
+    // 14.8 mm wide: rOut 3.7 leaves 3.4, under the 4 mm minimum.
+    const none = computePrintBoxDims({ ...p, outerFilletMm: 6 }, 10, 10, 30);
     expect(none.clasp).toBeNull();
   });
   it('nulls features that are switched off', () => {
@@ -103,7 +109,7 @@ describe('print box dims', () => {
     expect(tooShort.clasp).toBeNull();
     expect(tooShort.dropped).toEqual(['clasp-height']);
     // A narrow, round box has no flat front wide enough.
-    expect(computePrintBoxDims({ ...p, outerFilletMm: 6 }, 15, 15, 30).dropped).toContain('clasp-width');
+    expect(computePrintBoxDims({ ...p, outerFilletMm: 6 }, 10, 10, 30).dropped).toContain('clasp-width');
     // wall 8 -> R 9: no lid height keeps both parts 2R + 1.3 tall.
     const thick = computePrintBoxDims({ ...p, wallThickness3dMm: 8 }, 30, 30, 20);
     expect(thick.hinge).toBeNull();
@@ -545,13 +551,15 @@ describe('snap clasp pieces', () => {
 
   it('keeps the clasp between the corner fillets on a small, round box', () => {
     // 30 mm tall: at 20 mm the base is only 10 mm, under the clasp's 10.5 mm height rule.
+    // The 8 mm fillet clamps to rOut = 24.8 / 4 = 6.2; the clasp keeps 2 mm clear of that.
     const t = computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 30);
     expect(t.clasp).not.toBeNull();
-    expect(t.clasp!.width).toBeLessThanOrEqual(t.outerW - 2 * (8 + 2) + 1e-9);
+    expect(t.rOut).toBeCloseTo(6.2);
+    expect(t.clasp!.width).toBeLessThanOrEqual(t.outerW - 2 * (t.rOut + 2) + 1e-9);
     for (const part of ['base', 'lid'] as const) {
       const u = unionBox(buildClaspPieces(t, part));
-      expect(u.min.x).toBeGreaterThanOrEqual(8 - 1e-4);
-      expect(u.max.x).toBeLessThanOrEqual(t.outerW - 8 + 1e-4);
+      expect(u.min.x).toBeGreaterThanOrEqual(t.rOut - 1e-4);
+      expect(u.max.x).toBeLessThanOrEqual(t.outerW - t.rOut + 1e-4);
     }
     // At 20 mm the lid yields 0.5 mm so the base reaches the clasp's 10.5 mm.
     const short = computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 20);

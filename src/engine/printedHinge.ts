@@ -22,7 +22,10 @@ export interface PrintedHingeSpec {
 
 const PLATE_T = 1.6;
 const PLATE_DEPTH = 10;
-/** Gap between the axis-side plate edge and the plane through the axis (y = 0). */
+/**
+ * Gap between the plate's knuckle-side edge and y = 0, the plane tangent to the knuckle's back
+ * (the axis is at y = -2.5).
+ */
 const RELIEF = 0.3;
 const HOLE_D = 3.2;
 /**

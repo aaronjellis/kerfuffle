@@ -95,6 +95,9 @@ export function computePrintBoxDims(
   const hole = params.hingePinDiameterMm + PIN_CLEARANCE;
   const R = Math.max(MIN_HINGE_R, hole / 2 + wall);
 
+  const rOut = Math.min(params.outerFilletMm, Math.min(outerW, outerD) * 0.25);
+  const rIn = Math.min(params.innerFilletMm, Math.max(0.5, rOut - wall * 0.5));
+
   const dropped: PrintDroppedFeature[] = [];
   // One lid-height clamp for the whole 3D box. The base interior never drops below 5 mm.
   let lidInner = Math.min(innerH - 8, Math.max(10, params.lidHeightMm));
@@ -118,14 +121,15 @@ export function computePrintBoxDims(
     }
   }
 
-  // The clasp sits on the flat front face, so it stays clear of the corner fillets. Below 4 mm
+  // The clasp sits on the flat front face, so it stays clear of the corner fillets (the real,
+  // clamped radius rOut) with 2 mm to spare on each side, measured to the clasp's own width. Below 4 mm
   // wide it is dropped, the same as when the toggle is off. The lid's tongue reaches hang + 2 below
   // the seam, so the base must be at least that plus 0.5 mm tall or the tongue would pass the bed:
   // cap a tall lid the way the hinge does (not under its 10 mm minimum, nor under the hinge's
   // minimum). If that cannot be done, the clasp is dropped and the lid stays as it was.
   const claspWidth = Math.max(
     0,
-    Math.min(Math.min(18, Math.max(10, outerW * 0.25)), outerW - 2 * (params.outerFilletMm + 2))
+    Math.min(Math.min(18, Math.max(10, outerW * 0.25)), outerW - 2 * (rOut + 2))
   );
   let claspFits = params.includeSnapClasp;
   if (claspFits && claspWidth < 4) {
@@ -144,9 +148,6 @@ export function computePrintBoxDims(
 
   const baseH = Math.max(innerH - lidInner + floor, floor + MIN_BASE_INNER_H);
   const lidH = lidInner + floor;
-
-  const rOut = Math.min(params.outerFilletMm, Math.min(outerW, outerD) * 0.25);
-  const rIn = Math.min(params.innerFilletMm, Math.max(0.5, rOut - wall * 0.5));
 
   let hinge: PrintBoxDims['hinge'] = null;
   if (hingeFits) {
@@ -415,6 +416,15 @@ function extrudeAlongX(shape: THREE.Shape, x0: number, x1: number): THREE.Buffer
  * its front-back axis into the world, which mirrors its x; its knuckles are built at the mirrored
  * range [outerW - x1, outerW - x0] so they land on [x0, x1] once assembled.
  */
+/**
+ * A lid-owned knuckle's x-range in the lid's print frame. Segment ranges are in WORLD x; the lid is
+ * turned pi about its front-back axis into the world, which mirrors x, so it prints at
+ * [outerW - x1, outerW - x0]. Shared by the lid's geometry and its blueprint.
+ */
+export function lidPrintRange(seg: { x0: number; x1: number }, outerW: number): [number, number] {
+  return [outerW - seg.x1, outerW - seg.x0];
+}
+
 export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): PrintPiece[] {
   const { hinge, outerW, outerD } = dims;
   if (!hinge) return [];
@@ -426,7 +436,7 @@ export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
 
   for (const seg of hinge.segments) {
     if (seg.owner !== part) continue;
-    const [x0, x1] = part === 'base' ? [seg.x0, seg.x1] : [outerW - seg.x1, outerW - seg.x0];
+    const [x0, x1] = part === 'base' ? [seg.x0, seg.x1] : lidPrintRange(seg, outerW);
 
     const ring = new THREE.Shape(circlePoints(axisY, rim, R, KNUCKLE_SEGMENTS));
     ring.holes.push(new THREE.Path(circlePoints(axisY, rim, hole / 2, KNUCKLE_SEGMENTS).reverse()));
@@ -451,9 +461,9 @@ export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
 
 /** How far the boss reaches down the lid's front face from the rim, print z. */
 const BOSS_H = 4;
-/** Thumb lip: the tongue's last THUMB_LEN mm flare THUMB_FLARE mm away from the box. */
+/** Thumb lip: the tongue's last THUMB_LEN mm flare CLASP_THUMB_FLARE mm away from the box. */
 const THUMB_LEN = CLASP_TIP;
-const THUMB_FLARE = 1;
+export const CLASP_THUMB_FLARE = 1;
 
 /** A Y-Z polygon (shape x -> world y, shape y -> world z) extruded across x0..x1. */
 function yzPrism(pts: [number, number][], x0: number, x1: number): PrintPiece {
@@ -555,7 +565,7 @@ export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
       [
         [outY + OVERLAP, tipZ - THUMB_LEN],
         [outY + OVERLAP, tipZ],
-        [outY - THUMB_FLARE, tipZ],
+        [outY - CLASP_THUMB_FLARE, tipZ],
         [outY, tipZ - THUMB_LEN],
       ],
       x0,

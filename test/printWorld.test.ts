@@ -202,7 +202,7 @@ describe('3D print panels and blueprint', () => {
     // Knuckles stand 0.3 off the back edge (y outerD + 0.3 .. outerD + 0.3 + 2R in the print frame,
     // shifted by the plan's front depth); the pin line sits on the axis.
     const nums = (d: string) => d.match(/-?\d+(\.\d+)?/g)!.map(Number);
-    for (const [panel, oy] of [[base, 0.8], [lid, 2.6]] as const) {
+    for (const [panel, oy] of [[base, 0.8], [lid, 3.6]] as const) {
       for (const q of panel.paths.filter((x) => x.id.startsWith('3d-hinge-knuckle-'))) {
         const ys = nums(q.d).filter((_, i) => i % 2 === 1);
         expect(Math.min(...ys) - oy).toBeCloseTo(dims.outerD + 0.3, 2);
@@ -212,6 +212,19 @@ describe('3D print panels and blueprint', () => {
     const pinY = nums(base.paths.find((q) => q.id === '3d-hinge-pin')!.d)[1];
     expect(pinY - 0.8).toBeCloseTo(dims.hinge!.axisY, 2);
     expect(base.heightMm).toBeGreaterThanOrEqual(dims.outerD + 2 * R + 0.8 - 1e-6);
-    expect(lid.heightMm).toBeGreaterThanOrEqual(dims.outerD + 2 * R + 2.6 - 1e-6);
+    // The lid's front footprint reaches the thumb lip: standoff 1 + tongue 1.6 + flare 1 = 3.6.
+    expect(lid.heightMm).toBeCloseTo(3.6 + dims.outerD + 0.3 + 2 * R, 6);
+    expect(base.heightMm).toBeCloseTo(0.8 + dims.outerD + 0.3 + 2 * R, 6);
+    const boss = lid.paths.find((q) => q.id === '3d-clasp-boss')!;
+    const bossYs = nums(boss.d).filter((_, i) => i % 2 === 1);
+    expect(Math.min(...bossYs)).toBeCloseTo(0, 3);
+    expect(Math.max(...bossYs)).toBeCloseTo(3.6, 3);
+    // Lid knuckles are drawn at the lid's mirrored print range.
+    segs.forEach((seg, i) => {
+      if (seg.owner !== 'lid') return;
+      const xs = nums(lid.paths.find((q) => q.id === `3d-hinge-knuckle-${i}`)!.d).filter((_, j) => j % 2 === 0);
+      expect(Math.min(...xs)).toBeCloseTo(dims.outerW - seg.x1, 2);
+      expect(Math.max(...xs)).toBeCloseTo(dims.outerW - seg.x0, 2);
+    });
   });
 });

@@ -7,7 +7,7 @@ import {
   Point2D,
 } from './types';
 import { fmt, pointsToSvgPath } from './fingerJointEngine';
-import { computePrintBoxDims } from './printParts';
+import { CLASP_THUMB_FLARE, computePrintBoxDims, lidPrintRange } from './printParts';
 import { buildRoundedRectPoints } from './roundedRect';
 
 export function generate3DPrintBox(
@@ -36,7 +36,12 @@ export function generate3DPrintBox(
     `M ${fmt(x0)} ${fmt(y0)} L ${fmt(x1)} ${fmt(y0)} L ${fmt(x1)} ${fmt(y1)} L ${fmt(x0)} ${fmt(y1)} Z`;
 
   const buildPlan = (part: 'base' | 'lid'): { paths: DielinePath[]; oy: number; heightMm: number } => {
-    const frontDepth = clasp ? (part === 'base' ? clasp.hookProud : clasp.standoff + clasp.tongueT) : 0;
+    // Base: the catch ridge. Lid: boss, tongue and the thumb lip that flares past the tongue.
+    const frontDepth = clasp
+      ? part === 'base'
+        ? clasp.hookProud
+        : clasp.standoff + clasp.tongueT + CLASP_THUMB_FLARE
+      : 0;
     const oy = frontDepth;
     const shift = (pts: Point2D[]) => pts.map((p) => ({ x: p.x, y: p.y + oy }));
     const outerPts = shift(buildRoundedRectPoints(outerW, outerD, rOut, 8));
@@ -51,7 +56,7 @@ export function generate3DPrintBox(
     if (hinge) {
       hinge.segments.forEach((seg, i) => {
         if (seg.owner !== part) return;
-        const [x0, x1] = part === 'base' ? [seg.x0, seg.x1] : [outerW - seg.x1, outerW - seg.x0];
+        const [x0, x1] = part === 'base' ? [seg.x0, seg.x1] : lidPrintRange(seg, outerW);
         paths.push({
           id: `3d-hinge-knuckle-${i}`,
           layer: 'cut',
