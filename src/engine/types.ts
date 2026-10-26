@@ -20,11 +20,7 @@ export type DisplayUnit = 'mm' | 'in';
 export type SvgUnitMode = 'mm' | 'in' | '96dpi' | '72dpi';
 export type SvgGroupingMode = 'by-layer' | 'by-piece' | 'flat-2-objects';
 export type ScoreLineMode = 'solid-score' | 'dashed-perf';
-export type CardboardLockStyle =
-  | 'front-slot-tabs'
-  | 'cherry-ears'
-  | 'center-tongue'
-  | 'friction-tuck';
+export type CardboardLockStyle = 'tuck' | 'front-lock';
 export type ExportProfileId = 'xtool-studio' | 'lightburn' | 'illustrator' | 'glowforge';
 export type DimensionReference = 'inner' | 'outer';
 export type FaceLabelPosition = 'center' | 'bottom' | 'top-left';
@@ -100,6 +96,7 @@ export interface BoxParameters {
   tuckFlapMm: number;
   glueFlapMm: number;
   thumbNotch: boolean;
+  includeLidFlaps: boolean;
   cardboardLockStyle: CardboardLockStyle;
   lockTabWidthMm: number;
   lockTabDepthMm: number;

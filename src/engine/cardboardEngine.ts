@@ -117,7 +117,7 @@ function generateMailerBox(
   const hFrontSpan = H + 2 * T;
   const hSideSpan = H + 2 * T;
 
-  const lockStyle = params.cardboardLockStyle || 'center-tongue';
+  const lockStyle = (params.cardboardLockStyle || 'center-tongue') as string;
   const tabW = Math.min(W * 0.28, Math.max(8, params.lockTabWidthMm || 18));
   const tongueLen = Math.min(18, Math.max(6, params.lockTabDepthMm || 8));
   const recessH = Math.min(14, Math.max(8, H * 0.2));

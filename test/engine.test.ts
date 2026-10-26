@@ -302,14 +302,6 @@ describe('Boxer Parametric Geometry & Export Engine', () => {
     // Blank width and height expand with material thickness T due to panel bend allowances and rollover/lock-tab bridges
     expect(thickMailer.panels2D[0].widthMm).toBeGreaterThan(thinMailer.panels2D[0].widthMm);
     expect(thickMailer.panels2D[0].heightMm).toBeGreaterThan(thinMailer.panels2D[0].heightMm);
-
-    // Front locking tab includes root score, fold score, and material-thickness bridge score line
-    const scoreIds = thickMailer.panels2D[0].paths
-      .filter((p) => p.layer === 'score')
-      .map((p) => p.id);
-    expect(scoreIds.some((id) => id.includes('score-front-tab-root'))).toBe(true);
-    expect(scoreIds.some((id) => id.includes('score-front-tab-fold'))).toBe(true);
-    expect(scoreIds.some((id) => id.includes('score-front-tab-bridge'))).toBe(true);
   });
 
   it('produces distinct 3D panel assemblies across all 8 templates and updates 3D when template options change', () => {

@@ -1112,22 +1112,12 @@ export const App: React.FC = () => {
                           )
                         }
                       >
-                        <option value="center-tongue">
-                          Center Fold-In Front Cutout Tab + D-Cutout
-                        </option>
-                        <option value="front-slot-tabs">
-                          Dual Fold-In Front Cutout Tabs + D-Cutouts
-                        </option>
-                        <option value="cherry-ears">
-                          Cherry-Lock Side Ears (Rollover Catch)
-                        </option>
-                        <option value="friction-tuck">
-                          Inner Tuck Flap Only (No Joint Cutouts)
-                        </option>
+                        <option value="tuck">Tuck top</option>
+                        <option value="front-lock">Front lock tabs</option>
                       </select>
                     </label>
 
-                    {params.cardboardLockStyle !== 'friction-tuck' && (
+                    {params.cardboardLockStyle === 'front-lock' && (
                       <div className="two-col-inputs">
                         <label className="field-block">
                           <span>Lock Tab Width ({uLabel})</span>
@@ -1148,7 +1138,7 @@ export const App: React.FC = () => {
                           <NumberField
                             valueMm={params.lockTabDepthMm}
                             minMm={5}
-                            maxMm={25}
+                            maxMm={45}
                             step={isInch ? 0.05 : 1}
                             displayUnit={displayUnit}
                             inDecimals={2}
@@ -1159,6 +1149,17 @@ export const App: React.FC = () => {
                         </label>
                       </div>
                     )}
+
+                    <div className="checkbox-row" style={{ marginTop: 2 }}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={params.includeLidFlaps}
+                          onChange={(e) => updateParam('includeLidFlaps', e.target.checked)}
+                        />
+                        Lid side flaps
+                      </label>
+                    </div>
                   </>
                 )}
 
