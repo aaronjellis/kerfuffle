@@ -287,12 +287,14 @@ function generateTuckCarton(
   const cSide = T < 1.0 ? '#d8ceb4' : '#bf9466';
   const cFlap = T < 1.0 ? '#eee7d3' : '#dbb386';
   const cTuck = T < 1.0 ? '#cfc3a6' : '#b5895a';
+  // Same width the sheet cuts for the tuck flap: the wall span less a tuckInset on each side.
+  const tuckW = wSpan - 2 * tuckInset;
   const rTuckCorner = Math.min(8, tuckH * 0.45);
   const roundedTuckOutline: Point2D[] = [
     { x: 0, y: 0 },
-    { x: W + T, y: 0 },
-    { x: W + T, y: tuckH - rTuckCorner },
-    { x: W + T - rTuckCorner, y: tuckH },
+    { x: tuckW, y: 0 },
+    { x: tuckW, y: tuckH - rTuckCorner },
+    { x: tuckW - rTuckCorner, y: tuckH },
     { x: rTuckCorner, y: tuckH },
     { x: 0, y: tuckH - rTuckCorner },
   ];
@@ -465,7 +467,7 @@ function generateTuckCarton(
       id: 'top-tuck',
       name: 'Top Tuck Flap',
       faceId: 'top',
-      widthMm: W,
+      widthMm: tuckW,
       heightMm: tuckH,
       thicknessMm: T,
       color: cTuck,
@@ -550,7 +552,7 @@ function generateTuckCarton(
             id: 'bot-tuck',
             name: 'Bottom Tuck Flap (Reverse Tuck)',
             faceId: 'bottom',
-            widthMm: W,
+            widthMm: tuckW,
             heightMm: tuckH,
             thicknessMm: T,
             color: cTuck,
@@ -593,7 +595,7 @@ function generateTuckCarton(
             id: 'bot-tuck',
             name: 'Bottom Tuck Flap (Straight Tuck)',
             faceId: 'bottom',
-            widthMm: W,
+            widthMm: tuckW,
             heightMm: tuckH,
             thicknessMm: T,
             color: cTuck,

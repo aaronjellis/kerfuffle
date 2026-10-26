@@ -361,18 +361,19 @@ describe('other cardboard templates', () => {
   } as const;
   for (const templateId of ['cardboard-tuck-carton', 'cardboard-telescope'] as const) {
     for (const T of [1.5, 3]) {
-      it(`${templateId} clears the typed inner size within T/2 at T=${T}`, () => {
+      it(`${templateId} clears the typed inner size exactly at T=${T}`, () => {
         const m = generateBoxModel({ ...base, ...inner, templateId, materialThicknessMm: T, dimensionReference: 'inner' });
         const at = (id: string) => m.panels3D.find((p) => p.id === id)!.closedPos;
         const ids = wallIds[templateId];
         const clearW = at(ids.right)[0] - at(ids.left)[0] - T;
         const clearD = at(ids.front)[2] - at(ids.back)[2] - T;
-        expect(Math.abs(clearW - inner.widthMm)).toBeLessThanOrEqual(T / 2 + 1e-6);
-        expect(Math.abs(clearD - inner.depthMm)).toBeLessThanOrEqual(T / 2 + 1e-6);
+        expect(Math.abs(clearW - inner.widthMm)).toBeLessThanOrEqual(1e-6);
+        expect(Math.abs(clearD - inner.depthMm)).toBeLessThanOrEqual(1e-6);
       });
       it(`${templateId} sheet uses single-ply wall spans at T=${T}`, () => {
         const p = { ...base, ...inner, templateId, materialThicknessMm: T, dimensionReference: 'inner' as const };
-        const sheet = generateBoxModel(p).panels2D[0];
+        const m = generateBoxModel(p);
+        const sheet = m.panels2D[0];
         const { widthMm: W, depthMm: D, heightMm: H } = inner;
         if (templateId === 'cardboard-tuck-carton') {
           // The carton exposes only inner-size sub-faces, so assert on the blank: glue flap + 2 W spans + 2 D spans.
@@ -380,13 +381,35 @@ describe('other cardboard templates', () => {
           expect(sheet.widthMm).toBeCloseTo(glueW + 2 * (W + T) + 2 * (D + T), 2);
           const tuckH = Math.max(12, p.tuckFlapMm);
           expect(sheet.heightMm).toBeCloseTo(2 * tuckH + 2 * (D + T) + (H + 2 * T), 2);
+          // The rig's tuck flaps are as wide as the cut: the wall span less a tuckInset each side.
+          const tuckW = W + T - 2 * Math.max(0.8, T);
+          for (const id of ['top-tuck', 'bot-tuck']) {
+            const tuck = m.panels3D.find((q) => q.id === id)!;
+            expect(tuck.widthMm).toBeCloseTo(tuckW, 6);
+            const xs = tuck.outlinePoints!.map((q) => q.x);
+            expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(tuckW, 6);
+          }
         } else {
           // Base tray blank: floor span + two wall spans (H + T) on each axis.
-          const base = generateBoxModel(p).panels2D.find((q) => q.id === 'bottom')!;
-          expect(base.widthMm - 2 * (H + T)).toBeCloseTo(W + T, 2);
-          expect(base.heightMm - 2 * (H + T)).toBeCloseTo(D + T, 2);
+          const tray = m.panels2D.find((q) => q.id === 'bottom')!;
+          expect(tray.widthMm - 2 * (H + T)).toBeCloseTo(W + T, 2);
+          expect(tray.heightMm - 2 * (H + T)).toBeCloseTo(D + T, 2);
         }
       });
     }
+  }
+  for (const T of [1.5, 3]) {
+    it(`telescope lid clears the base by the typed clearance on each side at T=${T}`, () => {
+      const p = { ...base, ...inner, templateId: 'cardboard-telescope' as const, materialThicknessMm: T, dimensionReference: 'inner' as const };
+      const m = generateBoxModel(p);
+      const at = (id: string) => m.panels3D.find((q) => q.id === id)!.closedPos;
+      // Lid clear inner span minus the base's outer span is the clearance on both sides.
+      const lidInnerW = at('lid-right')[0] - at('lid-left')[0] - T;
+      const baseOuterW = at('base-right')[0] - at('base-left')[0] + T;
+      const lidInnerD = at('lid-front')[2] - at('lid-back')[2] - T;
+      const baseOuterD = at('base-front')[2] - at('base-back')[2] + T;
+      expect(Math.abs(lidInnerW - baseOuterW - 2 * p.telescopeClearanceMm)).toBeLessThanOrEqual(1e-6);
+      expect(Math.abs(lidInnerD - baseOuterD - 2 * p.telescopeClearanceMm)).toBeLessThanOrEqual(1e-6);
+    });
   }
 });
