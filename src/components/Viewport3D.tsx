@@ -182,6 +182,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      boxGroup.children.forEach(disposeObject);
       renderer.dispose();
     };
   }, []);
@@ -203,10 +204,11 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       grid.position.y = -model.outerDims.heightMm / 2 - 4;
     }
 
-    // Clear previous meshes
+    // Clear the previous wrappers, freeing their GPU geometry, materials and decal textures.
     while (boxGroup.children.length > 0) {
       const child = boxGroup.children[0];
       boxGroup.remove(child);
+      disposeObject(child);
     }
     panelMeshesRef.current.clear();
 
@@ -366,6 +368,21 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
   return <div ref={containerRef} className="viewport-3d-canvas" />;
 };
+
+/** Frees the GPU resources under an object: geometries, materials and their texture maps. */
+function disposeObject(root: THREE.Object3D) {
+  root.traverse((obj) => {
+    const drawable = obj as THREE.Mesh | THREE.LineSegments;
+    if (!(drawable instanceof THREE.Mesh || drawable instanceof THREE.LineSegments)) return;
+    drawable.geometry.dispose();
+    const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material];
+    for (const mat of materials) {
+      const map = (mat as THREE.MeshBasicMaterial).map;
+      if (map) map.dispose();
+      mat.dispose();
+    }
+  });
+}
 
 function applyAssemblyTransform(
   map: Map<string, PanelEntry>,
