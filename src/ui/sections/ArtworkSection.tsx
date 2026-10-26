@@ -118,6 +118,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
               key={sample.id}
               type="button"
               className="chip"
+              data-ph-capture-attribute-sample={sample.id}
               onClick={() => addSampleArtwork(sample)}
             >
               {sample.name}
@@ -139,8 +140,10 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 <button
                   key={item.id}
                   type="button"
-                  className="chip layer-chip"
+                  // The chip shows the user's own text or file name: PostHog skips it.
+                  className="chip layer-chip ph-no-capture"
                   aria-pressed={selectedArtwork?.id === item.id}
+                  data-ph-no-capture
                   onClick={() => setSelectedArtworkId(item.id)}
                 >
                   {item.textConfig ? (
@@ -164,8 +167,8 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 type="button"
                 className="icon-btn"
                 onClick={() => duplicateArtwork(selectedArtwork)}
-                aria-label="Duplicate"
-                title="Duplicate"
+                aria-label="Duplicate this item"
+                title="Duplicate this item"
               >
                 <Copy size={18} strokeWidth={1.75} aria-hidden="true" />
               </button>
@@ -173,8 +176,8 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 type="button"
                 className="icon-btn icon-btn-danger"
                 onClick={() => removeArtwork(selectedArtwork.id)}
-                aria-label="Remove"
-                title="Remove"
+                aria-label="Remove this item"
+                title="Remove this item"
               >
                 <Trash2 size={18} strokeWidth={1.75} aria-hidden="true" />
               </button>

@@ -2,6 +2,7 @@ import React, { useId } from 'react';
 import { ChevronDown, Download, FileCode, FileText, Image, Link, Printer, Scissors, type LucideIcon } from 'lucide-react';
 import type { BoxParameters, ExportProfileId } from '../engine/types';
 import { EXPORT_PROFILES } from '../engine/presets';
+import { captureExport } from './analytics';
 import { Popover, usePopover } from './Popover';
 
 export interface ExportHandlers {
@@ -111,11 +112,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
       console.error(`Export ${f.format} failed`, err);
       return;
     }
-    window.posthog?.capture('export_downloaded', {
-      format: f.format,
-      template: params.templateId,
-      project: 'kerfuffle',
-    });
+    captureExport(f.format, params.templateId);
     close();
   };
 

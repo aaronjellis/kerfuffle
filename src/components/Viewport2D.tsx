@@ -340,6 +340,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
             <g
               key={panel.id}
               transform={`translate(${fmt(panel.sheetX)}, ${fmt(panel.sheetY)})`}
+              data-ph-capture-attribute-face={panel.id.replace(/^base-/, '')}
               onClick={(e) => {
                 e.stopPropagation();
                 if (!panel.subFaces || panel.subFaces.length === 0) {
@@ -370,6 +371,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                 return (
                   <g
                     key={sf.id}
+                    data-ph-capture-attribute-face={sf.id}
                     onClick={(e) => {
                       e.stopPropagation();
                       onSelectFace(sf.id);
@@ -477,6 +479,8 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
               key={artwork.id}
               transform={rot}
               style={{ cursor: 'grab' }}
+              data-ph-capture-attribute-face={artwork.faceId}
+              data-ph-capture-attribute-artwork={artwork.textConfig ? 'text' : 'image'}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 onSelectFace(artwork.faceId);

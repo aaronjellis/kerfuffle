@@ -35,6 +35,7 @@ import {
 } from './engine/googleFonts';
 import { partForMesh, partsForTemplate, reconcileSelection, type PartId } from './ui/parts';
 import type { SectionHandlers } from './ui/sections';
+import { ANALYTICS_PROJECT } from './ui/analytics';
 import { AppBar } from './ui/AppBar';
 import { Inspector } from './ui/Inspector';
 import { Stage, type ViewMode } from './ui/Stage';
@@ -120,7 +121,7 @@ export const App: React.FC = () => {
     if (!part) return;
     handleSelectPart(part);
     if (part === 'artwork') setSelectedFaceId(meshPartId);
-    window.posthog?.capture('part_selected', { part, template: params.templateId, project: 'kerfuffle' });
+    window.posthog?.capture('part_selected', { part, template: params.templateId, project: ANALYTICS_PROJECT });
   };
 
   // Switch category & pick first template in that category
@@ -166,6 +167,7 @@ export const App: React.FC = () => {
           prev.category !== meta.category ? undefined : prev.materialPresetId,
       })
     );
+    window.posthog?.capture('template_changed', { template: templateId, project: ANALYTICS_PROJECT });
   };
 
   // Auto-play fold / assemble animation loop

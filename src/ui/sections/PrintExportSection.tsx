@@ -1,16 +1,33 @@
 import React from 'react';
 import { Printer } from 'lucide-react';
+import { captureExport } from '../analytics';
 import type { SectionProps } from './types';
 
 /** 3D box: one STL with both parts, or one file per part. */
-export const PrintExportSection: React.FC<SectionProps> = ({ handlers }) => (
+export const PrintExportSection: React.FC<SectionProps> = ({ params, handlers }) => (
   <>
     <div className="two-col-inputs">
-      <button type="button" className="btn" onClick={handlers.downloadStl}>
+      <button
+        type="button"
+        className="btn"
+        data-ph-capture-attribute-format="stl"
+        onClick={() => {
+          handlers.downloadStl();
+          captureExport('stl', params.templateId);
+        }}
+      >
         <Printer size={18} strokeWidth={1.75} aria-hidden="true" />
         One STL
       </button>
-      <button type="button" className="btn" onClick={handlers.downloadStlParts}>
+      <button
+        type="button"
+        className="btn"
+        data-ph-capture-attribute-format="stl-two-files"
+        onClick={() => {
+          handlers.downloadStlParts();
+          captureExport('stl-two-files', params.templateId);
+        }}
+      >
         <Printer size={18} strokeWidth={1.75} aria-hidden="true" />
         Two STLs
       </button>
