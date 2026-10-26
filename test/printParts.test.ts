@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import * as THREE from 'three';
-import { buildShellPieces, computePrintBoxDims, type PrintPiece } from '../src/engine/printParts';
+import { buildHingePieces, buildShellPieces, computePrintBoxDims, type PrintPiece } from '../src/engine/printParts';
 const p = { ...DEFAULT_BOX_PARAMETERS, category: '3d-print' as const, templateId: '3d-snap-box' as const };
 describe('print box dims', () => {
   it('derives shells, lip, hinge and clasp from the spec values', () => {
@@ -174,5 +174,118 @@ describe('shell and lip pieces', () => {
         expect(pos.count).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('knuckle hinge pieces', () => {
+  const d = computePrintBoxDims(p, 110, 80, 55);
+  const h = d.hinge!;
+  const rimOf = (part: 'base' | 'lid') => (part === 'base' ? d.baseH : d.lidH);
+  /** Annuli rise above the rim; prisms stop at it. */
+  const isAnnulus = (piece: PrintPiece, rim: number) => bbox(piece.geometry).max.z > rim + 0.1;
+  /** X ranges of a part's knuckles in world x (the lid's are un-mirrored). */
+  function worldRanges(dims: typeof d, part: 'base' | 'lid'): [number, number][] {
+    const rim = part === 'base' ? dims.baseH : dims.lidH;
+    return buildHingePieces(dims, part)
+      .filter((x) => isAnnulus(x, rim))
+      .map((x) => {
+        const b = bbox(x.geometry);
+        return part === 'base' ? [b.min.x, b.max.x] : [dims.outerW - b.max.x, dims.outerW - b.min.x];
+      });
+  }
+
+  it('builds base knuckles behind the back face, filled down to the wall at 45 degrees', () => {
+    const pieces = buildHingePieces(d, 'base');
+    expect(pieces.length).toBeGreaterThan(0);
+    expect(pieces.every((x) => x.partId === 'hinge')).toBe(true);
+    const rim = d.baseH;
+    const b = unionBox(pieces);
+    expect(b.min.y).toBeCloseTo(d.outerD, 5);
+    expect(b.max.y).toBeCloseTo(d.outerD + 2 * h.R, 5);
+    expect(b.max.z).toBeCloseTo(rim + h.R, 5);
+    expect(b.min.z).toBeCloseTo(rim - 2 * h.R, 5);
+  });
+
+  it('pairs each annulus with a prism over the same X range', () => {
+    for (const part of ['base', 'lid'] as const) {
+      const pieces = buildHingePieces(d, part);
+      const owned = h.segments.filter((s) => s.owner === part).length;
+      expect(pieces).toHaveLength(2 * owned);
+      const annuli = pieces.filter((x) => isAnnulus(x, rimOf(part)));
+      const prisms = pieces.filter((x) => !isAnnulus(x, rimOf(part)));
+      expect(annuli).toHaveLength(owned);
+      const key = (x: PrintPiece) => bbox(x.geometry).min.x.toFixed(4) + ':' + bbox(x.geometry).max.x.toFixed(4);
+      expect(prisms.map(key).sort()).toEqual(annuli.map(key).sort());
+    }
+  });
+
+  it('interleaves base and lid knuckles in world x with 0.3 gaps, covering the segment list', () => {
+    const all = [...worldRanges(d, 'base'), ...worldRanges(d, 'lid')].sort((a, b) => a[0] - b[0]);
+    expect(all).toHaveLength(h.segments.length);
+    all.forEach(([a, b], i) => {
+      expect(a).toBeCloseTo(h.segments[i].x0, 5);
+      expect(b).toBeCloseTo(h.segments[i].x1, 5);
+      if (i > 0) expect(a - all[i - 1][1]).toBeCloseTo(0.3, 5);
+    });
+    const base = worldRanges(d, 'base');
+    const lid = worldRanges(d, 'lid');
+    for (const [a0, a1] of base) for (const [b0, b1] of lid) expect(a1 <= b0 || b1 <= a0).toBe(true);
+  });
+
+  it('leaves a pin hole through every annulus', () => {
+    for (const part of ['base', 'lid'] as const) {
+      const rim = rimOf(part);
+      for (const piece of buildHingePieces(d, part).filter((x) => isAnnulus(x, rim))) {
+        const pos = piece.geometry.getAttribute('position');
+        let minR = Infinity;
+        for (let i = 0; i < pos.count; i++) {
+          minR = Math.min(minR, Math.hypot(pos.getY(i) - h.axisY, pos.getZ(i) - rim));
+        }
+        expect(minR).toBeGreaterThan(h.hole / 2 - 0.01);
+      }
+    }
+  });
+
+  it('emits non-indexed triangle geometry', () => {
+    for (const part of ['base', 'lid'] as const) {
+      for (const piece of buildHingePieces(d, part)) {
+        expect(piece.geometry.index).toBeNull();
+        expect(piece.geometry.getAttribute('position').count % 3).toBe(0);
+      }
+    }
+  });
+
+  it('gives a tiny box one knuckle each, the lid mirrored in its print frame', () => {
+    const t = computePrintBoxDims(p, 30, 30, 20);
+    expect(buildHingePieces(t, 'base')).toHaveLength(2);
+    expect(buildHingePieces(t, 'lid')).toHaveLength(2);
+    const [s0, s1] = t.hinge!.segments;
+    const [base] = worldRanges(t, 'base');
+    const [lid] = worldRanges(t, 'lid');
+    expect(base[0]).toBeCloseTo(s0.x0, 5);
+    expect(base[1]).toBeCloseTo(s0.x1, 5);
+    expect(lid[0]).toBeCloseTo(s1.x0, 5);
+    expect(lid[1]).toBeCloseTo(s1.x1, 5);
+  });
+
+  it('keeps faces pointing outward after the axis swap (positive signed volume)', () => {
+    for (const part of ['base', 'lid'] as const) {
+      for (const piece of buildHingePieces(d, part)) {
+        const pos = piece.geometry.getAttribute('position');
+        const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+        let vol = 0;
+        for (let i = 0; i < pos.count; i += 3) {
+          a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2);
+          vol += a.dot(b.clone().cross(c)) / 6;
+        }
+        expect(vol).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('returns no pieces when the hinge is off', () => {
+    const off = computePrintBoxDims({ ...p, include3dHinge: false }, 60, 60, 40);
+    expect(buildHingePieces(off, 'base')).toEqual([]);
+    expect(buildHingePieces(off, 'lid')).toEqual([]);
   });
 });

@@ -267,3 +267,63 @@ export function buildShellPieces(
 
   return pieces;
 }
+
+const KNUCKLE_SEGMENTS = 24;
+
+/** `n` points on a circle of radius `r` centred at (cx, cy), counter-clockwise. */
+function circlePoints(cx: number, cy: number, r: number, n: number): THREE.Vector2[] {
+  return Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2;
+    return new THREE.Vector2(cx + r * Math.cos(a), cy + r * Math.sin(a));
+  });
+}
+
+/**
+ * Extrudes a shape drawn in the Y-Z plane (shape x -> world y, shape y -> world z) along +X from
+ * x0 to x1. ExtrudeGeometry extrudes along local Z; the cyclic axis swap (x, y, z) -> (z, x, y) is a
+ * proper rotation (det +1, so winding is preserved) that sends local Z to world +X.
+ */
+function extrudeAlongX(shape: THREE.Shape, x0: number, x1: number): THREE.BufferGeometry {
+  const g = new THREE.ExtrudeGeometry(shape, { depth: x1 - x0, bevelEnabled: false });
+  g.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1));
+  g.translate(x0, 0, 0);
+  return nonIndexed(g);
+}
+
+/**
+ * The knuckles one part owns, in that part's print frame (open side up). Each knuckle is an
+ * annulus (outer R, inner hole/2) around the hinge axis (y = axisY, z = rim), plus a fill prism
+ * whose Y-Z cross-section is the triangle (outerD, rim - 2R) -> (outerD, rim) -> (outerD + 2R, rim).
+ * The prism runs from the back wall out under the cylinder at 45 degrees, so nothing overhangs
+ * more than 45 degrees and the knuckle prints without supports.
+ *
+ * `segments[].owner` and the segment x-ranges are in WORLD x. The base prints in world
+ * orientation, so it uses [x0, x1] as given. The lid prints open side up and is rotated pi about
+ * its front-back axis into the world, which mirrors its x; its knuckles are built at the mirrored
+ * range [outerW - x1, outerW - x0] so they land on [x0, x1] once assembled.
+ */
+export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): PrintPiece[] {
+  const { hinge, outerW, outerD } = dims;
+  if (!hinge) return [];
+  const { R, hole, axisY } = hinge;
+  const rim = part === 'base' ? dims.baseH : dims.lidH;
+  const pieces: PrintPiece[] = [];
+
+  for (const seg of hinge.segments) {
+    if (seg.owner !== part) continue;
+    const [x0, x1] = part === 'base' ? [seg.x0, seg.x1] : [outerW - seg.x1, outerW - seg.x0];
+
+    const ring = new THREE.Shape(circlePoints(axisY, rim, R, KNUCKLE_SEGMENTS));
+    ring.holes.push(new THREE.Path(circlePoints(axisY, rim, hole / 2, KNUCKLE_SEGMENTS).reverse()));
+    pieces.push({ partId: 'hinge', geometry: extrudeAlongX(ring, x0, x1) });
+
+    const fill = new THREE.Shape([
+      new THREE.Vector2(outerD, rim - 2 * R),
+      new THREE.Vector2(outerD + 2 * R, rim),
+      new THREE.Vector2(outerD, rim),
+    ]);
+    pieces.push({ partId: 'hinge', geometry: extrudeAlongX(fill, x0, x1) });
+  }
+
+  return pieces;
+}
