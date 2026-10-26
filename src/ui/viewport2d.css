@@ -77,27 +77,30 @@
   grid-column: 2;
 }
 
-/* Narrow stage: one row. Legend and toggles scroll sideways with a fade at each end; zoom
-   stays put at the right. */
+/* Narrow stage: one row that scrolls sideways with a fade at each end, zoom first so it shows
+   without scrolling. */
 @container (width < 560px) {
   .viewport-2d-hud {
+    right: 0;
     left: 0;
-    gap: 0.25rem;
+    display: block;
   }
 
   .hud-scroll {
     display: flex;
-    grid-row: 1;
-    grid-column: 1;
     gap: 0.375rem;
     min-width: 0;
-    padding-inline: 0.75rem 1rem;
+    padding-inline: 0.75rem;
     overflow-x: auto;
     scrollbar-width: none;
     overscroll-behavior-x: contain;
     pointer-events: auto;
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 0.75rem, #000 calc(100% - 1rem), transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, #000 0.75rem, #000 calc(100% - 1rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 0.75rem, #000 calc(100% - 1.25rem), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 0.75rem, #000 calc(100% - 1.25rem), transparent 100%);
+  }
+
+  .hud-zoom {
+    order: -1;
   }
 
   .hud-legend,
@@ -189,4 +192,26 @@
 
 .viewport-2d-wrapper :focus-visible {
   outline-color: var(--stage-accent);
+}
+
+/* Phone: the HUD's buttons keep their size but take 44 px taps. The scroll row grows by the
+   same amount, inside a negative margin, so the taller hit areas aren't clipped by its overflow. */
+@media (max-width: 719px) {
+  .hud-scroll,
+  .hud-toggles {
+    margin-block: -8px;
+    padding-block: 8px;
+  }
+
+  .hud-toggle,
+  .hud-btn {
+    position: relative;
+  }
+
+  .hud-toggle::before,
+  .hud-btn::before {
+    content: '';
+    position: absolute;
+    inset: -9px 0;
+  }
 }

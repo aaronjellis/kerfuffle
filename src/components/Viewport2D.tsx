@@ -9,6 +9,17 @@ import { effectiveLayer, resolveSheetArtworks } from '../engine/exporters';
 import { fmt } from '../engine/fingerJointEngine';
 import { STAGE_ACCENT_HEX } from '../ui/stageColors';
 
+/** "Front Face" reads as "Front face": accessible names in sentence case. */
+const sentenceCase = (name: string) => name.charAt(0) + name.slice(1).toLowerCase();
+
+/** Enter and Space on an SVG button do what a click does. */
+const onActivate = (run: () => void) => (e: React.KeyboardEvent) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    run();
+  }
+};
+
 /** A selected panel's wash: the stage accent at low opacity. */
 const STAGE_ACCENT_FILL = `${STAGE_ACCENT_HEX}24`;
 
@@ -46,6 +57,14 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
   // Fold lines follow the same rule as the exports: dashed perforations are cuts.
   const foldLayer = effectiveLayer({ id: 'fold', layer: 'score', d: '', closed: false, isFoldScore: true }, params);
   const foldColor = foldLayer === 'cut' ? profile.cutColor : profile.scoreColor;
+  const faceName = (faceId: string): string => {
+    for (const p of panels2D) {
+      if (p.id === faceId || p.id === `base-${faceId}`) return sentenceCase(p.name);
+      const sf = p.subFaces?.find((f) => f.id === faceId);
+      if (sf) return sentenceCase(sf.name);
+    }
+    return faceId;
+  };
   const bed =
     MACHINE_BED_PRESETS.find((b) => b.id === params.bedPresetId) || MACHINE_BED_PRESETS[0];
 
@@ -144,8 +163,41 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
   return (
     <div className="viewport-2d-wrapper" onWheel={handleWheel}>
       <div className="viewport-2d-hud">
-        {/* The legend and layer toggles: two rows on a wide stage, one scrolling row on a narrow one. */}
+        {/* Zoom, legend and layer toggles: two rows on a wide stage, one scrolling row on a narrow one. */}
         <div className="hud-scroll">
+          <div className="hud-zoom" role="group" aria-label="Zoom">
+            <button
+              type="button"
+              className="hud-btn"
+              onClick={() => setZoom((z) => Math.max(0.35, Number((z * 0.8).toFixed(2))))}
+              aria-label="Zoom out"
+              title="Zoom out"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="hud-btn hud-btn-reset"
+              onClick={() => {
+                setZoom(1);
+                setPan({ x: 0, y: 0 });
+              }}
+              aria-label={`Reset view (${Math.round(zoom * 100)}%)`}
+              title="Reset view"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              className="hud-btn"
+              onClick={() => setZoom((z) => Math.min(6, Number((z * 1.25).toFixed(2))))}
+              aria-label="Zoom in"
+              title="Zoom in"
+            >
+              +
+            </button>
+          </div>
+
           <div className="hud-legend">
             <span className="hud-chip" title={`Cut lines, ${profile.cutColor}`}>
               <span className="dot" style={{ backgroundColor: profile.cutColor }} />
@@ -209,39 +261,6 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
               </button>
             </div>
           )}
-        </div>
-
-        <div className="hud-zoom" role="group" aria-label="Zoom">
-          <button
-            type="button"
-            className="hud-btn"
-            onClick={() => setZoom((z) => Math.max(0.35, Number((z * 0.8).toFixed(2))))}
-            aria-label="Zoom out"
-            title="Zoom out"
-          >
-            −
-          </button>
-          <button
-            type="button"
-            className="hud-btn hud-btn-reset"
-            onClick={() => {
-              setZoom(1);
-              setPan({ x: 0, y: 0 });
-            }}
-            aria-label={`Reset view (${Math.round(zoom * 100)}%)`}
-            title="Reset view"
-          >
-            {Math.round(zoom * 100)}%
-          </button>
-          <button
-            type="button"
-            className="hud-btn"
-            onClick={() => setZoom((z) => Math.min(6, Number((z * 1.25).toFixed(2))))}
-            aria-label="Zoom in"
-            title="Zoom in"
-          >
-            +
-          </button>
         </div>
       </div>
 
@@ -336,6 +355,9 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
         {panels2D.map((panel) => {
           const isPanelSelected =
             panel.id === selectedFaceId || panel.id === `base-${selectedFaceId}`;
+          // A panel split into sub-faces selects through them; the panel itself isn't a target.
+          const panelSelectable = !panel.subFaces || panel.subFaces.length === 0;
+          const selectPanel = () => onSelectFace(panel.id.replace(/^base-/, ''));
           return (
             <g
               key={panel.id}
@@ -343,9 +365,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
               data-ph-capture-attribute-face={panel.id.replace(/^base-/, '')}
               onClick={(e) => {
                 e.stopPropagation();
-                if (!panel.subFaces || panel.subFaces.length === 0) {
-                  onSelectFace(panel.id.replace(/^base-/, ''));
-                }
+                if (panelSelectable) selectPanel();
               }}
               style={{ cursor: 'pointer' }}
             >
@@ -355,6 +375,13 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                 y={panel.safeRect.y}
                 width={panel.safeRect.width}
                 height={panel.safeRect.height}
+                {...(panelSelectable && {
+                  role: 'button',
+                  tabIndex: 0,
+                  'aria-label': sentenceCase(panel.name),
+                  'aria-pressed': isPanelSelected,
+                  onKeyDown: onActivate(selectPanel),
+                })}
                 fill={
                   isPanelSelected
                     ? STAGE_ACCENT_FILL
@@ -382,6 +409,11 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
                       y={sf.y}
                       width={sf.width}
                       height={sf.height}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={sentenceCase(sf.name)}
+                      aria-pressed={subSelected}
+                      onKeyDown={onActivate(() => onSelectFace(sf.id))}
                       fill={
                         subSelected
                           ? STAGE_ACCENT_FILL
@@ -495,6 +527,13 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
               }}
             >
               <image
+                role="button"
+                tabIndex={0}
+                aria-label={`Artwork on the ${faceName(artwork.faceId).toLowerCase()}`}
+                onKeyDown={onActivate(() => {
+                  onSelectFace(artwork.faceId);
+                  onSelectArtwork(artwork.id);
+                })}
                 href={artwork.dataUrl}
                 x={x}
                 y={y}

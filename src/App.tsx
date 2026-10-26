@@ -142,6 +142,10 @@ export const App: React.FC = () => {
         materialPresetId: undefined,
       })
     );
+    // A category switch picks that category's first template, which is a template change.
+    if (firstTemplate !== params.templateId) {
+      window.posthog?.capture('template_changed', { template: firstTemplate, project: ANALYTICS_PROJECT });
+    }
   };
 
   const handleSelectTemplate = (templateId: BoxTemplateId) => {
@@ -167,7 +171,9 @@ export const App: React.FC = () => {
           prev.category !== meta.category ? undefined : prev.materialPresetId,
       })
     );
-    window.posthog?.capture('template_changed', { template: templateId, project: ANALYTICS_PROJECT });
+    if (templateId !== params.templateId) {
+      window.posthog?.capture('template_changed', { template: templateId, project: ANALYTICS_PROJECT });
+    }
   };
 
   // Auto-play fold / assemble animation loop

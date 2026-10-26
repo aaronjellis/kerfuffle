@@ -8,3 +8,18 @@ export const ANALYTICS_PROJECT = 'kerfuffle';
 export function captureExport(format: string, template: string): void {
   window.posthog?.capture('export_downloaded', { format, template, project: ANALYTICS_PROJECT });
 }
+
+/**
+ * Runs one export and records it only if it succeeded. A failure is logged, not thrown, so a
+ * click handler never surfaces it as an uncaught error. Resolves to whether it succeeded.
+ */
+export async function runExport(format: string, template: string, run: () => unknown): Promise<boolean> {
+  try {
+    await run();
+  } catch (err) {
+    console.error(`Export ${format} failed`, err);
+    return false;
+  }
+  captureExport(format, template);
+  return true;
+}

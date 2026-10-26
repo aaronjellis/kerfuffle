@@ -2,7 +2,7 @@ import React, { useId } from 'react';
 import { ChevronDown, Download, FileCode, FileText, Image, Link, Printer, Scissors, type LucideIcon } from 'lucide-react';
 import type { BoxParameters, ExportProfileId } from '../engine/types';
 import { EXPORT_PROFILES } from '../engine/presets';
-import { captureExport } from './analytics';
+import { runExport } from './analytics';
 import { Popover, usePopover } from './Popover';
 
 export interface ExportHandlers {
@@ -106,14 +106,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
   // The PDF builds asynchronously: the popover stays open, its button disabled, until it lands.
   // The event fires only for a download that succeeded.
   const download = async (f: Format) => {
-    try {
-      await f.run();
-    } catch (err) {
-      console.error(`Export ${f.format} failed`, err);
-      return;
-    }
-    captureExport(f.format, params.templateId);
-    close();
+    if (await runExport(f.format, params.templateId, f.run)) close();
   };
 
   const profile = EXPORT_PROFILES[params.exportProfile];

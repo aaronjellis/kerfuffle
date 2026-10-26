@@ -7,6 +7,7 @@ import { Viewport2D } from '../components/Viewport2D';
 import { Segmented } from './Field';
 import type { PartId } from './parts';
 import { STAGE_ACCENT_HEX, STAGE_HEX } from './stageColors';
+import { PHONE_QUERY, useMediaQuery } from './useMediaQuery';
 
 export type ViewMode = 'split' | '3d' | '2d';
 
@@ -42,7 +43,7 @@ export const Stage: React.FC<StageProps> = ({
   params,
   artworks,
   displayUnit,
-  viewMode,
+  viewMode: storedViewMode,
   onViewMode,
   assemblyProgress,
   onScrub,
@@ -59,6 +60,9 @@ export const Stage: React.FC<StageProps> = ({
   onUpdateArtwork,
   onToggleParam,
 }) => {
+  // A phone's stage is too short to split: Split shows as 3D there, without changing the choice.
+  const isPhone = useMediaQuery(PHONE_QUERY);
+  const viewMode: ViewMode = isPhone && storedViewMode === 'split' ? '3d' : storedViewMode;
   const bed = MACHINE_BED_PRESETS.find((b) => b.id === params.bedPresetId) ?? MACHINE_BED_PRESETS[0];
   // "xTool M2 / M1 (385 × 300 mm)" reads as "xTool M2".
   const bedName = bed.name.replace(/\s*\(.*\)$/, '').replace(/\s*\/.*$/, '');
@@ -117,7 +121,7 @@ export const Stage: React.FC<StageProps> = ({
           options={[
             { value: '3d', label: '3D' },
             { value: '2d', label: '2D' },
-            { value: 'split', label: 'Split' },
+            ...(isPhone ? [] : [{ value: 'split' as const, label: 'Split' }]),
           ]}
         />
         <span className="stage-pill-sep" aria-hidden="true" />

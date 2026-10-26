@@ -42,9 +42,11 @@ h4 {
 
 /* ---------- frame ---------- */
 
+/* With viewport-fit=cover the page runs under a notch and the home indicator; the env()
+   insets keep the bar, the stage controls, and the inspector's content clear of them. */
 .app {
   display: grid;
-  grid-template-rows: var(--bar-h) 1fr;
+  grid-template-rows: calc(var(--bar-h) + env(safe-area-inset-top, 0px)) 1fr;
   height: 100dvh;
   background: var(--bg);
   color: var(--ink);
@@ -57,7 +59,8 @@ h4 {
   align-items: center;
   gap: 0.75rem;
   min-width: 0;
-  padding: 0 1rem;
+  padding: env(safe-area-inset-top, 0px) max(1rem, env(safe-area-inset-right, 0px)) 0
+    max(1rem, env(safe-area-inset-left, 0px));
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
@@ -66,6 +69,9 @@ h4 {
   display: grid;
   grid-template-columns: 1fr var(--inspector-w);
   min-height: 0;
+  /* The stage starts right of a left notch; the strip under it matches the stage. */
+  padding-left: env(safe-area-inset-left, 0px);
+  background: var(--stage);
 }
 
 @media (max-width: 899px) {
@@ -78,7 +84,7 @@ h4 {
 @media (max-width: 719px) {
   .app-body {
     grid-template-columns: 1fr;
-    grid-template-rows: calc(55dvh - var(--bar-h));
+    grid-template-rows: calc(55dvh - var(--bar-h) - env(safe-area-inset-top, 0px));
   }
 }
 
@@ -92,6 +98,8 @@ h4 {
 .inspector {
   min-width: 0;
   min-height: 0;
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--surface);
   border-left: 1px solid var(--line);
   overflow: hidden;
@@ -342,10 +350,21 @@ h4 {
   border-bottom: 0;
 }
 
+/* The pill's size, shared with the caption that sits just above it. One row of 36 px controls
+   on a wide screen; the phone block below redefines these for two rows. */
+.stage {
+  --pill-pad: 4px;
+  --pill-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  --pill-row: var(--control-h);
+  --pill-h: calc(var(--pill-row) + 2 * var(--pill-pad));
+}
+
 .stage-pill {
   left: 1rem;
-  bottom: 1rem;
+  bottom: var(--pill-bottom);
+  height: var(--pill-h);
   max-width: calc(100% - 2rem);
+  padding: var(--pill-pad);
   color: var(--ink);
 }
 
@@ -457,7 +476,7 @@ h4 {
    right, and wraps to two lines. It stays clear of the 2D view's HUD along the top. */
 @media (max-width: 1099px) {
   .stage-caption {
-    bottom: calc(1rem + 44px + 0.5rem);
+    bottom: calc(var(--pill-bottom) + var(--pill-h) + 0.5rem);
     flex-wrap: wrap;
     justify-content: flex-end;
     column-gap: 0.5rem;
@@ -823,7 +842,8 @@ h4 {
   .app-bar {
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 0.5rem;
-    padding: 0 0.75rem;
+    padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+    padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
   }
 
   .app-bar-units {
@@ -845,7 +865,7 @@ h4 {
     left: 0;
     display: block;
     max-height: 45dvh;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-right: 0;
     overflow: auto;
     overscroll-behavior: contain;
     border-top: 1px solid var(--line);
@@ -872,10 +892,46 @@ h4 {
     scroll-margin-top: calc(44px + 1.25rem);
   }
 
-  /* 44 px touch targets. */
+  /* 44 px touch targets across the sheet: the control height lifts buttons, icon buttons,
+     switches, inputs, selects and the search; the rest are set here. */
+  .inspector {
+    --control-h: 44px;
+  }
+
   .part-chip,
-  .chip {
+  .chip,
+  .btn-sm,
+  .link-btn {
     min-height: 44px;
+  }
+
+  /* A segment is 38 px inside its 3 px track; its hit area reaches the track's edges. */
+  .inspector .segmented-toggle button {
+    position: relative;
+  }
+
+  .inspector .segmented-toggle button::after {
+    content: '';
+    position: absolute;
+    inset: -3px 0;
+  }
+
+  .inspect-search-clear {
+    right: 0;
+    width: 44px;
+    height: 44px;
+  }
+
+  .anchor-grid-9 {
+    grid-template-columns: repeat(3, 44px);
+    grid-auto-rows: 44px;
+  }
+
+  .stage {
+    --pill-bottom: 0.75rem;
+    --pill-row: 50px; /* a 44 px segment in its 3 px track */
+    --pill-range-h: 32px;
+    --pill-h: calc(var(--pill-row) + var(--pill-range-h) + 2 * var(--pill-pad));
   }
 
   .stage-pill .segmented-toggle button,
@@ -897,9 +953,10 @@ h4 {
   .stage-pill {
     display: grid;
     grid-template-columns: repeat(4, auto);
+    grid-template-rows: var(--pill-row) var(--pill-range-h);
+    align-items: center;
     row-gap: 0;
     left: 0.75rem;
-    bottom: 0.75rem;
     max-width: calc(100% - 1.5rem);
     border-radius: var(--r-panel);
   }
@@ -908,14 +965,13 @@ h4 {
     grid-row: 2;
     grid-column: 1 / -1;
     width: auto;
-    min-height: 32px;
+    height: var(--pill-range-h);
     margin: 0 0.75rem;
   }
 
-  /* The caption sits above the two-row pill. */
+  /* Clear of the feedback tab on the right edge (moved up 60 px by its data-offset). */
   .stage-caption {
-    right: 0.75rem;
-    bottom: calc(0.75rem + 8px + 50px + 32px + 0.5rem);
+    right: calc(0.75rem + 32px);
   }
 }
 

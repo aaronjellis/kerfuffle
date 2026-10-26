@@ -5,7 +5,7 @@ import type { BoxParameters } from '../../engine/types';
 import { Field, Switch } from '../Field';
 import { computePrintBoxDims } from '../../engine/printParts';
 import { withPrintedPinClamp } from '../paramRules';
-import { captureExport } from '../analytics';
+import { runExport } from '../analytics';
 import { DROPPED_NOTES, unitHelpers } from './shared';
 import type { SectionProps } from './types';
 
@@ -110,10 +110,7 @@ export const HingeSection: React.FC<SectionProps> = ({ params, updateParam, disp
             type="button"
             className="btn"
             data-ph-capture-attribute-format="hinge-stl"
-            onClick={() => {
-              handlers.exportHingeStl();
-              captureExport('hinge-stl', params.templateId);
-            }}
+            onClick={() => void runExport('hinge-stl', params.templateId, handlers.exportHingeStl)}
           >
             <Printer size={18} strokeWidth={1.75} aria-hidden="true" />
             Export hinge STL
