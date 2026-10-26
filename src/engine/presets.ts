@@ -147,16 +147,33 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
 ];
 
 /**
- * Laser settings for the preset matching the box's category and material
- * thickness (within 0.01 mm), else the first preset of that category.
+ * The material preset a box uses. The chosen preset (`materialPresetId`) wins and is exact;
+ * else a preset of the box's category within 0.01 mm of its thickness (exact); else the
+ * nearest thicker preset in the category, else the category's thickest (both not exact);
+ * else the first preset.
  */
-export function laserSettingsFor(params: BoxParameters): MaterialPreset['laser'] {
+export function materialPresetFor(params: BoxParameters): { preset: MaterialPreset; exact: boolean } {
+  const chosen = params.materialPresetId
+    ? MATERIAL_PRESETS.find((m) => m.id === params.materialPresetId)
+    : undefined;
+  if (chosen) return { preset: chosen, exact: true };
+
+  const t = params.materialThicknessMm;
   const inCategory = MATERIAL_PRESETS.filter((m) => m.category === params.category);
-  const match =
-    inCategory.find((m) => Math.abs(m.thicknessMm - params.materialThicknessMm) <= 0.01) ??
-    inCategory[0] ??
-    MATERIAL_PRESETS[0];
-  return match.laser;
+  const match = inCategory.find((m) => Math.abs(m.thicknessMm - t) <= 0.01);
+  if (match) return { preset: match, exact: true };
+
+  const byThickness = [...inCategory].sort((a, b) => a.thicknessMm - b.thicknessMm);
+  const thicker = byThickness.find((m) => m.thicknessMm >= t);
+  if (thicker) return { preset: thicker, exact: false };
+  const thickest = byThickness[byThickness.length - 1];
+  if (thickest) return { preset: thickest, exact: false };
+  return { preset: MATERIAL_PRESETS[0], exact: false };
+}
+
+/** Laser settings for the box's material preset (see `materialPresetFor`). */
+export function laserSettingsFor(params: BoxParameters): MaterialPreset['laser'] {
+  return materialPresetFor(params).preset.laser;
 }
 
 export interface TemplateMetadata {

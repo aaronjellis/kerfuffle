@@ -41,7 +41,7 @@ import {
   EXPORT_PROFILES,
   MACHINE_BED_PRESETS,
   MATERIAL_PRESETS,
-  laserSettingsFor,
+  materialPresetFor,
 } from './engine/presets';
 import { generateBoxModel } from './engine/boxGenerator';
 import { exportPrintedHingeStl } from './engine/printedHinge';
@@ -150,6 +150,8 @@ export const App: React.FC = () => {
         ? matchingMaterial.thicknessMm
         : prev.materialThicknessMm,
       kerfMm: matchingMaterial ? matchingMaterial.kerfMm : prev.kerfMm,
+      // A preset picked for another category no longer applies.
+      materialPresetId: undefined,
     }));
   };
 
@@ -171,6 +173,8 @@ export const App: React.FC = () => {
         prev.category !== meta.category && matchingMaterial
           ? matchingMaterial.kerfMm
           : prev.kerfMm,
+      materialPresetId:
+        prev.category !== meta.category ? undefined : prev.materialPresetId,
     }));
     setShowCatalogModal(false);
   };
@@ -873,12 +877,16 @@ export const App: React.FC = () => {
                 <label className="field-block">
                   <span>Material Preset</span>
                   <select
-                    value=""
+                    value={params.materialPresetId ?? ''}
                     onChange={(e) => {
                       const mat = MATERIAL_PRESETS.find((m) => m.id === e.target.value);
                       if (mat) {
-                        updateParam('materialThicknessMm', mat.thicknessMm);
-                        updateParam('kerfMm', mat.kerfMm);
+                        setParams((prev) => ({
+                          ...prev,
+                          materialPresetId: mat.id,
+                          materialThicknessMm: mat.thicknessMm,
+                          kerfMm: mat.kerfMm,
+                        }));
                       }
                     }}
                   >
@@ -896,16 +904,13 @@ export const App: React.FC = () => {
                 </label>
 
                 {(() => {
-                  const preset = MATERIAL_PRESETS.find(
-                    (m) =>
-                      m.category === params.category &&
-                      Math.abs(m.thicknessMm - params.materialThicknessMm) <= 0.01
-                  );
-                  const laser = laserSettingsFor(params);
+                  const { preset, exact } = materialPresetFor(params);
+                  const laser = preset.laser;
                   return (
                     <>
-                      {preset && <p className="helper-note">{preset.scoreNote}</p>}
+                      {exact && <p className="helper-note">{preset.scoreNote}</p>}
                       <p className="helper-note">
+                        {!exact && `No preset for this thickness; using ${preset.name}: `}
                         Cut {laser.cutPower}% at {laser.cutSpeed} mm/s, {laser.cutPasses}{' '}
                         {laser.cutPasses === 1 ? 'pass' : 'passes'} · Score {laser.scorePower}% at{' '}
                         {laser.scoreSpeed} mm/s
@@ -926,7 +931,13 @@ export const App: React.FC = () => {
                       inDecimals={3}
                       mmDecimals={2}
                       ariaLabel="Material Thickness"
-                      onChangeMm={(mm) => updateParam('materialThicknessMm', mm)}
+                      onChangeMm={(mm) =>
+                        setParams((prev) => ({
+                          ...prev,
+                          materialThicknessMm: mm,
+                          materialPresetId: undefined,
+                        }))
+                      }
                     />
                   </label>
                   <label className="field-block">

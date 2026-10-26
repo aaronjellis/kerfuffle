@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_BOX_PARAMETERS, EXPORT_PROFILES, MATERIAL_PRESETS, laserSettingsFor } from '../src/engine/presets';
+import {
+  DEFAULT_BOX_PARAMETERS,
+  EXPORT_PROFILES,
+  MATERIAL_PRESETS,
+  laserSettingsFor,
+  materialPresetFor,
+} from '../src/engine/presets';
 import { generateBoxModel } from '../src/engine/boxGenerator';
 import { XCS_DEVICE_M2, buildXcsDisplays, buildXcsProject, uuidV4 } from '../src/engine/xcsExporter';
 import { effectiveLayer, exportBoxDxf, exportBoxSvg, exportXcsProject } from '../src/engine/exporters';
@@ -15,14 +21,13 @@ describe('laserSettingsFor', () => {
     expect(laser).toEqual({ cutPower: 90, cutSpeed: 10, cutPasses: 1, scorePower: 18, scoreSpeed: 100 });
   });
 
-  it('falls back to the first preset of the category for an unknown thickness', () => {
+  it('falls back to the nearest thicker preset of the category for an unknown thickness', () => {
     const laser = laserSettingsFor({
       ...DEFAULT_BOX_PARAMETERS,
       category: 'cardboard-fold',
       materialThicknessMm: 2.2,
     });
-    const first = MATERIAL_PRESETS.find((m) => m.category === 'cardboard-fold')!;
-    expect(laser).toEqual(first.laser);
+    expect(laser).toEqual(MATERIAL_PRESETS.find((m) => m.id === 'cardboard-bflute')!.laser);
   });
 
   it('matches within 0.01 mm', () => {
@@ -32,6 +37,44 @@ describe('laserSettingsFor', () => {
       materialThicknessMm: 6.005,
     });
     expect(laser.cutPasses).toBe(2);
+  });
+
+  it('uses MDF settings when MDF is the chosen preset', () => {
+    const params = { ...DEFAULT_BOX_PARAMETERS, materialPresetId: 'mdf-3mm', materialThicknessMm: 3.0 };
+    const mdf = MATERIAL_PRESETS.find((m) => m.id === 'mdf-3mm')!;
+    const basswood = MATERIAL_PRESETS.find((m) => m.id === 'basswood-3mm')!;
+    expect(mdf.laser).not.toEqual(basswood.laser);
+    expect(laserSettingsFor(params)).toEqual(mdf.laser);
+    expect(materialPresetFor(params)).toEqual({ preset: mdf, exact: true });
+    // Without a chosen preset, the same thickness resolves to the first match.
+    expect(laserSettingsFor({ ...params, materialPresetId: undefined })).toEqual(basswood.laser);
+  });
+
+  it('ignores an unknown preset id', () => {
+    const params = { ...DEFAULT_BOX_PARAMETERS, materialPresetId: 'gone', materialThicknessMm: 1.6 };
+    expect(materialPresetFor(params)).toEqual({
+      preset: MATERIAL_PRESETS.find((m) => m.id === 'basswood-1.6mm')!,
+      exact: true,
+    });
+  });
+
+  it('uses the nearest thicker preset for 5 mm wood, not the first wood preset', () => {
+    const result = materialPresetFor({ ...DEFAULT_BOX_PARAMETERS, category: 'wood-finger', materialThicknessMm: 5 });
+    expect(result.preset.id).toBe('plywood-6mm');
+    expect(result.exact).toBe(false);
+    expect(laserSettingsFor({ ...DEFAULT_BOX_PARAMETERS, materialThicknessMm: 5 })).toEqual(result.preset.laser);
+  });
+
+  it('uses the thickest preset of the category when the stock is thicker than all of them', () => {
+    const result = materialPresetFor({ ...DEFAULT_BOX_PARAMETERS, category: 'wood-finger', materialThicknessMm: 9 });
+    expect(result).toEqual({ preset: MATERIAL_PRESETS.find((m) => m.id === 'plywood-6mm')!, exact: false });
+  });
+
+  it('returns PLA zeros for 3D print without throwing', () => {
+    const params = { ...DEFAULT_BOX_PARAMETERS, category: '3d-print' as const };
+    expect(() => laserSettingsFor(params)).not.toThrow();
+    expect(laserSettingsFor(params)).toEqual({ cutPower: 0, cutSpeed: 0, cutPasses: 0, scorePower: 0, scoreSpeed: 0 });
+    expect(materialPresetFor(params).preset.id).toBe('pla-petg');
   });
 
   it('every preset carries a laser block', () => {

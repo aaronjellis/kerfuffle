@@ -77,6 +77,8 @@ export interface BoxParameters {
   /** Material & Laser */
   materialThicknessMm: number;
   kerfMm: number;
+  /** The material preset the user picked; cleared when they edit the thickness by hand. */
+  materialPresetId?: string;
   /** Wood Finger-Joint specific */
   fingerWidthMm: number;
   woodLidStyle: WoodLidStyle;
