@@ -1,19 +1,39 @@
-import React, { useRef } from 'react';
+import React, { useId, useRef } from 'react';
 
 interface FieldProps {
   label: React.ReactNode;
   hint?: React.ReactNode;
+  /**
+   * Set when the child is a group of buttons (a `Segmented`, a button row, a select with a
+   * toggle beside it): the field becomes a labeled group instead of a `<label>`, which may
+   * hold only one control.
+   */
+  group?: boolean;
   children: React.ReactNode;
 }
 
 /** A labeled control: the label above, the control below, an optional hint under it. */
-export const Field: React.FC<FieldProps> = ({ label, hint, children }) => (
-  <label className="field">
-    <span className="field-label">{label}</span>
-    {children}
-    {hint && <small className="field-hint">{hint}</small>}
-  </label>
-);
+export const Field: React.FC<FieldProps> = ({ label, hint, group, children }) => {
+  const labelId = useId();
+  if (group) {
+    return (
+      <div className="field" role="group" aria-labelledby={labelId}>
+        <span className="field-label" id={labelId}>
+          {label}
+        </span>
+        {children}
+        {hint && <small className="field-hint">{hint}</small>}
+      </div>
+    );
+  }
+  return (
+    <label className="field">
+      <span className="field-label">{label}</span>
+      {children}
+      {hint && <small className="field-hint">{hint}</small>}
+    </label>
+  );
+};
 
 interface SwitchProps {
   checked: boolean;

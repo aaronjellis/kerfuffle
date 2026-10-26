@@ -200,7 +200,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
           {/* Text: content, font, weight, alignment and color. */}
           {selectedArtwork.textConfig && (
             <div className="text-config-panel">
-              <Field label={"Text"}>
+              <Field label="Text">
                 <textarea
                   rows={2}
                   className="text-area-field"
@@ -212,7 +212,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 />
               </Field>
 
-              <Field label={"Font"}>
+              <Field label="Font">
                 <select
                   value={
                     GOOGLE_FONT_CATALOG.some(
@@ -297,9 +297,10 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
               </div>
 
               <div className="two-col-inputs">
-                <Field label={"Weight and style"}>
+                <Field label="Weight and style" group>
                   <div className="control-pair">
                     <select
+                      aria-label="Weight"
                       value={selectedArtwork.textConfig.fontWeight}
                       onChange={(e) =>
                         updateTextConfig(selectedArtwork, {
@@ -332,7 +333,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                   </div>
                 </Field>
 
-                <Field label={"Line align and color"}>
+                <Field label="Line align and color" group>
                   <div className="control-pair">
                     <Segmented
                       ariaLabel="Line align"
