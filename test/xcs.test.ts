@@ -369,6 +369,13 @@ describe('uuidV4', () => {
 });
 
 describe('SVG grouped by piece', () => {
+  it('defaults to by-piece grouping when the default profile is xTool Studio', () => {
+    if (DEFAULT_BOX_PARAMETERS.exportProfile === 'xtool-studio') {
+      expect(DEFAULT_BOX_PARAMETERS.svgGroupingMode).toBe('by-piece');
+    }
+    expect(DEFAULT_BOX_PARAMETERS.exportProfile).toBe('xtool-studio');
+  });
+
   const colorOf = (tag: string) => /stroke="([^"]+)"/.exec(tag)?.[1];
   const profile = EXPORT_PROFILES['xtool-studio'];
 

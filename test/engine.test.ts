@@ -205,7 +205,7 @@ describe('Boxer Parametric Geometry & Export Engine', () => {
   });
 
   it('exports 1:1 physical-scale SVG, Layered PDF, DXF, and STL with face artwork', async () => {
-    const model = generateBoxModel(DEFAULT_BOX_PARAMETERS);
+    const model = generateBoxModel({ ...DEFAULT_BOX_PARAMETERS, svgGroupingMode: 'by-layer' });
     const sampleArt: FaceArtwork[] = [
       {
         id: 'art-1',

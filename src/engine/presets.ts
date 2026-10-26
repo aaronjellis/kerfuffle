@@ -368,7 +368,7 @@ export const DEFAULT_BOX_PARAMETERS: BoxParameters = {
   customFaceLabels: { ...DEFAULT_FACE_LABELS },
   exportProfile: 'xtool-studio',
   svgUnitMode: 'mm',
-  svgGroupingMode: 'by-layer',
+  svgGroupingMode: 'by-piece',
   includeScaleBar: false,
   bedPresetId: 'xtool-m2',
   sheetMarginMm: 8,
