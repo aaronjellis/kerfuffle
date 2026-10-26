@@ -1,4 +1,6 @@
+import * as THREE from 'three';
 import { BoxParameters } from './types';
+import { buildRoundedRectPoints } from './print3dEngine';
 
 /**
  * Dimensions of the 3D-printed box: two shells, a registration lip, a filament-pin knuckle
@@ -129,4 +131,120 @@ export function computePrintBoxDims(
     hinge,
     clasp,
   };
+}
+
+export type PrintPartId = 'shell' | 'lip' | 'hinge' | 'clasp';
+
+/**
+ * One closed primitive of a printed part, in the print frame. Pieces may overlap; the slicer
+ * merges them. Contract for the STL writer: every geometry is non-indexed (no `index`), and its
+ * `position` attribute holds consecutive triangles, so `position.count` is divisible by 3.
+ */
+export interface PrintPiece {
+  partId: PrintPartId;
+  geometry: THREE.BufferGeometry;
+}
+
+const CORNER_SEGMENTS = 8;
+/** How far the lip reaches below the rim, buried in the base wall's inner face. */
+const LIP_EMBED = 2;
+
+function toShape(pts: { x: number; y: number }[]): THREE.Shape {
+  return new THREE.Shape(pts.map((p) => new THREE.Vector2(p.x, p.y)));
+}
+
+function nonIndexed(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  return g.index ? g.toNonIndexed() : g;
+}
+
+/** Rounded-rectangle ring (outer boundary minus an inner hole), extruded along +Z from z0. */
+function extrudeRing(
+  outer: { x: number; y: number }[],
+  inner: { x: number; y: number }[],
+  z0: number,
+  depth: number
+): THREE.BufferGeometry {
+  const shape = toShape(outer);
+  shape.holes.push(new THREE.Path(inner.slice().reverse().map((p) => new THREE.Vector2(p.x, p.y))));
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+  g.translate(0, 0, z0);
+  return nonIndexed(g);
+}
+
+/**
+ * The shell of one printed part, open side up: a plate on the bed (z 0..floor) with a bed chamfer,
+ * and the wall ring from the plate to the rim. The base also gets the registration lip.
+ *
+ * The plate is a separate piece from the wall ring. With a chamfer, the plate's outline is inset
+ * by the bevel size so the bevel brings it back out to exactly the outer footprint at mid height,
+ * and the plate stays inside z 0..floor. The ring starts one bevel thickness below the plate top so
+ * it covers the plate's upper bevel; otherwise the bevel would leave a ledge around the wall base.
+ */
+export function buildShellPieces(
+  dims: PrintBoxDims,
+  part: 'base' | 'lid',
+  chamfer: number
+): PrintPiece[] {
+  const { wall, floor, innerW, innerD, outerW, outerD, rOut, rIn } = dims;
+  const rimH = part === 'base' ? dims.baseH : dims.lidH;
+  const pieces: PrintPiece[] = [];
+
+  // Same bevel rule as the old STL exporter.
+  const bevelOn = chamfer > 0;
+  const bevelSize = bevelOn ? Math.min(chamfer, wall * 0.4) : 0;
+  const bevelThickness = bevelOn ? Math.min(chamfer, floor * 0.5) : 0;
+
+  const plateOutline = buildRoundedRectPoints(
+    outerW - 2 * bevelSize,
+    outerD - 2 * bevelSize,
+    Math.max(0, rOut - bevelSize),
+    CORNER_SEGMENTS
+  ).map((p) => ({ x: p.x + bevelSize, y: p.y + bevelSize }));
+  const plate = new THREE.ExtrudeGeometry(toShape(plateOutline), {
+    depth: floor - 2 * bevelThickness,
+    bevelEnabled: bevelOn,
+    bevelSize,
+    bevelThickness,
+    bevelSegments: 1,
+  });
+  // ExtrudeGeometry's bevel starts at z = -bevelThickness; lift it onto the bed.
+  plate.translate(0, 0, bevelThickness);
+  pieces.push({ partId: 'shell', geometry: nonIndexed(plate) });
+
+  const outerPts = buildRoundedRectPoints(outerW, outerD, rOut, CORNER_SEGMENTS);
+  const innerPts = buildRoundedRectPoints(innerW, innerD, rIn, CORNER_SEGMENTS).map((p) => ({
+    x: p.x + wall,
+    y: p.y + wall,
+  }));
+  const ringStart = floor - bevelThickness;
+  pieces.push({
+    partId: 'shell',
+    geometry: extrudeRing(outerPts, innerPts, ringStart, rimH - ringStart),
+  });
+
+  if (part === 'base') {
+    const { thickness, clearance, height } = dims.lip;
+    const w = innerW - 2 * clearance;
+    const d = innerD - 2 * clearance;
+    const r = Math.max(0.5, rIn - clearance);
+    const lipOuter = buildRoundedRectPoints(w, d, r, CORNER_SEGMENTS).map((p) => ({
+      x: p.x + wall + clearance,
+      y: p.y + wall + clearance,
+    }));
+    const lipInner = buildRoundedRectPoints(
+      w - 2 * thickness,
+      d - 2 * thickness,
+      Math.max(0, r - thickness),
+      CORNER_SEGMENTS
+    ).map((p) => ({
+      x: p.x + wall + clearance + thickness,
+      y: p.y + wall + clearance + thickness,
+    }));
+    pieces.push({
+      partId: 'lip',
+      geometry: extrudeRing(lipOuter, lipInner, dims.baseH - LIP_EMBED, height + LIP_EMBED),
+    });
+  }
+
+  return pieces;
 }

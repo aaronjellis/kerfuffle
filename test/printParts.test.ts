@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
-import { computePrintBoxDims } from '../src/engine/printParts';
+import * as THREE from 'three';
+import { buildShellPieces, computePrintBoxDims, type PrintPiece } from '../src/engine/printParts';
 const p = { ...DEFAULT_BOX_PARAMETERS, category: '3d-print' as const, templateId: '3d-snap-box' as const };
 describe('print box dims', () => {
   it('derives shells, lip, hinge and clasp from the spec values', () => {
@@ -75,5 +76,84 @@ describe('print box dims', () => {
     const c = computePrintBoxDims(p, 110, 80, 55).clasp!;
     expect(c).toMatchObject({ tongueT: 1.6, hang: 8, hookProud: 0.8, standoff: 1.0, ridgeH: 1.5 });
     expect(c.ridgeTop).toBeCloseTo(8 - 0.8 - 1.5 - 0.1);
+  });
+});
+
+function bbox(g: THREE.BufferGeometry): THREE.Box3 {
+  g.computeBoundingBox();
+  return g.boundingBox!;
+}
+function unionBox(pieces: PrintPiece[]): THREE.Box3 {
+  const b = new THREE.Box3();
+  for (const piece of pieces) b.union(bbox(piece.geometry));
+  return b;
+}
+
+describe('shell and lip pieces', () => {
+  const d = computePrintBoxDims(p, 110, 80, 55);
+
+  it('spans the footprint and bed-to-rim height for the base shell', () => {
+    const shell = buildShellPieces(d, 'base', p.outerChamferMm).filter((x) => x.partId === 'shell');
+    expect(shell.length).toBeGreaterThan(0);
+    const b = unionBox(shell);
+    expect(b.min.x).toBeCloseTo(0, 3);
+    expect(b.max.x).toBeCloseTo(d.outerW, 3);
+    expect(b.min.y).toBeCloseTo(0, 3);
+    expect(b.max.y).toBeCloseTo(d.outerD, 3);
+    expect(b.min.z).toBeCloseTo(0, 3);
+    expect(b.max.z).toBeCloseTo(d.baseH, 3);
+  });
+
+  it('spans bed to lidH for the lid shell and has no lip', () => {
+    const pieces = buildShellPieces(d, 'lid', p.outerChamferMm);
+    expect(pieces.every((x) => x.partId === 'shell')).toBe(true);
+    const b = unionBox(pieces);
+    expect(b.min.z).toBeCloseTo(0, 3);
+    expect(b.max.z).toBeCloseTo(d.lidH, 3);
+    expect(b.max.x).toBeCloseTo(d.outerW, 3);
+    expect(b.max.y).toBeCloseTo(d.outerD, 3);
+  });
+
+  it('keeps the plate on the bed with no chamfer too', () => {
+    const b = unionBox(buildShellPieces(d, 'base', 0).filter((x) => x.partId === 'shell'));
+    expect(b.min.z).toBeCloseTo(0, 3);
+    expect(b.max.z).toBeCloseTo(d.baseH, 3);
+    expect(b.max.x).toBeCloseTo(d.outerW, 3);
+  });
+
+  it('chamfers the plate bottom edge without growing the footprint', () => {
+    const plate = buildShellPieces(d, 'base', 1.2)[0].geometry;
+    const pos = plate.getAttribute('position');
+    let minX = Infinity;
+    for (let i = 0; i < pos.count; i++) if (pos.getZ(i) < 1e-6) minX = Math.min(minX, pos.getX(i));
+    // The bed face is pulled in by the bevel size; the plate widens above it.
+    expect(minX).toBeGreaterThan(0.1);
+    expect(bbox(plate).min.x).toBeCloseTo(0, 3);
+  });
+
+  it('adds the lip for the base only, centred in the shell', () => {
+    const base = buildShellPieces(d, 'base', p.outerChamferMm);
+    const lips = base.filter((x) => x.partId === 'lip');
+    expect(lips).toHaveLength(1);
+    expect(buildShellPieces(d, 'lid', p.outerChamferMm).some((x) => x.partId === 'lip')).toBe(false);
+    const b = bbox(lips[0].geometry);
+    expect(b.max.z).toBeCloseTo(d.baseH + 3, 3);
+    expect(b.min.z).toBeCloseTo(d.baseH - 2, 3);
+    expect(b.max.x - b.min.x).toBeCloseTo(d.innerW - 0.4, 3);
+    expect(b.max.y - b.min.y).toBeCloseTo(d.innerD - 0.4, 3);
+    expect((b.min.x + b.max.x) / 2).toBeCloseTo(d.outerW / 2, 3);
+    expect((b.min.y + b.max.y) / 2).toBeCloseTo(d.outerD / 2, 3);
+  });
+
+  it('emits non-indexed triangle geometry with a position attribute', () => {
+    for (const part of ['base', 'lid'] as const) {
+      for (const piece of buildShellPieces(d, part, p.outerChamferMm)) {
+        const pos = piece.geometry.getAttribute('position');
+        expect(pos).toBeDefined();
+        expect(piece.geometry.index).toBeNull();
+        expect(pos.count % 3).toBe(0);
+        expect(pos.count).toBeGreaterThan(0);
+      }
+    }
   });
 });
