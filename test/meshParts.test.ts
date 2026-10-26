@@ -79,7 +79,6 @@ describe('meshPartIdFor', () => {
       const params = { ...DEFAULT_BOX_PARAMETERS, ...c } as BoxParameters;
       for (const p of generateBoxModel(params).panels3D) {
         const id = meshPartIdFor(p, params);
-        if (p.id === 'clamshell-front-clasp') continue; // the clamshell has no Clasp section
         expect(partForMesh(id, params.templateId), `${params.templateId} ${p.id} -> ${id}`).not.toBeNull();
       }
     }

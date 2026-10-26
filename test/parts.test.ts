@@ -99,7 +99,8 @@ describe('partForMesh', () => {
     expect(partForMesh('tabs', 'cardboard-mailer')).toBe('flaps');
     expect(partForMesh('living-hinge', 'finger-living-hinge')).toBe('living-hinge');
     expect(partForMesh('lid', 'finger-clamshell')).toBe('lid');
-    expect(partForMesh('clasp', 'finger-clamshell')).toBeNull();
+    expect(partForMesh('clasp', 'finger-clamshell')).toBe('lid');
+    expect(partForMesh('clasp', '3d-snap-box')).toBe('clasp');
     expect(partForMesh('dividers', 'finger-basic')).toBeNull();
     expect(partForMesh('living-hinge', 'finger-basic')).toBeNull();
   });

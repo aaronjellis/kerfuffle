@@ -177,6 +177,8 @@ const MESH_TO_PART: Record<string, PartId> = {
 export function partForMesh(meshPartId: string, templateId: BoxTemplateId): PartId | null {
   let part: PartId | undefined = FACE_IDS.has(meshPartId) ? 'artwork' : MESH_TO_PART[meshPartId];
   if (part === 'lid' && templateId === '3d-snap-box') part = 'shell';
+  // The clamshell's decorative front clasp belongs to the lid.
+  if (part === 'clasp' && templateId === 'finger-clamshell') part = 'lid';
   if (!part) return null;
   return PART_IDS[templateId].includes(part) ? part : null;
 }
