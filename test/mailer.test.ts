@@ -352,3 +352,24 @@ describe('mailer 3D rig', () => {
     }
   });
 });
+
+describe('other cardboard templates', () => {
+  const inner = { widthMm: 120, depthMm: 80, heightMm: 50 };
+  const wallIds = {
+    'cardboard-tuck-carton': { left: 'left', right: 'right', front: 'front', back: 'back' },
+    'cardboard-telescope': { left: 'base-left', right: 'base-right', front: 'base-front', back: 'base-back' },
+  } as const;
+  for (const templateId of ['cardboard-tuck-carton', 'cardboard-telescope'] as const) {
+    for (const T of [1.5, 3]) {
+      it(`${templateId} clears the typed inner size within T/2 at T=${T}`, () => {
+        const m = generateBoxModel({ ...base, ...inner, templateId, materialThicknessMm: T, dimensionReference: 'inner' });
+        const at = (id: string) => m.panels3D.find((p) => p.id === id)!.closedPos;
+        const ids = wallIds[templateId];
+        const clearW = at(ids.right)[0] - at(ids.left)[0] - T;
+        const clearD = at(ids.front)[2] - at(ids.back)[2] - T;
+        expect(Math.abs(clearW - inner.widthMm)).toBeLessThanOrEqual(T / 2 + 1e-6);
+        expect(Math.abs(clearD - inner.depthMm)).toBeLessThanOrEqual(T / 2 + 1e-6);
+      });
+    }
+  }
+});

@@ -283,14 +283,16 @@ function generateTuckCarton(
   const rTuckCorner = Math.min(8, tuckH * 0.45);
   const roundedTuckOutline: Point2D[] = [
     { x: 0, y: 0 },
-    { x: W, y: 0 },
-    { x: W, y: tuckH - rTuckCorner },
-    { x: W - rTuckCorner, y: tuckH },
+    { x: W + T, y: 0 },
+    { x: W + T, y: tuckH - rTuckCorner },
+    { x: W + T - rTuckCorner, y: tuckH },
     { x: rTuckCorner, y: tuckH },
     { x: 0, y: tuckH - rTuckCorner },
   ];
 
-  const carton3D: Panel3DTransform[] = [
+  // Walls straddle their creases: a single-ply wall centres half a ply outside the inner face,
+  // so the rig runs on W + T and D + T and the clear distance between opposite walls is W and D.
+  const carton3D = ((W: number, D: number): Panel3DTransform[] => [
     {
       id: 'back',
       name: 'Back Face',
@@ -602,7 +604,7 @@ function generateTuckCarton(
             },
           },
         ] as Panel3DTransform[])),
-  ];
+  ])(W + T, D + T);
 
   return {
     panels2D: [panel2D],
@@ -708,7 +710,8 @@ function generateTelescopingBox(
   const baseTabW = Math.min(22, H * 0.75);
   const lidTabW = Math.min(22, lidH * 0.75);
 
-  const telescope3D: Panel3DTransform[] = [
+  // Same straddle rule as the carton: wall centres sit half a ply outside the inner face.
+  const telescope3D = ((W: number, D: number, lidW: number, lidD: number): Panel3DTransform[] => [
     // Base Tray
     {
       id: 'bottom',
@@ -1053,7 +1056,7 @@ function generateTelescopingBox(
         stage: [0.65, 0.98],
       },
     },
-  ];
+  ])(W + T, D + T, lidW + T, lidD + T);
 
   return {
     panels2D: [baseTray, topLid],
