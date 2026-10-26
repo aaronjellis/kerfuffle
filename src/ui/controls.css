@@ -98,7 +98,13 @@
 }
 
 @container (width < 328px) {
-  .two-col-inputs,
+  .two-col-inputs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Two short segmented controls fit side by side down to a much narrower panel. */
+@container (width < 240px) {
   .seg-pair {
     grid-template-columns: minmax(0, 1fr);
   }

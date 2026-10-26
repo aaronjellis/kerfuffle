@@ -126,7 +126,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
       <button
         ref={anchorRef}
         type="button"
-        className="btn-primary export-trigger"
+        className="btn-primary"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? popId : undefined}
@@ -134,7 +134,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
       >
         <Download size={18} strokeWidth={1.75} aria-hidden="true" />
         <span>Export</span>
-        <ChevronDown size={18} strokeWidth={1.75} aria-hidden="true" />
+        <ChevronDown size={18} strokeWidth={1.75} className="btn-caret" aria-hidden="true" />
       </button>
       <Popover
         open={open}

@@ -74,10 +74,11 @@ h4 {
   }
 }
 
+/* Phone: the bar and the stage take the top 55% and the inspector is a sheet over the rest. */
 @media (max-width: 719px) {
   .app-body {
     grid-template-columns: 1fr;
-    grid-template-rows: 55dvh 1fr;
+    grid-template-rows: calc(55dvh - var(--bar-h));
   }
 }
 
@@ -96,12 +97,6 @@ h4 {
   overflow: hidden;
 }
 
-@media (max-width: 719px) {
-  .inspector {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-}
 
 /* ---------- inspector ---------- */
 
@@ -819,6 +814,140 @@ h4 {
 .export-formats {
   display: grid;
   gap: 2px;
+}
+
+/* ---------- phone (< 720 px) ---------- */
+
+@media (max-width: 719px) {
+  /* The bar: wordmark, categories, Export. Units move to the Size section. */
+  .app-bar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    padding: 0 0.75rem;
+  }
+
+  .app-bar-units {
+    display: none;
+  }
+
+  .app-bar .segmented-toggle button,
+  .app-bar .btn-primary {
+    min-height: 44px;
+  }
+
+  /* The inspector becomes a bottom sheet that scrolls on its own; the head scrolls with it
+     and the parts chips stay pinned at its top. */
+  .inspector {
+    position: fixed;
+    z-index: 10;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: block;
+    max-height: 45dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    border-radius: 12px 12px 0 0;
+    box-shadow: var(--shadow-float);
+  }
+
+  .inspector > .inspect-scroll {
+    height: auto;
+    overflow: visible;
+  }
+
+  .parts-row {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding-top: 0.25rem;
+    background: var(--surface);
+  }
+
+  /* A chip scrolls its section to just under the pinned chips. */
+  .inspect-fold {
+    scroll-margin-top: calc(44px + 1.25rem);
+  }
+
+  /* 44 px touch targets. */
+  .part-chip,
+  .chip {
+    min-height: 44px;
+  }
+
+  .stage-pill .segmented-toggle button,
+  .stage-icon-btn,
+  .stage-toggle {
+    min-height: 44px;
+  }
+
+  .stage-pill .segmented-toggle button {
+    min-width: 44px;
+  }
+
+  .stage-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* The pill: view, play and wireframe on the first row, the fold range across the second. */
+  .stage-pill {
+    display: grid;
+    grid-template-columns: repeat(4, auto);
+    row-gap: 0;
+    left: 0.75rem;
+    bottom: 0.75rem;
+    max-width: calc(100% - 1.5rem);
+    border-radius: var(--r-panel);
+  }
+
+  .stage-pill input.stage-range {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    width: auto;
+    min-height: 32px;
+    margin: 0 0.75rem;
+  }
+
+  /* The caption sits above the two-row pill. */
+  .stage-caption {
+    right: 0.75rem;
+    bottom: calc(0.75rem + 8px + 50px + 32px + 0.5rem);
+  }
+}
+
+/* Narrow phone: the categories show icons only; their names stay as accessible names. */
+@media (max-width: 479px) {
+  .app-bar .seg-label {
+    display: none;
+  }
+
+  .app-bar .segmented-toggle button {
+    min-width: 44px;
+    padding: 0 0.75rem;
+  }
+
+  .app-bar .btn-caret {
+    display: none;
+  }
+
+  .app-bar .btn-primary {
+    padding: 0 0.75rem;
+  }
+}
+
+/* Smallest phones: the wordmark drops its icon and a size so the bar holds one row. */
+@media (max-width: 419px) {
+  .app-brand-icon {
+    display: none;
+  }
+
+  .app-wordmark {
+    font-size: var(--fs-h3);
+  }
 }
 
 /* ---------- motion ---------- */

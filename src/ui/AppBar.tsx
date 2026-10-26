@@ -14,7 +14,7 @@ interface AppBarProps {
 
 const ICON = { size: 18, strokeWidth: 1.75, 'aria-hidden': true } as const;
 
-/** Wordmark, the three categories, units, and Export. */
+/** Wordmark, the three categories (icons only on a narrow phone), units, and Export. */
 export const AppBar: React.FC<AppBarProps> = ({
   category,
   onSelectCategory,
@@ -34,23 +34,26 @@ export const AppBar: React.FC<AppBarProps> = ({
         value={category}
         onChange={onSelectCategory}
         options={[
-          { value: 'wood-finger', label: <><Hammer {...ICON} /><span>Wood</span></> },
-          { value: 'cardboard-fold', label: <><Package {...ICON} /><span>Cardboard</span></> },
-          { value: '3d-print', label: <><Box {...ICON} /><span>3D print</span></> },
+          { value: 'wood-finger', title: 'Wood', label: <><Hammer {...ICON} /><span className="seg-label">Wood</span></> },
+          { value: 'cardboard-fold', title: 'Cardboard', label: <><Package {...ICON} /><span className="seg-label">Cardboard</span></> },
+          { value: '3d-print', title: '3D print', label: <><Box {...ICON} /><span className="seg-label">3D print</span></> },
         ]}
       />
     </div>
 
     <div className="app-bar-end">
-      <Segmented<DisplayUnit>
-        ariaLabel="Units"
-        value={displayUnit}
-        onChange={onSelectUnit}
-        options={[
-          { value: 'mm', label: 'mm' },
-          { value: 'in', label: 'in' },
-        ]}
-      />
+      {/* On a phone the units live in the Size section only. */}
+      <div className="app-bar-units">
+        <Segmented<DisplayUnit>
+          ariaLabel="Units"
+          value={displayUnit}
+          onChange={onSelectUnit}
+          options={[
+            { value: 'mm', label: 'mm' },
+            { value: 'in', label: 'in' },
+          ]}
+        />
+      </div>
       <ExportMenu {...exportMenu} />
     </div>
   </header>

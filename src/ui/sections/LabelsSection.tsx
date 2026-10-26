@@ -50,7 +50,7 @@ export const LabelsSection: React.FC<SectionProps> = ({ params, updateParam, dis
       </div>
 
       <Switch
-        label="Score panel dimensions under the name"
+        label="Score dimensions under the name"
         checked={params.scoreFaceDimensions}
         onChange={(v) => updateParam('scoreFaceDimensions', v)}
       />

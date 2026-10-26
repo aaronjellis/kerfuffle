@@ -21,7 +21,12 @@
   cursor: grabbing;
 }
 
-/* Legend on the left, zoom on the right; the layer toggles take the row below. */
+/* Legend on the left, zoom on the right; the layer toggles take the row below. The wrapper is a
+   size container so the HUD answers to the stage's width, not the window's. */
+.viewport-2d-wrapper {
+  container-type: inline-size;
+}
+
 .viewport-2d-hud {
   position: absolute;
   z-index: 2;
@@ -35,27 +40,71 @@
   pointer-events: none;
 }
 
+/* Wide stage: the scroll wrapper steps aside and its two children take the HUD's rows. */
+.hud-scroll {
+  display: contents;
+}
+
 .hud-legend,
 .hud-toggles {
   display: flex;
   flex-wrap: nowrap;
   gap: 0.375rem;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.hud-legend::-webkit-scrollbar,
+.hud-toggles::-webkit-scrollbar,
+.hud-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .hud-legend {
-  overflow: hidden;
+  grid-row: 1;
+  grid-column: 1;
 }
 
 .hud-toggles {
+  grid-row: 2;
   grid-column: 1 / -1;
-  overflow-x: auto;
-  scrollbar-width: none;
   pointer-events: auto;
 }
 
-.hud-toggles::-webkit-scrollbar {
-  display: none;
+.hud-zoom {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+/* Narrow stage: one row. Legend and toggles scroll sideways with a fade at each end; zoom
+   stays put at the right. */
+@container (width < 560px) {
+  .viewport-2d-hud {
+    left: 0;
+    gap: 0.25rem;
+  }
+
+  .hud-scroll {
+    display: flex;
+    grid-row: 1;
+    grid-column: 1;
+    gap: 0.375rem;
+    min-width: 0;
+    padding-inline: 0.75rem 1rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    pointer-events: auto;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 0.75rem, #000 calc(100% - 1rem), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 0.75rem, #000 calc(100% - 1rem), transparent 100%);
+  }
+
+  .hud-legend,
+  .hud-toggles {
+    flex: none;
+    overflow: visible;
+  }
 }
 
 .hud-chip,

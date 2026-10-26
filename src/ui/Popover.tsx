@@ -18,7 +18,7 @@ const EDGE = 8;
 const FOCUSABLE = 'button:not(:disabled), select:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 /**
- * A panel anchored below its trigger. It closes on Escape and on a click outside, and focus
+ * A panel anchored below its trigger, or above it when there's more room there. It closes on Escape and on a click outside, and focus
  * returns to the trigger. It sits left-aligned to the trigger, or right-aligned when that
  * would run off the window. Rendered into `document.body`, so no parent's overflow clips it.
  */
@@ -33,7 +33,7 @@ export const Popover: React.FC<PopoverProps> = ({
   children,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
 
   const place = useCallback(() => {
     const anchor = anchorRef.current;
@@ -44,9 +44,20 @@ export const Popover: React.FC<PopoverProps> = ({
     let left = a.left;
     if (left + w > window.innerWidth - EDGE) left = a.right - w;
     left = Math.max(EDGE, left);
-    const top = a.bottom + GAP;
+    // Below the trigger, unless it doesn't fit there and there's more room above (a trigger
+    // in the phone's bottom sheet). Either way it scrolls inside the room it gets.
+    const h = panel.scrollHeight + 2;
+    const below = window.innerHeight - a.bottom - GAP - EDGE;
+    const above = a.top - GAP - EDGE;
+    const flip = h > below && above > below;
+    const maxHeight = Math.max(0, Math.round(flip ? above : below));
+    const top = flip ? a.top - GAP - Math.min(h, above) : a.bottom + GAP;
     // Unchanged on most scroll and resize events; keep the same object so nothing re-renders.
-    setPos((prev) => (prev && prev.top === top && prev.left === left ? prev : { top, left }));
+    setPos((prev) =>
+      prev && prev.top === top && prev.left === left && prev.maxHeight === maxHeight
+        ? prev
+        : { top, left, maxHeight }
+    );
   }, [anchorRef]);
 
   useLayoutEffect(() => {
@@ -127,7 +138,7 @@ export const Popover: React.FC<PopoverProps> = ({
       aria-label={ariaLabel}
       tabIndex={-1}
       className={`popover${className ? ` ${className}` : ''}`}
-      style={pos ? { top: pos.top, left: pos.left } : { top: 0, left: 0, visibility: 'hidden' }}
+      style={pos ? pos : { top: 0, left: 0, visibility: 'hidden' }}
       onKeyDown={onKeyDown}
     >
       {children}

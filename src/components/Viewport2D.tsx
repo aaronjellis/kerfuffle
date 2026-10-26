@@ -144,27 +144,71 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
   return (
     <div className="viewport-2d-wrapper" onWheel={handleWheel}>
       <div className="viewport-2d-hud">
-        <div className="hud-legend">
-          <span className="hud-chip" title={`Cut lines, ${profile.cutColor}`}>
-            <span className="dot" style={{ backgroundColor: profile.cutColor }} />
-            Cut
-          </span>
-          <span className="hud-chip" title={`Fold lines, ${foldColor}`}>
-            <span className="dot" style={{ backgroundColor: foldColor }} />
-            {foldLayer === 'cut' ? 'Perforation (cuts)' : 'Score'}
-          </span>
-          {foldLayer === 'cut' && (
-            <span className="hud-chip" title={`Label engraves, ${profile.scoreColor}`}>
-              <span className="dot" style={{ backgroundColor: profile.scoreColor }} />
-              Labels (score)
+        {/* The legend and layer toggles: two rows on a wide stage, one scrolling row on a narrow one. */}
+        <div className="hud-scroll">
+          <div className="hud-legend">
+            <span className="hud-chip" title={`Cut lines, ${profile.cutColor}`}>
+              <span className="dot" style={{ backgroundColor: profile.cutColor }} />
+              Cut
             </span>
+            <span className="hud-chip" title={`Fold lines, ${foldColor}`}>
+              <span className="dot" style={{ backgroundColor: foldColor }} />
+              {foldLayer === 'cut' ? 'Perforation (cuts)' : 'Score'}
+            </span>
+            {foldLayer === 'cut' && (
+              <span className="hud-chip" title={`Label engraves, ${profile.scoreColor}`}>
+                <span className="dot" style={{ backgroundColor: profile.scoreColor }} />
+                Labels (score)
+              </span>
+            )}
+            <span className="hud-chip">
+              Sheet{' '}
+              {displayUnit === 'in'
+                ? `${(sheetWidthMm / 25.4).toFixed(2)} × ${(sheetHeightMm / 25.4).toFixed(2)} in`
+                : `${Math.round(sheetWidthMm)} × ${Math.round(sheetHeightMm)} mm`}
+            </span>
+          </div>
+
+          {onToggleParam && (
+            <div className="hud-toggles" role="group" aria-label="Sheet layers">
+              <button
+                type="button"
+                className="hud-toggle"
+                aria-pressed={params.scoreInnerFaceLabels}
+                onClick={() => onToggleParam('scoreInnerFaceLabels')}
+                title="Score each side's name onto its inner face (in the SVG, PDF and DXF)"
+              >
+                Side names
+              </button>
+              <button
+                type="button"
+                className="hud-toggle"
+                aria-pressed={params.showDimensions}
+                onClick={() => onToggleParam('showDimensions')}
+                title="Show panel dimensions on the 2D sheet"
+              >
+                Dimensions
+              </button>
+              <button
+                type="button"
+                className="hud-toggle"
+                aria-pressed={params.showGuideLabels2D}
+                onClick={() => onToggleParam('showGuideLabels2D')}
+                title="Show screen-only face names in the 2D view"
+              >
+                Guides
+              </button>
+              <button
+                type="button"
+                className="hud-toggle"
+                aria-pressed={params.includeRegistrationMarks}
+                onClick={() => onToggleParam('includeRegistrationMarks')}
+                title="Corner registration marks for print-then-cut"
+              >
+                Registration marks
+              </button>
+            </div>
           )}
-          <span className="hud-chip">
-            Sheet{' '}
-            {displayUnit === 'in'
-              ? `${(sheetWidthMm / 25.4).toFixed(2)} × ${(sheetHeightMm / 25.4).toFixed(2)} in`
-              : `${Math.round(sheetWidthMm)} × ${Math.round(sheetHeightMm)} mm`}
-          </span>
         </div>
 
         <div className="hud-zoom" role="group" aria-label="Zoom">
@@ -199,47 +243,6 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
             +
           </button>
         </div>
-
-        {onToggleParam && (
-          <div className="hud-toggles" role="group" aria-label="Sheet layers">
-            <button
-              type="button"
-              className="hud-toggle"
-              aria-pressed={params.scoreInnerFaceLabels}
-              onClick={() => onToggleParam('scoreInnerFaceLabels')}
-              title="Score each side's name onto its inner face (in the SVG, PDF and DXF)"
-            >
-              Side names
-            </button>
-            <button
-              type="button"
-              className="hud-toggle"
-              aria-pressed={params.showDimensions}
-              onClick={() => onToggleParam('showDimensions')}
-              title="Show panel dimensions on the 2D sheet"
-            >
-              Dimensions
-            </button>
-            <button
-              type="button"
-              className="hud-toggle"
-              aria-pressed={params.showGuideLabels2D}
-              onClick={() => onToggleParam('showGuideLabels2D')}
-              title="Show screen-only face names in the 2D view"
-            >
-              Guides
-            </button>
-            <button
-              type="button"
-              className="hud-toggle"
-              aria-pressed={params.includeRegistrationMarks}
-              onClick={() => onToggleParam('includeRegistrationMarks')}
-              title="Corner registration marks for print-then-cut"
-            >
-              Registration marks
-            </button>
-          </div>
-        )}
       </div>
 
       <svg
