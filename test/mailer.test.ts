@@ -157,7 +157,7 @@ describe('mailer 2D sheet', () => {
   });
   it('short depth keeps the two floor tabs apart', () => {
     const s = computeMailerSpans({ ...base, depthMm: 40 }, 110, 40, 55);
-    const gap = (0.75 - 0.25) * s.floorD - s.tab.len;
+    const gap = (s.tab.centers[1] - s.tab.centers[0]) * s.floorD - s.tab.len;
     expect(gap).toBeGreaterThanOrEqual(2);
   });
   it('low front-lock box clamps the slit so the front ear crease stays attached', () => {
@@ -329,6 +329,117 @@ describe('mailer perimeter geometry', () => {
       const ys = parsePathVertices(sheetPaths.find((p) => p.id === `mailer-slot-r-${n}`)!.d).map((v) => v.y);
       expect(tabCenters[i]).toBeCloseTo((Math.min(...ys) + Math.max(...ys)) / 2, 6);
     });
+  });
+});
+
+type V = { x: number; y: number };
+/** Pairs of perimeter segments (curves taken as chords) that cross, touch, or fold back on a neighbour. */
+function selfIntersections(d: string): [number, number][] {
+  const raw = parsePathVertices(d);
+  const vs = raw.filter((v, i) => i === 0 || Math.hypot(v.x - raw[i - 1].x, v.y - raw[i - 1].y) > 1e-9);
+  if (Math.hypot(vs[0].x - vs[vs.length - 1].x, vs[0].y - vs[vs.length - 1].y) <= 1e-9) vs.pop();
+  const n = vs.length;
+  const seg = (i: number): [V, V] => [vs[i], vs[(i + 1) % n]];
+  const cross = (o: V, a: V, b: V) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const distToSeg = (p: V, a: V, b: V) => {
+    const L = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / L));
+    return Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.y - (a.y + t * (b.y - a.y)));
+  };
+  const hits: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    // Neighbours that fold straight back on each other overlap along their length.
+    const [a, b] = seg(i);
+    const [, c] = seg((i + 1) % n);
+    const dot = (b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y);
+    if (Math.abs(cross(a, b, c)) < 1e-6 && dot < 0) hits.push([i, (i + 1) % n]);
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue; // closing neighbours
+      const [a, b] = seg(i);
+      const [c, e] = seg(j);
+      const d1 = cross(c, e, a), d2 = cross(c, e, b), d3 = cross(a, b, c), d4 = cross(a, b, e);
+      const proper = d1 * d2 < 0 && d3 * d4 < 0 && Math.abs(d1) > 1e-6 && Math.abs(d2) > 1e-6 && Math.abs(d3) > 1e-6 && Math.abs(d4) > 1e-6;
+      const tol = 1e-4;
+      const touch = distToSeg(a, c, e) < tol || distToSeg(b, c, e) < tol || distToSeg(c, a, b) < tol || distToSeg(e, a, b) < tol;
+      if (proper || touch) hits.push([i, j]);
+    }
+  }
+  return hits;
+}
+
+describe('mailer small boxes', () => {
+  const perimeter = (m: ReturnType<typeof generateBoxModel>) => m.panels2D[0].paths.find((p) => p.id === 'mailer-perimeter-cut')!.d;
+  const cases = [
+    { W: 60, D: 25, H: 30, T: 1.5, tabs: 1 },
+    { W: 60, D: 25, H: 30, T: 3, tabs: 1 },
+    { W: 60, D: 40, H: 30, T: 6, tabs: 2 },
+  ];
+  for (const { W, D, H, T, tabs } of cases) {
+    describe(`W${W} D${D} H${H} T${T}`, () => {
+      const m = generateBoxModel({ ...base, widthMm: W, depthMm: D, heightMm: H, materialThicknessMm: T, includeLidFlaps: true });
+      const s = computeMailerSpans(m.params, W, D, H);
+      const sheetPaths = m.panels2D[0].paths;
+      const slots = sheetPaths
+        .filter((p) => p.id.startsWith('mailer-slot-'))
+        .map((p) => {
+          const vs = parsePathVertices(p.d);
+          const xs = vs.map((v) => v.x);
+          const ys = vs.map((v) => v.y);
+          return { id: p.id, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+        });
+      // Tab root corners: perimeter vertices on the right inner wall's free-edge line within the floor row,
+      // less the inner wall's own two end corners.
+      const earInset = 1.5 * T;
+      const wallY0 = s.y.floorTop + earInset;
+      const wallY1 = s.y.frontTop - earInset;
+      const tabEdges = parsePathVertices(perimeter(m))
+        .filter((v) => Math.abs(v.x - s.x.innerR) < 1e-3 && v.y > s.y.floorTop && v.y < s.y.frontTop)
+        .filter((v) => Math.abs(v.y - wallY0) > 1e-3 && Math.abs(v.y - wallY1) > 1e-3)
+        .map((v) => v.y)
+        .sort((a, b) => a - b);
+
+      it(`cuts ${tabs} tab(s) and ${tabs} slot(s) per side`, () => {
+        expect(s.tab.centers).toHaveLength(tabs);
+        expect(tabEdges).toHaveLength(2 * tabs);
+        expect(slots).toHaveLength(2 * tabs);
+      });
+      it('keeps each tab inside the inner wall with 2 mm end margins and 4 mm between tabs', () => {
+        expect(tabEdges[0] - s.y.floorTop).toBeGreaterThanOrEqual(earInset + 2 - 1e-6);
+        expect(s.y.frontTop - tabEdges[tabEdges.length - 1]).toBeGreaterThanOrEqual(earInset + 2 - 1e-6);
+        for (let i = 2; i < tabEdges.length; i += 2) expect(tabEdges[i] - tabEdges[i - 1]).toBeGreaterThanOrEqual(4 - 1e-6);
+      });
+      it('keeps the slots inside the floor and apart', () => {
+        for (const r of slots) {
+          expect(r.x0).toBeGreaterThan(s.x.floorL);
+          expect(r.x1).toBeLessThan(s.x.floorR);
+          expect(r.y0).toBeGreaterThan(s.y.floorTop);
+          expect(r.y1).toBeLessThan(s.y.frontTop);
+        }
+        for (let i = 0; i < slots.length; i++) {
+          for (let j = i + 1; j < slots.length; j++) {
+            const [a, b] = [slots[i], slots[j]];
+            const overlap = a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+            expect(overlap, `${a.id} overlaps ${b.id}`).toBe(false);
+          }
+        }
+      });
+      it('perimeter does not cross itself', () => {
+        expect(selfIntersections(perimeter(m))).toEqual([]);
+      });
+    });
+  }
+  it('default box keeps two 20 mm tabs at 0.25 and 0.75 and a clean perimeter', () => {
+    const m = generateBoxModel({ ...base });
+    const s = computeMailerSpans(m.params, 110, 80, 55);
+    expect(s.tab.len).toBeCloseTo(20);
+    expect(s.tab.centers).toEqual([0.25, 0.75]);
+    expect(selfIntersections(perimeter(m))).toEqual([]);
+  });
+  it('narrow tuck top (W 20, T 3) keeps the tuck flap corners apart', () => {
+    const m = generateBoxModel({ ...base, widthMm: 20, materialThicknessMm: 3, cardboardLockStyle: 'tuck' });
+    const s = computeMailerSpans(m.params, 20, 80, 55);
+    expect(s.tuckR).toBeLessThanOrEqual(s.tuckW / 2 + 1e-9);
+    expect(selfIntersections(perimeter(m))).toEqual([]);
   });
 });
 

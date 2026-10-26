@@ -24,14 +24,18 @@ export interface MailerSpans {
   lidD: number; // D + 3T
   tuckH: number; // min(tuckFlapMm, H - T)
   tuckW: number; // W - 2T
-  tuckR: number; // min(8, 0.4 * tuckH)
+  tuckR: number; // min(8, 0.4 * tuckH, tuckW / 2): the two corners never overlap
   lidFlapDepth: number; // H - T (0 when flaps off)
   lidFlapLen: number; // D - T
   earW: number; // min(H, D/2 - T)
   earBackH: number; // H - 2T: backH less an ear inset (1.5T) at each crease
   earFrontH: number; // frontH - 2 * earInset = H - 2.5T
-  /** chamferEff = min(chamfer, depth, len / 2): the chamfer actually cut on the tab's free corners */
-  tab: { len: number; depth: number; centers: [number, number]; chamfer: 4; chamferEff: number };
+  /**
+   * Inner-wall tabs. `centers` are fractions of floorD from the back crease: [0.25, 0.75], moved inward
+   * when a tab would come within 2 mm of the inner wall's end, or [0.5] when two cannot fit.
+   * chamferEff = min(chamfer, depth, len / 2): the chamfer actually cut on the tab's free corners.
+   */
+  tab: { len: number; depth: number; centers: number[]; chamfer: 4; chamferEff: number };
   /**
    * centerFromCrease = roll: the inner wall's mid-plane, measured from the floor's side crease.
    * inset = centerFromCrease - width/2: the slot's edge nearest the side crease.
@@ -106,17 +110,31 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   const lidD = D + 3 * T;
   const tuckH = Math.min(params.tuckFlapMm, H - T);
   const tuckW = W - 2 * T;
-  const tuckR = Math.min(8, 0.4 * tuckH);
+  const tuckR = Math.min(8, 0.4 * tuckH, tuckW / 2);
   const lidFlapDepth = params.includeLidFlaps ? H - T : 0;
   const earW = Math.min(H, D / 2 - T);
 
-  const tabLen = clamp(D / 4, 14, 26);
+  const innerSideLen = D - T;
+  const { innerInset } = insetsFor(T);
+  // Two tabs fit inside the inner wall with 2 mm end margins and 4 mm between them; below 8 mm, one centred tab.
+  let tabLen = Math.min(clamp(D / 4, 14, 26), (innerSideLen - 2 * 2 - 4) / 2);
+  let centers: number[];
+  if (tabLen < 8) {
+    tabLen = Math.min(26, innerSideLen - 4);
+    centers = [0.5];
+  } else {
+    // At 0.25 and 0.75 unless that leaves less than 2 mm to the inner wall's end; then move both inward.
+    const c0 = Math.max(0.25, (innerInset + 2 + tabLen / 2) / floorD);
+    centers = [c0, 1 - c0];
+  }
+  // The slot (tab + 1) stays inside the floor, clear of the walls' plies.
+  tabLen = Math.min(tabLen, floorD - 2 * innerInset - 2 - 1);
   const tabDepth = Math.min(T + 5, innerSideH - 2);
   const tabChamfer = 4;
   const tab: MailerSpans['tab'] = {
     len: tabLen,
     depth: tabDepth,
-    centers: [0.25, 0.75],
+    centers,
     chamfer: tabChamfer,
     chamferEff: Math.min(tabChamfer, tabDepth, tabLen / 2),
   };
@@ -189,7 +207,7 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     frontH,
     outerSideH,
     innerSideH,
-    innerSideLen: D - T,
+    innerSideLen,
     rollLen: D,
     lidD,
     tuckH,
