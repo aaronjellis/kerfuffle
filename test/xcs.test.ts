@@ -7,6 +7,7 @@ import {
   materialPresetFor,
 } from '../src/engine/presets';
 import { generateBoxModel } from '../src/engine/boxGenerator';
+import { translateSvgPath } from '../src/engine/fingerJointEngine';
 import { XCS_DEVICE_M2, buildXcsDisplays, buildXcsProject, uuidV4 } from '../src/engine/xcsExporter';
 import { effectiveLayer, exportBoxDxf, exportBoxSvg, exportXcsProject } from '../src/engine/exporters';
 import type { BoxParameters, GeneratedBoxModel } from '../src/engine/types';
@@ -367,6 +368,63 @@ describe('perforation processing', () => {
       expect(map.get(d.id)!.processingType).toBe('VECTOR_ENGRAVING');
       expect(map.get(d.id)!.data.VECTOR_ENGRAVING.parameter.customize).toMatchObject({ power: 18, speed: 100, repeat: 1 });
     }
+  });
+});
+
+describe('processing order', () => {
+  const outlineDPath = (model: GeneratedBoxModel, panelId: string, pathId: string) => {
+    const panel = model.panels2D.find((p) => p.id === panelId)!;
+    const path = panel.paths.find((p) => p.id === pathId)!;
+    return translateSvgPath(path.d, panel.sheetX, panel.sheetY, 1);
+  };
+  type Shown = { id: string; name: string; zOrder: number; layerColor: string };
+  const profile = EXPORT_PROFILES['xtool-studio'];
+  const shown = (model: GeneratedBoxModel) => parse(model).canvas[0].displays as Shown[];
+  const expectOutlinesLast = (model: GeneratedBoxModel) => {
+    const { displays: built } = buildXcsDisplays(model);
+    for (const panel of model.panels2D) {
+      const outline =
+        panel.paths.find((p) => p.layer === 'cut' && p.id.endsWith('-outline')) ??
+        panel.paths.find((p) => p.layer === 'cut')!;
+      const mine = built.filter((d) => d.name.startsWith(`${panel.name} ·`));
+      const top = mine.reduce((a, b) => (b.zOrder > a.zOrder ? b : a));
+      expect(top.dPath, panel.id).toBe(outlineDPath(model, panel.id, outline.id));
+    }
+  };
+
+  it('scores every display before any cut, and ends each panel with its outer outline', () => {
+    const model = fingerModel({ scoreInnerFaceLabels: true });
+    const displays = shown(model);
+    const scores = displays.filter((d) => d.layerColor === profile.scoreColor);
+    const cuts = displays.filter((d) => d.layerColor === profile.cutColor);
+    expect(scores.length).toBeGreaterThan(0);
+    expect(cuts.length).toBeGreaterThan(0);
+    const maxScore = Math.max(...scores.map((d) => d.zOrder));
+    const minCut = Math.min(...cuts.map((d) => d.zOrder));
+    expect(maxScore).toBeLessThan(minCut);
+
+    // The inset lid's lip and the organizer's slots put inner cuts beside an outline.
+    for (const m of [
+      model,
+      fingerModel({ scoreInnerFaceLabels: true, woodLidStyle: 'inset-lid' }),
+      fingerModel({ scoreInnerFaceLabels: true, templateId: 'finger-organizer' }),
+    ])
+      expectOutlinesLast(m);
+  });
+
+  it('cuts the mailer perimeter last overall', () => {
+    const model = mailerModel({ scoreLineMode: 'dashed-perf', scoreInnerFaceLabels: true });
+    const { displays } = buildXcsDisplays(model);
+    const last = displays.reduce((a, b) => (b.zOrder > a.zOrder ? b : a));
+    expect(last.dPath).toBe(outlineDPath(model, 'mailer-sheet', 'mailer-perimeter-cut'));
+    expect(last.zOrder).toBe(displays.length - 1);
+  });
+
+  it('orders the score layer before the cut layer', () => {
+    const { layerData } = parse(mailerModel()).canvas[0];
+    expect(layerData[profile.scoreColor].order).toBe(1);
+    expect(layerData[profile.cutColor].order).toBe(2);
+    expect(parse(fingerModel()).canvas[0].layerData[profile.cutColor].order).toBe(2);
   });
 });
 

@@ -1,4 +1,4 @@
-import { GeneratedBoxModel } from './types';
+import { DielinePath, GeneratedBoxModel } from './types';
 import { EXPORT_PROFILES, laserSettingsFor } from './presets';
 import { translateSvgPath } from './fingerJointEngine';
 import { effectiveLayer, svgPathToPolylines } from './exporters';
@@ -72,17 +72,22 @@ const mm = (n: number) => Math.round(n * 1000) / 1000;
  * All paths of a panel share one `groupTag`, so each dieline piece selects as a unit in Studio.
  * `effectiveLayer` decides each display's layer, so dashed perforations take the cut color:
  * with `isProcessByLayer`, Studio processes one color as one layer.
+ *
+ * Displays come back in processing order, which `zOrder` follows: every score first, then
+ * cuts inside a piece, then each piece's outer outline last, so a piece never drops free
+ * before its holes, slots and perforations are done.
  */
 export function buildXcsDisplays(
   model: GeneratedBoxModel,
   newId: XcsIdGenerator = randomId
 ): { displays: XcsDisplay[]; layerOf: Map<string, 'cut' | 'score'> } {
   const profile = EXPORT_PROFILES[model.params.exportProfile];
-  const displays: XcsDisplay[] = [];
+  const ranked: { display: XcsDisplay; rank: number }[] = [];
   const layerOf = new Map<string, 'cut' | 'score'>();
   const groupOf = new Map<string, string>();
 
   for (const panel of model.panels2D) {
+    const outlineId = outerOutlineId(panel.paths);
     for (const path of panel.paths) {
       const layer = effectiveLayer(path, model.params);
       if (layer === 'guide') continue;
@@ -111,7 +116,7 @@ export function buildXcsDisplays(
       const id = newId();
       const x = mm(minX);
       const y = mm(minY);
-      displays.push({
+      const display: XcsDisplay = {
         id,
         type: 'PATH',
         name: `${panel.name} · ${layer}`,
@@ -138,7 +143,7 @@ export function buildXcsDisplays(
         offsetX: x,
         offsetY: y,
         lockRatio: false,
-        zOrder: displays.length,
+        zOrder: 0,
         visible: true,
         visibleState: true,
         lockState: false,
@@ -153,12 +158,30 @@ export function buildXcsDisplays(
         points: [],
         graphicX: 0,
         graphicY: 0,
-      });
+      };
+      const rank = layer === 'score' ? 0 : path.id === outlineId ? 2 : 1;
+      ranked.push({ display, rank });
       layerOf.set(id, layer);
     }
   }
 
+  // Array.prototype.sort is stable, so each rank keeps panel and path order.
+  const displays = ranked.sort((a, b) => a.rank - b.rank).map((r) => r.display);
+  displays.forEach((d, i) => (d.zOrder = i));
   return { displays, layerOf };
+}
+
+/**
+ * The id of a panel's outer outline: the path whose id ends with `-outline` or is
+ * `mailer-perimeter-cut`. Pieces named otherwise (the carton's perimeter, the telescope's
+ * trays, the finger box's lid parts, the organizer's dividers) list their outer cut first,
+ * so the first cut path stands in for them.
+ */
+function outerOutlineId(paths: DielinePath[]): string | undefined {
+  const named = paths.find(
+    (p) => p.layer === 'cut' && (p.id.endsWith('-outline') || p.id === 'mailer-perimeter-cut')
+  );
+  return (named ?? paths.find((p) => p.layer === 'cut'))?.id;
 }
 
 /** The machine a `.xcs` project targets: written to the envelope and to `device`. */
@@ -224,10 +247,11 @@ export function buildXcsProject(
   const laser = laserSettingsFor(model.params);
   const canvasId = newId();
 
+  // Studio runs layers by `order`: scores (1) before cuts (2).
   const layerData: Record<string, { name: string; order: number; visible: true }> = {};
   for (const d of displays) {
     if (!layerData[d.layerColor]) {
-      layerData[d.layerColor] = { name: d.layerColor, order: Object.keys(layerData).length + 1, visible: true };
+      layerData[d.layerColor] = { name: d.layerColor, order: layerOf.get(d.id) === 'score' ? 1 : 2, visible: true };
     }
   }
 
