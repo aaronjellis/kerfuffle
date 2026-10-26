@@ -194,13 +194,13 @@ describe('knuckle hinge pieces', () => {
       });
   }
 
-  it('builds base knuckles behind the back face, filled down to the wall at 45 degrees', () => {
+  it('builds base knuckles behind the back face, filled into the wall at 45 degrees', () => {
     const pieces = buildHingePieces(d, 'base');
     expect(pieces.length).toBeGreaterThan(0);
     expect(pieces.every((x) => x.partId === 'hinge')).toBe(true);
     const rim = d.baseH;
     const b = unionBox(pieces);
-    expect(b.min.y).toBeCloseTo(d.outerD, 5);
+    expect(b.min.y).toBeCloseTo(d.outerD - d.wall / 2, 5);
     expect(b.max.y).toBeCloseTo(d.outerD + 2 * h.R, 5);
     expect(b.max.z).toBeCloseTo(rim + h.R, 5);
     expect(b.min.z).toBeCloseTo(rim - 2 * h.R, 5);

@@ -293,9 +293,11 @@ function extrudeAlongX(shape: THREE.Shape, x0: number, x1: number): THREE.Buffer
 /**
  * The knuckles one part owns, in that part's print frame (open side up). Each knuckle is an
  * annulus (outer R, inner hole/2) around the hinge axis (y = axisY, z = rim), plus a fill prism
- * whose Y-Z cross-section is the triangle (outerD, rim - 2R) -> (outerD, rim) -> (outerD + 2R, rim).
- * The prism runs from the back wall out under the cylinder at 45 degrees, so nothing overhangs
- * more than 45 degrees and the knuckle prints without supports.
+ * whose Y-Z cross-section is the quadrilateral (outerD - wall/2, rim - 2R) -> (outerD, rim - 2R)
+ * -> (outerD + 2R, rim) -> (outerD - wall/2, rim). The prism runs from the back wall out under the
+ * cylinder at 45 degrees, so nothing overhangs more than 45 degrees and the knuckle prints without
+ * supports. Its wall-side edge sits at the wall's mid-thickness line, so the knuckle is embedded
+ * in the wall rather than touching its face.
  *
  * `segments[].owner` and the segment x-ranges are in WORLD x. The base prints in world
  * orientation, so it uses [x0, x1] as given. The lid prints open side up and is rotated pi about
@@ -307,6 +309,8 @@ export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
   if (!hinge) return [];
   const { R, hole, axisY } = hinge;
   const rim = part === 'base' ? dims.baseH : dims.lidH;
+  // The fill reaches into the back wall to its mid-thickness line, like the lip anchor.
+  const embedY = outerD - dims.wall / 2;
   const pieces: PrintPiece[] = [];
 
   for (const seg of hinge.segments) {
@@ -318,9 +322,10 @@ export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
     pieces.push({ partId: 'hinge', geometry: extrudeAlongX(ring, x0, x1) });
 
     const fill = new THREE.Shape([
+      new THREE.Vector2(embedY, rim - 2 * R),
       new THREE.Vector2(outerD, rim - 2 * R),
       new THREE.Vector2(outerD + 2 * R, rim),
-      new THREE.Vector2(outerD, rim),
+      new THREE.Vector2(embedY, rim),
     ]);
     pieces.push({ partId: 'hinge', geometry: extrudeAlongX(fill, x0, x1) });
   }
