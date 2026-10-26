@@ -57,72 +57,82 @@ export function generate3DPrintBox(
   summary: string;
   outerDims: BoxDims;
 } {
-  const wall = Math.max(1.2, params.wallThickness3dMm);
-  const floor = Math.max(1.2, params.floorThickness3dMm);
-  const outerW = innerW + 2 * wall;
-  const outerD = innerD + 2 * wall;
-  const { baseH, lidH: lidTotalH } = computePrintBoxDims(params, innerW, innerD, innerH);
+  const dims = computePrintBoxDims(params, innerW, innerD, innerH);
+  const { wall, floor, outerW, outerD, baseH, lidH: lidTotalH, rOut, rIn, hinge, clasp } = dims;
 
-  const rOut = Math.min(params.outerFilletMm, Math.min(outerW, outerD) * 0.25);
-  const rIn = Math.min(params.innerFilletMm, Math.max(0.5, rOut - wall * 0.5));
+  // 2D plan blueprints, one per part, each drawn in that part's print frame (plate on the bed):
+  // front face at y = 0, back at y = outerD. The lid's hinge segments are mirrored in x, as it
+  // prints. Mechanism footprints sit outside the outline: knuckles behind the back edge
+  // (y outerD..outerD + 2R), clasp in front of the front edge (y < 0). Each plan is shifted down by
+  // its front feature's depth so the whole drawing stays inside the panel's 0..heightMm.
+  const knuckleDepth = hinge ? 2 * hinge.R : 0;
+  const rectPath = (x0: number, y0: number, x1: number, y1: number) =>
+    `M ${fmt(x0)} ${fmt(y0)} L ${fmt(x1)} ${fmt(y0)} L ${fmt(x1)} ${fmt(y1)} L ${fmt(x0)} ${fmt(y1)} Z`;
 
-  // Generate 2D Orthographic Top & Cross-Section Blueprints so the 2D view is also super informative
-  const baseOuterPts = buildRoundedRectPoints(outerW, outerD, rOut, 8);
-  const baseInnerPts = buildRoundedRectPoints(innerW, innerD, rIn, 8).map((p) => ({
-    x: p.x + wall,
-    y: p.y + wall,
-  }));
+  const buildPlan = (part: 'base' | 'lid'): { paths: DielinePath[]; oy: number; heightMm: number } => {
+    const frontDepth = clasp ? (part === 'base' ? clasp.hookProud : clasp.standoff + clasp.tongueT) : 0;
+    const oy = frontDepth;
+    const shift = (pts: Point2D[]) => pts.map((p) => ({ x: p.x, y: p.y + oy }));
+    const outerPts = shift(buildRoundedRectPoints(outerW, outerD, rOut, 8));
+    const innerPts = shift(
+      buildRoundedRectPoints(innerW, innerD, rIn, 8).map((p) => ({ x: p.x + wall, y: p.y + wall }))
+    );
+    const paths: DielinePath[] = [
+      { id: `3d-${part}-outer`, layer: 'cut', d: pointsToSvgPath(outerPts, true), closed: true },
+      { id: `3d-${part}-inner`, layer: 'score', d: pointsToSvgPath(innerPts, true), closed: true },
+    ];
 
-  const basePaths: DielinePath[] = [
-    {
-      id: '3d-base-outer',
-      layer: 'cut',
-      d: pointsToSvgPath(baseOuterPts, true),
-      closed: true,
-    },
-    {
-      id: '3d-base-inner',
-      layer: 'score',
-      d: pointsToSvgPath(baseInnerPts, true),
-      closed: true,
-    },
-  ];
+    if (hinge) {
+      hinge.segments.forEach((seg, i) => {
+        if (seg.owner !== part) return;
+        const [x0, x1] = part === 'base' ? [seg.x0, seg.x1] : [outerW - seg.x1, outerW - seg.x0];
+        paths.push({
+          id: `3d-hinge-knuckle-${i}`,
+          layer: 'cut',
+          d: rectPath(x0, outerD + oy, x1, outerD + knuckleDepth + oy),
+          closed: true,
+        });
+      });
+      if (part === 'base') {
+        const first = hinge.segments[0];
+        const last = hinge.segments[hinge.segments.length - 1];
+        const y = hinge.axisY + oy;
+        paths.push({
+          id: '3d-hinge-pin',
+          layer: 'score',
+          d: `M ${fmt(first.x0)} ${fmt(y)} L ${fmt(last.x1)} ${fmt(y)}`,
+          closed: false,
+        });
+      }
+    }
 
-  // Add snap clasp and hinge lug profiles on the 2D blueprint
-  if (params.includeSnapClasp) {
-    const claspW = Math.min(28, outerW * 0.32);
-    const claspDepth = 4.2;
-    const x0 = (outerW - claspW) / 2;
-    basePaths.push({
-      id: '3d-clasp-catch',
-      layer: 'cut',
-      d: `M ${fmt(x0)} ${fmt(outerD)} L ${fmt(x0 + claspW)} ${fmt(outerD)} L ${fmt(x0 + claspW - 2)} ${fmt(outerD + claspDepth)} L ${fmt(x0 + 2)} ${fmt(outerD + claspDepth)} Z`,
-      closed: true,
-    });
-  }
+    if (clasp) {
+      const w = part === 'base' ? clasp.width + 1 : clasp.width + 2;
+      const x0 = (outerW - w) / 2;
+      paths.push({
+        id: part === 'base' ? '3d-clasp-catch' : '3d-clasp-boss',
+        layer: 'cut',
+        d: rectPath(x0, oy - frontDepth, x0 + w, oy),
+        closed: true,
+      });
+    }
 
-  if (params.include3dHinge) {
-    const knuckleW = Math.min(36, outerW * 0.45);
-    const knuckleDepth = 5.0;
-    const x0 = (outerW - knuckleW) / 2;
-    basePaths.push({
-      id: '3d-hinge-knuckle',
-      layer: 'cut',
-      d: `M ${fmt(x0)} 0 L ${fmt(x0 + knuckleW)} 0 L ${fmt(x0 + knuckleW)} ${fmt(-knuckleDepth)} L ${fmt(x0)} ${fmt(-knuckleDepth)} Z`,
-      closed: true,
-    });
-  }
+    return { paths, oy, heightMm: frontDepth + outerD + knuckleDepth };
+  };
+
+  const basePlan = buildPlan('base');
+  const lidPlan = buildPlan('lid');
 
   const basePanel2D: BoxPanel2D = {
     id: 'base-3d-plan',
     name: `3D Print Base Shell (${fmt(outerW)}×${fmt(outerD)}×${fmt(baseH)} mm)`,
     faceLabel: '3D BASE SHELL (PRINT BED)',
     widthMm: outerW,
-    heightMm: outerD + 10,
-    safeRect: { x: wall, y: wall, width: innerW, height: innerD },
+    heightMm: basePlan.heightMm,
+    safeRect: { x: wall, y: wall + basePlan.oy, width: innerW, height: innerD },
     sheetX: 0,
     sheetY: 0,
-    paths: basePaths,
+    paths: basePlan.paths,
   };
 
   const lidPanel2D: BoxPanel2D = {
@@ -130,24 +140,11 @@ export function generate3DPrintBox(
     name: `3D Print Hinged Lid (${fmt(outerW)}×${fmt(outerD)}×${fmt(lidTotalH)} mm)`,
     faceLabel: '3D LID SHELL (PRINT BED)',
     widthMm: outerW,
-    heightMm: outerD + 10,
-    safeRect: { x: wall, y: wall, width: innerW, height: innerD },
+    heightMm: lidPlan.heightMm,
+    safeRect: { x: wall, y: wall + lidPlan.oy, width: innerW, height: innerD },
     sheetX: 0,
     sheetY: 0,
-    paths: [
-      {
-        id: '3d-lid-outer',
-        layer: 'cut',
-        d: pointsToSvgPath(baseOuterPts, true),
-        closed: true,
-      },
-      {
-        id: '3d-lid-inner',
-        layer: 'score',
-        d: pointsToSvgPath(baseInnerPts, true),
-        closed: true,
-      },
-    ],
+    paths: lidPlan.paths,
   };
 
   const explodeDist = Math.max(outerW, outerD, innerH) * 0.45;
@@ -163,8 +160,9 @@ export function generate3DPrintBox(
       heightMm: outerD,
       thicknessMm: baseH,
       color: '#4f46e5',
-      closedPos: [0, -totalOuterH / 2 + baseH / 2, 0],
-      explodedPos: [0, -totalOuterH / 2 + baseH / 2 - explodeDist * 0.35, 0],
+      // The world geometry (printWorld.ts) is already placed, so the panel sits at the origin.
+      closedPos: [0, 0, 0],
+      explodedPos: [0, -explodeDist * 0.35, 0],
       rotation: [0, 0, 0],
     },
     {
@@ -175,11 +173,12 @@ export function generate3DPrintBox(
       heightMm: outerD,
       thicknessMm: lidTotalH,
       color: '#6366f1',
-      closedPos: [0, seamY + lidTotalH / 2, 0],
-      explodedPos: [0, seamY + lidTotalH / 2 + explodeDist * 0.55, 0],
+      closedPos: [0, 0, 0],
+      explodedPos: [0, explodeDist * 0.55, 0],
       rotation: [0, 0, 0],
       foldRig: {
-        pivotOffset: [0, seamY, -outerD / 2],
+        // The real hinge axis sits R behind the back face at the seam; without a hinge, the back edge.
+        pivotOffset: [0, seamY, -outerD / 2 - (hinge ? hinge.R : 0)],
         axis: 'x',
         flatAngleRad: -Math.PI * 0.58,
         foldedAngleRad: 0,

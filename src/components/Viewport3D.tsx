@@ -6,7 +6,8 @@ import {
   GeneratedBoxModel,
   Panel3DTransform,
 } from '../engine/types';
-import { buildRoundedRectPoints } from '../engine/print3dEngine';
+import { buildPrintPartWorldGeometry } from '../engine/printWorld';
+import type { PrintPartId } from '../engine/printParts';
 
 interface Viewport3DProps {
   model: GeneratedBoxModel;
@@ -186,9 +187,13 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     for (const spec of model.panels3D) {
       const wrapper = new THREE.Group();
       let geometry: THREE.BufferGeometry;
+      let printParts: PrintPartId[] | undefined;
 
       if (model.params.category === '3d-print') {
-        geometry = build3DPrintShellGeometry(model, spec);
+        // One mesh per part for now; the pieces are already placed in the world frame.
+        const pieces = buildPrintPartWorldGeometry(model, spec.id === '3d-lid' ? 'lid' : 'base');
+        geometry = mergeBufferGeometries(pieces.map((p) => p.geometry));
+        printParts = pieces.map((p) => p.partId);
       } else if (spec.id === 'living-hinge-lid') {
         geometry = buildLivingHingeLidGeometry(model, spec);
       } else if (spec.outlinePoints && spec.outlinePoints.length >= 3) {
@@ -237,6 +242,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.userData = { faceId: spec.faceId, panelId: spec.id };
+      if (printParts) mesh.userData.parts = printParts;
 
       // Dark laser-charred edge highlight for wood & cardboard panels
       if (model.params.category !== '3d-print') {
@@ -456,124 +462,6 @@ function createFaceArtworkDecalMesh(
   const decal = new THREE.Mesh(planeGeom, planeMat);
   decal.position.z = spec.thicknessMm / 2 + 0.15;
   return decal;
-}
-
-function build3DPrintShellGeometry(
-  model: GeneratedBoxModel,
-  spec: Panel3DTransform
-): THREE.BufferGeometry {
-  const { params, innerDims } = model;
-  const wall = Math.max(1.2, params.wallThickness3dMm);
-  const floor = Math.max(1.2, params.floorThickness3dMm);
-  const outerW = spec.widthMm;
-  const outerD = spec.heightMm;
-  const shellH = spec.thicknessMm;
-  const isLid = spec.id === '3d-lid';
-
-  const rOut = Math.min(params.outerFilletMm, Math.min(outerW, outerD) * 0.25);
-  const rIn = Math.min(params.innerFilletMm, Math.max(0.5, rOut - wall * 0.5));
-
-  const outerPts = buildRoundedRectPoints(outerW, outerD, rOut, 8).map((p) => ({
-    x: p.x - outerW / 2,
-    y: p.y - outerD / 2,
-  }));
-  const innerPts = buildRoundedRectPoints(
-    innerDims.widthMm,
-    innerDims.depthMm,
-    rIn,
-    8
-  ).map((p) => ({
-    x: p.x - innerDims.widthMm / 2,
-    y: p.y - innerDims.depthMm / 2,
-  }));
-
-  const parts: THREE.BufferGeometry[] = [];
-  const wallH = Math.max(1, shellH - floor);
-
-  // Note: ExtrudeGeometry extrudes along +Z from 0 to depth.
-  // Calling rotateX(Math.PI / 2) sends local (x, y, z) -> (x, -z, y),
-  // so z in [0..depth] becomes Y in [0..-depth].
-  // To make local Y span [-shellH/2 .. +shellH/2]:
-  // 1. Solid Floor (for Base, at bottom Y in [-shellH/2 .. -shellH/2 + floor])
-  //    or Solid Roof (for Lid, at top Y in [+shellH/2 - floor .. +shellH/2])
-  const solidShape = new THREE.Shape(
-    outerPts.map((p) => new THREE.Vector2(p.x, p.y))
-  );
-  const capGeom = new THREE.ExtrudeGeometry(solidShape, {
-    depth: floor,
-    bevelEnabled: params.outerChamferMm > 0,
-    bevelSize: Math.min(params.outerChamferMm, wall * 0.35),
-    bevelThickness: Math.min(params.outerChamferMm, floor * 0.45),
-    bevelSegments: 1,
-  });
-  capGeom.rotateX(Math.PI / 2);
-  if (isLid) {
-    // Roof cap sits at the top of the lid: Y from +shellH/2 down to +shellH/2 - floor
-    capGeom.translate(0, shellH / 2, 0);
-  } else {
-    // Floor cap sits at the bottom of the base: Y from -shellH/2 + floor down to -shellH/2
-    capGeom.translate(0, -shellH / 2 + floor, 0);
-  }
-  parts.push(capGeom);
-
-  // 2. Hollow Perimeter Walls (for Base: Y from +shellH/2 down to -shellH/2 + floor;
-  //    for Lid: Y from +shellH/2 - floor down to -shellH/2)
-  const wallShape = new THREE.Shape(
-    outerPts.map((p) => new THREE.Vector2(p.x, p.y))
-  );
-  wallShape.holes.push(
-    new THREE.Path(
-      innerPts
-        .slice()
-        .reverse()
-        .map((p) => new THREE.Vector2(p.x, p.y))
-    )
-  );
-  const wallGeom = new THREE.ExtrudeGeometry(wallShape, {
-    depth: wallH,
-    bevelEnabled: false,
-  });
-  wallGeom.rotateX(Math.PI / 2);
-  if (isLid) {
-    wallGeom.translate(0, shellH / 2 - floor, 0);
-  } else {
-    wallGeom.translate(0, shellH / 2, 0);
-  }
-  parts.push(wallGeom);
-
-  // 3. Front Snap-Fit Clasp (at +Z front face)
-  if (params.includeSnapClasp) {
-    const claspW = Math.min(24, outerW * 0.26);
-    if (isLid) {
-      // Lid cantilevered latch arm hanging down over the front seam
-      const armGeom = new THREE.BoxGeometry(claspW, 10, 2.8);
-      armGeom.translate(0, -shellH / 2 - 2.5, outerD / 2 + 1.4);
-      parts.push(armGeom);
-    } else {
-      // Base catch ridge near the top of the front wall
-      const catchGeom = new THREE.BoxGeometry(claspW + 2, 4, 2.6);
-      catchGeom.translate(0, shellH / 2 - 4.5, outerD / 2 + 1.3);
-      parts.push(catchGeom);
-    }
-  }
-
-  // 4. Rear Knuckle Hinge Lugs (at -Z back face)
-  if (params.include3dHinge) {
-    const lugW = Math.min(14, outerW * 0.16);
-    if (isLid) {
-      const centerKnuckle = new THREE.BoxGeometry(lugW, 6, 4.5);
-      centerKnuckle.translate(0, -shellH / 2, -outerD / 2 - 2.0);
-      parts.push(centerKnuckle);
-    } else {
-      for (const sign of [-1, 1]) {
-        const sideKnuckle = new THREE.BoxGeometry(lugW, 6, 4.5);
-        sideKnuckle.translate(sign * (lugW + 1), shellH / 2, -outerD / 2 - 2.0);
-        parts.push(sideKnuckle);
-      }
-    }
-  }
-
-  return mergeBufferGeometries(parts);
 }
 
 /**
