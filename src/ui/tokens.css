@@ -1,4 +1,8 @@
-/* Design tokens, copied from the bathroom planner. Only the accent family differs (olive). */
+/* Design tokens, copied from the bathroom planner. What differs:
+   - the accent family (olive instead of verdigris);
+   - the font names ('Figtree Variable', 'Bricolage Grotesque Variable');
+   - --brass and the --sketch-* tokens are dropped;
+   - --inspector-w and --inspector-w-narrow are added. */
 
 :root {
   /* Calm porcelain neutrals; the drawing carries the color. */
@@ -43,6 +47,9 @@
   --shadow-pop: 0 2px 6px rgb(23 36 43 / 0.08), 0 16px 40px rgb(23 36 43 / 0.18);
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --bar-h: 56px;
+  /* How much of the top the sticky app bar covers; none when it scrolls away. */
+  --sticky-top: var(--bar-h);
+  --tabbar-h: 0px;
   --control-h: 36px;
   --inspector-w: 380px;
   --inspector-w-narrow: 320px;
