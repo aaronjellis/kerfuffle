@@ -337,7 +337,7 @@ h4 {
 }
 
 .stage-views .viewport-pane {
-  border-bottom: 1px solid color-mix(in srgb, var(--ink) 40%, var(--stage));
+  border-bottom: 1px solid var(--stage-line);
 }
 
 .stage-views .viewport-pane:last-child {
@@ -345,8 +345,10 @@ h4 {
 }
 
 /* The pill's size, shared with the caption that sits just above it. One row of 36 px controls
-   on a wide screen; the phone block below redefines these for two rows. */
+   on a wide screen; the phone block below redefines these for two rows. The stage is a size
+   container, so the caption's place follows the stage's width, not the window's. */
 .stage {
+  container: stage / inline-size;
   --pill-pad: 4px;
   --pill-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
   --pill-row: var(--control-h);
@@ -466,9 +468,10 @@ h4 {
   font-weight: var(--w-medium);
 }
 
-/* On a narrow stage the pill takes the bottom row, so the caption sits just above it, at the
-   right, and wraps to two lines. It stays clear of the 2D view's HUD along the top. */
-@media (max-width: 1099px) {
+/* Unless the stage holds the pill (about 580 px) and the longest caption (about 400 px) side by
+   side, the pill takes the bottom row and the caption sits just above it, at the right, wrapped
+   to two lines. It stays clear of the 2D view's HUD along the top. */
+@container stage (width < 1040px) {
   .stage-caption {
     bottom: calc(var(--pill-bottom) + var(--pill-h) + 0.5rem);
     flex-wrap: wrap;
@@ -495,7 +498,9 @@ h4 {
   white-space: nowrap;
 }
 
-@media (max-width: 899px) {
+/* Under 960 px the pill can't fit the readout beside the Wireframe toggle; the range's
+   aria-valuetext still says it. */
+@media (max-width: 959px) {
   .stage-readout {
     display: none;
   }
