@@ -192,8 +192,11 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   };
 }
 
-/** Crease insets shared by the perimeter and the creases: ears and inner wall 1.5T, roll strip T. */
-const insetsFor = (T: number) => ({ earInset: 1.5 * T, innerInset: 1.5 * T, rollInset: T });
+/**
+ * Insets shared by the perimeter, the creases and the rig: ears and inner wall 1.5T, roll strip T,
+ * lid flaps 2T back from the lid's front edge (so in 3D they end flush with the tuck flap's back face).
+ */
+const insetsFor = (T: number) => ({ earInset: 1.5 * T, innerInset: 1.5 * T, rollInset: T, lidFlapSetback: 2 * T });
 
 const rectPoints = (x: number, y: number, w: number, h: number): Point2D[] => [
   { x, y },
@@ -305,7 +308,7 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
   // Lid right edge with the lid flap.
   nodes.push({ x: fr, y: y.lidTop });
   if (s.lidFlapDepth > 0) {
-    const fy0 = y.lidTop + T;
+    const fy0 = y.lidTop + insetsFor(T).lidFlapSetback;
     const fy1 = fy0 + s.lidFlapLen;
     const fx = fr + s.lidFlapDepth;
     const ch = Math.min(4, s.lidFlapDepth, s.lidFlapLen);
@@ -448,7 +451,8 @@ export function buildMailerSheet(
     ['l', fl, x.outerL, x.rollL],
     ['r', fr, x.outerR, x.rollR],
   ] as const) {
-    if (s.lidFlapDepth > 0) vertical(`score-lid-flap-${side}`, edge, y.lidTop + T, y.lidTop + T + s.lidFlapLen);
+    const fy0 = y.lidTop + insetsFor(T).lidFlapSetback;
+    if (s.lidFlapDepth > 0) vertical(`score-lid-flap-${side}`, edge, fy0, fy0 + s.lidFlapLen);
     vertical(`score-ear-back-${side}`, edge, y.backTop + earInset, y.floorTop - earInset);
     scores.push([`score-ear-front-${side}`, edge, y.frontTop + earInset, edge, frontEarEnd]);
     vertical(`score-floor-side-${side}`, edge, y.floorTop, y.frontTop);
@@ -744,12 +748,12 @@ export function buildMailerRig(
     },
   });
 
-  // Lid side flaps start T behind the lid's front edge, as on the sheet, and hang straight down
+  // Lid side flaps start 2T behind the lid's front edge, as on the sheet, and hang straight down
   // inside the inner walls, outer face against the inner wall's inner face. The 3D hinge sits on
   // the flap's mid-plane (so the flat rig stays in the floor plane), not at the lid's side edge.
   if (s.lidFlapDepth > 0) {
     const xLidFlap = xInner - T; // W/2 + T/2
-    const z = zLidFront - T - s.lidFlapLen / 2;
+    const z = zLidFront - insetsFor(T).lidFlapSetback - s.lidFlapLen / 2;
     for (const [side, sideName, sx] of sides) {
       add({
         id: `lid-flap-${side}`,

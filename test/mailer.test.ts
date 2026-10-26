@@ -215,7 +215,7 @@ describe('mailer perimeter geometry', () => {
   });
   it('puts the lid flap lead-in chamfer at the front end', () => {
     const fx = s.x.floorR + s.lidFlapDepth;
-    const fy0 = s.y.lidTop + s.T;
+    const fy0 = s.y.lidTop + 2 * s.T;
     expect(has(fx - 4, fy0)).toBe(true);
     expect(has(fx, fy0 + 4)).toBe(true);
     expect(has(fx - 4, fy0 + s.lidFlapLen)).toBe(false);
@@ -285,6 +285,21 @@ describe('mailer 3D rig', () => {
     const inner = closed(m, 'left-roll-inner');
     const maxY = Math.max(...inner.outlinePoints!.map((p) => p.y));
     expect(maxY).toBeGreaterThan(inner.heightMm + 1);
+  });
+  it('sets the lid flaps back so the front-lock ears clear them', () => {
+    for (const T of [1.5, 3]) {
+      const m = generateBoxModel({ ...base, widthMm: 110, depthMm: 80, heightMm: 55, materialThicknessMm: T, includeLidFlaps: true, cardboardLockStyle: 'front-lock' });
+      const tuck = closed(m, 'tuck-flap');
+      const ears = [tuck.closedPos[2] - T / 2, tuck.closedPos[2] + T / 2];
+      expect(Math.abs(ears[0] - (40 - T / 2))).toBeLessThan(0.01);
+      for (const id of ['lid-flap-l', 'lid-flap-r']) {
+        const f = closed(m, id);
+        const z = [f.closedPos[2] - f.widthMm / 2, f.closedPos[2] + f.widthMm / 2];
+        expect(Math.abs(z[0] - (-40 + T / 2))).toBeLessThan(0.01);
+        expect(Math.abs(z[1] - (40 - T / 2))).toBeLessThan(0.01);
+        expect(Math.min(z[1], ears[1]) - Math.max(z[0], ears[0])).toBeLessThanOrEqual(0.01);
+      }
+    }
   });
   it('adds lid flaps as children of the lid, and drops them when off', () => {
     const on = generateBoxModel({ ...base, includeLidFlaps: true, cardboardLockStyle: 'front-lock' });
