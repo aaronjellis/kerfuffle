@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "aaronjellis-labs-boxer",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "html_handling": "auto-trailing-slash"
+  },
+  "routes": [
+    { "pattern": "labs.aaronjellis.com/boxer", "zone_name": "aaronjellis.com" },
+    { "pattern": "labs.aaronjellis.com/boxer/*", "zone_name": "aaronjellis.com" }
+  ]
+}
