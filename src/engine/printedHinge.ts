@@ -7,7 +7,7 @@ import { geometriesToAsciiStl } from './stl';
  * A 3D-printed flat offset hinge for the laser-cut clamshell. Each leaf prints flat with its bed
  * face as the mounting face against the wood; the knuckle stands proud beyond the plate's edge, so
  * its axis sits on the seam 2.5 mm off the wood. Separate printed pins pass through the leaf's
- * holes into the 3.0 mm holes the laser cuts 5 mm from the seam. A filament pin runs through the
+ * holes into the 3.0 mm holes the laser cuts 6 mm from the seam. A filament pin runs through the
  * knuckles; the bore follows `hingePinDiameterMm` (default 1.75 mm filament) plus 0.25 clearance,
  * with the pin capped at 3.0 mm.
  */
@@ -25,8 +25,11 @@ const PLATE_DEPTH = 10;
 /** Gap between the axis-side plate edge and the plane through the axis (y = 0). */
 const RELIEF = 0.3;
 const HOLE_D = 3.2;
-/** Pin holes sit 5 mm from the axis, matching the laser holes 5 mm from the seam. */
-const HOLE_Y = 2.5;
+/**
+ * Pin holes sit 6 mm from the axis (at y = -2.5), matching the laser holes 6 mm from the seam. The
+ * 3.2 mm hole then leaves a 1.6 mm ligament to the plate's knuckle-side edge at y = 0.3.
+ */
+const HOLE_Y = 3.5;
 const KNUCKLE_R = 2.5;
 const AXIS_Y = -KNUCKLE_R;
 const AXIS_Z = KNUCKLE_R;
@@ -108,7 +111,7 @@ function knuckle(x0: number, x1: number, boreR: number): THREE.BufferGeometry[] 
 /**
  * The two hinge leaves, each laid flat for printing (Z up, bed face = mounting face). The plate
  * spans x 0..spacing + 8, y 0.3..10, z 0..1.6, with two 3.2 mm through-holes at
- * x = centre ± spacing/2, y = 2.5. The knuckle axis runs along X at y = -2.5, z = 2.5, split into
+ * x = centre ± spacing/2, y = 3.5. The knuckle axis runs along X at y = -2.5, z = 2.5, split into
  * three segments with 0.3 mm gaps: leaf A owns the outer two, leaf B the middle one, at the same X
  * in both frames, so they interleave once B is turned 180 degrees about Z to face A across the seam.
  */

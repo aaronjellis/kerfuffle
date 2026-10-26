@@ -650,20 +650,36 @@ describe('printed hinge', () => {
     expect(l.centersX[0]).toBeCloseTo(T + 24.2);
     expect(l.centersX[1]).toBeCloseTo(T + 85.8);
     expect(l.spacing).toBeCloseTo(8.8);
+    // Butt hardware keeps its pilot holes 5 mm from the seam; the printed hinge's are 6 mm.
     expect(l.fromSeam).toBe(5);
+    expect(hingeHoleLayout(clam, 110).fromSeam).toBe(6);
   });
 
-  it('cuts four 3.0 mm pin holes in each back wall and shows the hinges in 3D', () => {
+  it('cuts four 3.0 mm pin holes in each back wall, 6 mm from the seam, and shows the hinges in 3D', () => {
     const model = generateBoxModel({ ...clam, includeHingeScrewHoles: false });
+    // The clamshell's lid height clamp (fingerJointEngine): 18 mm on the default 55 mm box.
+    const lidH = Math.min(Math.max(12, clam.lidHeightMm), model.innerDims.heightMm - 12);
+    // Holes are built at y = T + 6 (base back, seam on its flat top edge at y = T) and
+    // y = T + lidH - 6 (lid back, seam on its flat bottom edge at y = T + lidH); the panel then
+    // shifts its paths so its outline starts at 0, so measure from the outline's seam edge.
+    const outlineY = (panel: (typeof model.panels2D)[number]) => {
+      const nums = panel.paths.find((x) => x.id === `${panel.id}-outline`)!.d.match(/-?\d+(\.\d+)?/g)!.map(Number);
+      const ys = nums.filter((_, i) => i % 2 === 1);
+      return { min: Math.min(...ys), max: Math.max(...ys) };
+    };
     for (const id of ['base-back', 'lid-back']) {
       const panel = model.panels2D.find((x) => x.id === id)!;
       const holes = panel.paths.filter((x) => x.layer === 'cut' && x.id.includes('hinge-hole'));
       expect(holes.length).toBe(4);
+      const { min, max } = outlineY(panel);
+      if (id === 'lid-back') expect(max - min).toBeCloseTo(T + lidH, 3);
       for (const h of holes) {
         const nums = h.d.match(/-?\d+(\.\d+)?/g)!.map(Number);
         // "M x0 y A r r 0 1 0 x1 y ...": radius 1.5, extent x1 - x0 = 3.0
         expect(nums[2]).toBeCloseTo(1.5);
         expect(nums[7] - nums[0]).toBeCloseTo(3.0);
+        // 6 mm from the seam edge.
+        expect(id === 'base-back' ? nums[1] - min : max - nums[1]).toBeCloseTo(6, 3);
       }
     }
     const ids = model.panels3D.map((x) => x.id);
@@ -724,7 +740,7 @@ describe('printed hinge', () => {
     expect(a[1][1]).toBeCloseTo(L, 4);
   });
 
-  it('cuts two 3.2 mm pin holes through each plate, 5 mm from the axis', () => {
+  it('cuts two 3.2 mm pin holes through each plate, 6 mm from the axis', () => {
     for (const leaf of buildPrintedHingeLeaves(spec)) {
       const pos = leaf.getAttribute('position');
       for (const dx of [-spec.spacing / 2, spec.spacing / 2]) {
@@ -733,7 +749,7 @@ describe('printed hinge', () => {
         for (let i = 0; i < pos.count; i++) {
           const z = pos.getZ(i);
           if (z < -1e-6 || z > 1.6 + 1e-6) continue;
-          const r = Math.hypot(pos.getX(i) - cx, pos.getY(i) - 2.5);
+          const r = Math.hypot(pos.getX(i) - cx, pos.getY(i) - 3.5);
           expect(r).toBeGreaterThan(1.59);
           if (Math.abs(r - 1.6) < 1e-4) onRim++;
         }
@@ -744,9 +760,17 @@ describe('printed hinge', () => {
           const ty = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
           const tz = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3;
           if (tz > 1.6 + 1e-6) continue;
-          expect(Math.hypot(tx - cx, ty - 2.5)).toBeGreaterThan(1.6 * Math.cos(Math.PI / 24) - 1e-3);
+          expect(Math.hypot(tx - cx, ty - 3.5)).toBeGreaterThan(1.6 * Math.cos(Math.PI / 24) - 1e-3);
         }
       }
+      // 6 mm from the axis at y = -2.5, and a 1.6 mm ligament to the plate's knuckle edge (y = 0.3).
+      expect(3.5 - -2.5).toBeCloseTo(6);
+      let plateMinY = Infinity;
+      for (let i = 0; i < pos.count; i++) {
+        if (pos.getZ(i) <= 1.6 + 1e-6 && pos.getY(i) > 0) plateMinY = Math.min(plateMinY, pos.getY(i));
+      }
+      expect(plateMinY).toBeCloseTo(0.3, 4);
+      expect(3.5 - 1.6 - plateMinY).toBeCloseTo(1.6, 4);
     }
   });
 

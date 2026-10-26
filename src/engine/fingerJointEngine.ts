@@ -885,7 +885,8 @@ export function generateWoodFingerBox(
 /**
  * Where the clamshell's rear hinges sit: two hinges at 22% and 78% across the back wall (2D x,
  * measured from the panel's left edge), each with two holes `spacing` apart, `fromSeam` mm from
- * the lid/base seam. Shared by the butt-hardware pilot holes and the printed hinge's peg holes.
+ * the lid/base seam. Shared by the butt-hardware pilot holes (5 mm from the seam) and the printed
+ * hinge's peg holes (6 mm, so the leaf's 3.2 mm hole keeps a 1.6 mm ligament to its knuckle edge).
  */
 export function hingeHoleLayout(
   params: BoxParameters,
@@ -895,7 +896,7 @@ export function hingeHoleLayout(
   return {
     centersX: [T + innerW * 0.22, T + innerW * 0.78],
     spacing: Math.min(12, Math.max(6, innerW * 0.08)),
-    fromSeam: 5,
+    fromSeam: params.clamshellHingeType === 'printed-hinge' ? 6 : 5,
   };
 }
 
