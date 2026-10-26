@@ -48,8 +48,6 @@ export const App: React.FC = () => {
   const [selectedArtworkId, setSelectedArtworkId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('split');
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>('mm');
-  const [assemblyProgress, setAssemblyProgress] = useState<number>(1.0);
-  const [isPlayingAnim, setIsPlayingAnim] = useState<boolean>(false);
   const [showWireframe, setShowWireframe] = useState<boolean>(false);
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
   const [settingQuery, setSettingQuery] = useState<string>('');
@@ -59,7 +57,6 @@ export const App: React.FC = () => {
   const [scrollRequest, setScrollRequest] = useState<{ id: PartId; n: number } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const animDirRef = useRef<number>(1);
 
   const model = useMemo(() => generateBoxModel(params), [params]);
 
@@ -192,31 +189,6 @@ export const App: React.FC = () => {
       window.posthog?.capture('template_changed', { template: templateId, project: ANALYTICS_PROJECT });
     }
   };
-
-  // Auto-play fold / assemble animation loop
-  useEffect(() => {
-    if (!isPlayingAnim) return;
-    let raf = 0;
-    let last = performance.now();
-    const tick = (now: number) => {
-      const dt = (now - last) / 1000;
-      last = now;
-      setAssemblyProgress((prev) => {
-        let next = prev + animDirRef.current * dt * 0.42;
-        if (next >= 1) {
-          next = 1;
-          animDirRef.current = -1;
-        } else if (next <= 0) {
-          next = 0;
-          animDirRef.current = 1;
-        }
-        return Number(next.toFixed(3));
-      });
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [isPlayingAnim]);
 
   const [alignMarginMm, setAlignMarginMm] = useState<number>(4);
   const [customFontInput, setCustomFontInput] = useState<string>('');
@@ -533,13 +505,6 @@ export const App: React.FC = () => {
           displayUnit={displayUnit}
           viewMode={viewMode}
           onViewMode={setViewMode}
-          assemblyProgress={assemblyProgress}
-          onScrub={(progress) => {
-            setIsPlayingAnim(false);
-            setAssemblyProgress(progress);
-          }}
-          isPlaying={isPlayingAnim}
-          onTogglePlay={() => setIsPlayingAnim((p) => !p)}
           showWireframe={showWireframe}
           onToggleWireframe={() => setShowWireframe((w) => !w)}
           selectedFaceId={selectedFaceId}

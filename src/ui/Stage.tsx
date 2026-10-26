@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import type { BoxParameters, DisplayUnit, FaceArtwork, GeneratedBoxModel } from '../engine/types';
 import { MACHINE_BED_PRESETS } from '../engine/presets';
@@ -18,10 +18,6 @@ interface StageProps {
   displayUnit: DisplayUnit;
   viewMode: ViewMode;
   onViewMode: (mode: ViewMode) => void;
-  assemblyProgress: number;
-  onScrub: (progress: number) => void;
-  isPlaying: boolean;
-  onTogglePlay: () => void;
   showWireframe: boolean;
   onToggleWireframe: () => void;
   selectedFaceId: string;
@@ -47,10 +43,6 @@ export const Stage: React.FC<StageProps> = ({
   displayUnit,
   viewMode: storedViewMode,
   onViewMode,
-  assemblyProgress,
-  onScrub,
-  isPlaying,
-  onTogglePlay,
   showWireframe,
   onToggleWireframe,
   selectedFaceId,
@@ -66,6 +58,40 @@ export const Stage: React.FC<StageProps> = ({
   // A phone's stage is too short to split: Split shows as 3D there, without changing the choice.
   const isPhone = useMediaQuery(PHONE_QUERY);
   const viewMode: ViewMode = isPhone && storedViewMode === 'split' ? '3d' : storedViewMode;
+  // The fold progress lives here, not in App: playing or scrubbing re-renders the stage only,
+  // never the inspector. Viewport2D is memoised, so it skips these renders too.
+  const [assemblyProgress, setAssemblyProgress] = useState(1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const animDirRef = useRef(1);
+  useEffect(() => {
+    if (!isPlaying) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      setAssemblyProgress((prev) => {
+        let next = prev + animDirRef.current * dt * 0.42;
+        if (next >= 1) {
+          next = 1;
+          animDirRef.current = -1;
+        } else if (next <= 0) {
+          next = 0;
+          animDirRef.current = 1;
+        }
+        return Number(next.toFixed(3));
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaying]);
+  const onScrub = (progress: number) => {
+    setIsPlaying(false);
+    setAssemblyProgress(progress);
+  };
+  const onTogglePlay = () => setIsPlaying((p) => !p);
+
   const bed = MACHINE_BED_PRESETS.find((b) => b.id === params.bedPresetId) ?? MACHINE_BED_PRESETS[0];
   // "xTool M2 / M1 (385 × 300 mm)" reads as "xTool M2".
   const bedName = bed.name.replace(/\s*\(.*\)$/, '').replace(/\s*\/.*$/, '');

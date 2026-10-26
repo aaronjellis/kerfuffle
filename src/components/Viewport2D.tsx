@@ -42,7 +42,7 @@ interface Viewport2DProps {
   ) => void;
 }
 
-export const Viewport2D: React.FC<Viewport2DProps> = ({
+const Viewport2DView: React.FC<Viewport2DProps> = ({
   model,
   artworks,
   selectedFaceId,
@@ -615,3 +615,6 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
     </div>
   );
 };
+
+/** Memoised: the stage re-renders on every fold frame, and the sheet doesn't depend on the fold. */
+export const Viewport2D = React.memo(Viewport2DView);

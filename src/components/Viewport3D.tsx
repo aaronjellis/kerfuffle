@@ -184,7 +184,10 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
       boxGroup.children.forEach(disposeObject);
       disposeObject(grid);
+      controls.dispose();
       renderer.dispose();
+      // Frees the WebGL context now, not at garbage collection; Chrome warns after about 16 live contexts.
+      renderer.forceContextLoss();
     };
   }, []);
 
