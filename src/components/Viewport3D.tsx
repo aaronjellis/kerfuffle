@@ -228,7 +228,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           color: spec.color,
           roughness: isPrint ? 0.35 : 0.72,
           metalness: isPrint ? 0.12 : 0.04,
-          wireframe: showWireframe,
+          // Wireframe mode draws feature edges only (below); the surface then writes depth
+          // but no colour, so hidden edges stay hidden instead of every triangle showing.
+          colorWrite: !showWireframe,
         });
 
       if (isPrint) {
@@ -353,7 +355,11 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         const edges = mesh.getObjectByName(EDGES_NAME) as THREE.LineSegments | undefined;
         if (edges) {
           const edgeMat = edges.material as THREE.LineBasicMaterial;
-          if (model.params.category === '3d-print') {
+          if (showWireframe) {
+            edges.visible = true;
+            edgeMat.color.set(on ? accent : spec.color);
+            edgeMat.opacity = on ? 1 : 0.9;
+          } else if (model.params.category === '3d-print') {
             edges.visible = on;
             edgeMat.color.set(accent);
           } else {
