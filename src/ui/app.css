@@ -1,0 +1,182 @@
+/* App frame: bar on top, stage and inspector below. Later tasks fill in the sections. */
+
+/* ---------- base ---------- */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--fs-body);
+  font-weight: var(--w-regular);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: var(--w-bold);
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------- frame ---------- */
+
+.app {
+  display: grid;
+  grid-template-rows: var(--bar-h) 1fr;
+  height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+
+.app-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.app-body {
+  display: grid;
+  grid-template-columns: 1fr var(--inspector-w);
+  min-height: 0;
+}
+
+@media (max-width: 899px) {
+  .app-body {
+    grid-template-columns: 1fr var(--inspector-w-narrow);
+  }
+}
+
+@media (max-width: 719px) {
+  .app-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 55dvh 1fr;
+  }
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--stage);
+}
+
+.inspector {
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  overflow: hidden;
+}
+
+@media (max-width: 719px) {
+  .inspector {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
+
+/* ---------- inspector ---------- */
+
+.inspect-scroll {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.inspect-fold {
+  border-top: 1px solid var(--line);
+}
+
+.inspect-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 1rem;
+  font-weight: var(--w-medium);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.inspect-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.inspect-fold > summary .icon {
+  color: var(--muted);
+  transition: transform 0.15s var(--ease-out);
+}
+
+.inspect-fold[open] > summary .icon {
+  transform: rotate(90deg);
+}
+
+.inspect-fold-body {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: 0 1rem 1rem;
+}
+
+.inspect-fold:last-child {
+  margin-bottom: 0.25rem;
+}
+
+/* ---------- stage ---------- */
+
+.stage-pill {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-float);
+}
+
+/* ---------- motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

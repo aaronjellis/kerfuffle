@@ -1,0 +1,75 @@
+/* Design tokens, copied from the bathroom planner. Only the accent family differs (olive). */
+
+:root {
+  /* Calm porcelain neutrals; the drawing carries the color. */
+  --bg: #f2f4f3;
+  --surface: #ffffff;
+  --sunken: #eef1f0;
+  --ink: #17242b;
+  --muted: #5b6970;
+  --line: #dce2e0;
+  --line-strong: #c3ccc9;
+  /* A field's edge, its only cue: 3:1 against white (WCAG 1.4.11). */
+  --field-line: #869390;
+  /* A chosen segment, raised off its track. */
+  --raised: #ffffff;
+  --raised-shadow: 0 1px 2px rgb(23 36 43 / 0.12), 0 0 0 1px rgb(23 36 43 / 0.04);
+  /* Olive: primary actions, selection, focus. */
+  --accent: #4f7a1b;
+  --accent-text: #4f7a1b;
+  --accent-fg: #ffffff;
+  --accent-soft: #e9f1dc;
+  --stage: #2b3036;
+  --danger: #b3261e;
+  --ok: #2e7d4f;
+
+  --font-ui: 'Figtree Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', var(--font-ui);
+  --fs-label: 0.8125rem;
+  --fs-body: 0.875rem;
+  --fs-h4: 0.9375rem;
+  --fs-h3: 1.0625rem;
+  --fs-h2: 1.25rem;
+  --fs-h1: 1.5rem;
+  --w-regular: 450;
+  --w-medium: 550;
+  --w-bold: 650;
+
+  --r-control: 8px;
+  --r-panel: 12px;
+  --r-pill: 999px;
+  --radius: var(--r-control);
+  --shadow-float: 0 1px 2px rgb(23 36 43 / 0.08), 0 6px 20px rgb(23 36 43 / 0.12);
+  --shadow-pop: 0 2px 6px rgb(23 36 43 / 0.08), 0 16px 40px rgb(23 36 43 / 0.18);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --bar-h: 56px;
+  --control-h: 36px;
+  --inspector-w: 380px;
+  --inspector-w-narrow: 320px;
+
+  font-family: var(--font-ui);
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111719;
+    --surface: #182124;
+    --sunken: #1f2a2e;
+    --ink: #e6ecea;
+    --muted: #9baaa9;
+    --line: #2c393d;
+    --line-strong: #3d4c51;
+    --field-line: #6a7c80;
+    --raised: #2a373b;
+    --raised-shadow: 0 0 0 1px var(--line-strong);
+    --accent: #9fcf52;
+    --accent-text: #b6dd78;
+    --accent-fg: #142007;
+    --accent-soft: #2a3a16;
+    --danger: #f2a39c;
+    --ok: #86d3a3;
+    --shadow-float: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.35);
+    --shadow-pop: 0 2px 6px rgb(0 0 0 / 0.3), 0 16px 40px rgb(0 0 0 / 0.45);
+  }
+}
