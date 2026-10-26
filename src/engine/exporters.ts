@@ -430,6 +430,7 @@ export function exportBoxDxf(model: GeneratedBoxModel): string {
 }
 
 export { export3DPrintBoxStl, export3DPrintBoxStlParts };
+export { exportXcsProject } from './xcsExporter';
 
 interface LineSegment2D {
   x1: number;

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS, MATERIAL_PRESETS, laserSettingsFor } from '../src/engine/presets';
 import { generateBoxModel } from '../src/engine/boxGenerator';
-import { buildXcsDisplays } from '../src/engine/xcsExporter';
+import { XCS_DEVICE_M2, buildXcsDisplays, buildXcsProject } from '../src/engine/xcsExporter';
+import { exportXcsProject } from '../src/engine/exporters';
 import type { BoxParameters, GeneratedBoxModel } from '../src/engine/types';
 
 describe('laserSettingsFor', () => {
@@ -161,5 +162,115 @@ describe('buildXcsDisplays', () => {
     displays.forEach((d, i) => expect(d.zOrder).toBe(i));
     expect(new Set(displays.map((d) => d.id)).size).toBe(displays.length);
     expect(displays.every((d) => d.id.startsWith('id-'))).toBe(true);
+  });
+});
+
+type Entry = {
+  type: string;
+  isFill: boolean;
+  processingType: string;
+  data: Record<string, { parameter: { customize: { power: number; speed: number; repeat: number } } }>;
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const parse = (model: GeneratedBoxModel): any => JSON.parse(exportXcsProject(model));
+const processingMap = (project: any): Map<string, Entry> => {
+  const [[, canvas]] = project.device.data.value;
+  return new Map(canvas.displays.value);
+};
+
+describe('exportXcsProject', () => {
+  it('ties the canvas id through the envelope and the processing map', () => {
+    const project = parse(mailerModel());
+    expect(project.canvas[0].id).toBe(project.canvasId);
+    expect(project.device.data.dataType).toBe('Map');
+    const [[canvasKey, canvas]] = project.device.data.value;
+    expect(canvasKey).toBe(project.canvasId);
+    expect(canvas.mode).toBe('LASER_PLANE');
+    expect(canvas.data.LASER_PLANE.thickness).toBe(1.5);
+    expect(canvas.displays.dataType).toBe('Map');
+  });
+
+  it('lists every display exactly once in the processing map with a matching type', () => {
+    const project = parse(fingerModel({ scoreInnerFaceLabels: true }));
+    const displays = project.canvas[0].displays as { id: string; type: string }[];
+    const [[, canvas]] = project.device.data.value;
+    const keys = (canvas.displays.value as [string, Entry][]).map(([k]) => k);
+    expect(keys.length).toBe(displays.length);
+    expect(new Set(keys).size).toBe(keys.length);
+    const map = processingMap(project);
+    for (const d of displays) {
+      expect(map.get(d.id)?.type).toBe('PATH');
+      expect(map.get(d.id)?.type).toBe(d.type);
+    }
+  });
+
+  it('assigns cut and score processing from the material preset', () => {
+    const project = parse(mailerModel());
+    const map = processingMap(project);
+    const displays = project.canvas[0].displays as { id: string; layerColor: string }[];
+    const cut = displays.find((d) => d.layerColor === '#FF0000')!;
+    const score = displays.find((d) => d.layerColor === '#0000FF')!;
+    const cutEntry = map.get(cut.id)!;
+    expect(cutEntry.processingType).toBe('VECTOR_CUTTING');
+    expect(cutEntry.data.VECTOR_CUTTING.parameter.customize).toMatchObject({ power: 90, speed: 10, repeat: 1 });
+    const scoreEntry = map.get(score.id)!;
+    expect(scoreEntry.processingType).toBe('VECTOR_ENGRAVING');
+    expect(scoreEntry.data.VECTOR_ENGRAVING.parameter.customize).toMatchObject({ power: 18, speed: 100, repeat: 1 });
+  });
+
+  it('keeps panel grouping in the parsed project', () => {
+    const mailer = parse(mailerModel()).canvas[0].displays as { groupTag: string }[];
+    expect(new Set(mailer.map((d) => d.groupTag)).size).toBe(1);
+
+    const model = fingerModel({ scoreInnerFaceLabels: true });
+    const finger = parse(model).canvas[0].displays as { name: string; groupTag: string }[];
+    const tags = (id: string) => {
+      const name = model.panels2D.find((p) => p.id === id)!.name;
+      return new Set(finger.filter((d) => d.name.startsWith(`${name} ·`)).map((d) => d.groupTag));
+    };
+    expect(tags('front').size).toBe(1);
+    expect(tags('back').size).toBe(1);
+    expect([...tags('front')][0]).not.toBe([...tags('back')][0]);
+  });
+
+  it('round-trips through JSON without NaN', () => {
+    for (const model of [fingerModel(), mailerModel({ scoreLineMode: 'dashed-perf' }), mailerModel({ cardboardLockStyle: 'tuck' })]) {
+      const text = exportXcsProject(model);
+      expect(text).not.toContain('NaN');
+      expect(text).not.toContain('null');
+      expect(JSON.stringify(JSON.parse(text))).toBe(text);
+    }
+  });
+
+  it('declares exactly the layer colors used', () => {
+    const cutOnly = parse(fingerModel());
+    expect(Object.keys(cutOnly.canvas[0].layerData)).toEqual(['#FF0000']);
+    const both = parse(mailerModel());
+    expect(Object.keys(both.canvas[0].layerData).sort()).toEqual(['#0000FF', '#FF0000']);
+    for (const [hex, layer] of Object.entries(both.canvas[0].layerData)) {
+      expect(layer).toMatchObject({ name: hex, visible: true });
+    }
+  });
+
+  it('stamps the injected time and device template', () => {
+    const now = 1_761_500_000_000;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const project = buildXcsProject(mailerModel(), { ...XCS_DEVICE_M2, extra: { deviceCode: 'M2' } }, now) as any;
+    expect(project.created).toBe(now);
+    expect(project.modify).toBe(now);
+    expect(project.extId).toBe('M2');
+    expect(project.extName).toBe('xTool M2');
+    expect(project.version).toBe('1.7.24');
+    expect(project.device).toMatchObject({ id: 'M2-1', extId: 'M2', extName: 'xTool M2', power: 10, deviceCode: 'M2' });
+    expect(project.device.data.dataType).toBe('Map');
+    expect(project.canvas[0].title).toBe('{panel}1');
+    expect(project.canvas[0].extendInfo.version).toBe('2.15.108');
+  });
+
+  it('matches buildXcsDisplays geometry', () => {
+    const model = mailerModel();
+    const project = parse(model);
+    const { displays } = buildXcsDisplays(model);
+    expect(project.canvas[0].displays.map((d: { dPath: string }) => d.dPath)).toEqual(displays.map((d) => d.dPath));
   });
 });
