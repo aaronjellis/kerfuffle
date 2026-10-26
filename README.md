@@ -1,6 +1,17 @@
-# Boxer (`labs.aaronjellis.com/boxer`)
+# Kerfuffle
 
-Browser-based parametric laser-cutting, cardboard packaging, and 3D-printed enclosure studio.
+Kerfuffle is a browser app that generates dielines for laser-cut finger-joint boxes, cardboard mailers and cartons, and a 3D-printed snap box. It shows each design as a 2D dieline and a 3D fold preview, and exports SVG, PDF, DXF and STL. An xTool `.xcs` project export is available behind `VITE_XCS_EXPORT=1`.
+
+It is served at https://labs.aaronjellis.com/kerfuffle.
+
+## Run it
+
+```bash
+npm install
+npm run dev      # Start the Vite dev server at http://localhost:5173/
+npm test         # Run the Vitest unit tests
+npm run build    # Typecheck and build to dist
+```
 
 ## Features
 
@@ -25,11 +36,6 @@ Browser-based parametric laser-cutting, cardboard packaging, and 3D-printed encl
 - **xTool project (`.xcs`)** opens in xTool Studio with cut and score settings already assigned. It is hidden by default: set `VITE_XCS_EXPORT=1` (see `.env.example`) to show it.
 - The `.xcs` format is reverse-engineered, so an xTool Studio update can break it and may need a fix.
 
-## Development
+## License
 
-```bash
-npm install
-npm run dev      # Start Vite dev server
-npm test         # Run Vitest unit tests
-npm run build    # Typecheck & build to dist/boxer
-```
+MIT. See `LICENSE`.

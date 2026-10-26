@@ -90,7 +90,7 @@ export async function loadGoogleFont(fontFamily: string): Promise<void> {
  */
 export function preloadCuratedGoogleFonts(): void {
   if (typeof document === 'undefined') return;
-  const batchId = 'boxer-google-fonts-batch';
+  const batchId = 'kerfuffle-google-fonts-batch';
   if (document.getElementById(batchId)) return;
 
   const familiesParam = GOOGLE_FONT_CATALOG.map(

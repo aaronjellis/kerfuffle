@@ -1,15 +1,15 @@
 {
-  "name": "labs-boxer",
+  "name": "kerfuffle",
+  "description": "Kerfuffle: a browser box dieline generator for laser-cut boxes, cardboard packaging and 3D-printed enclosures.",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "hero": "node ../_tools/hero.mjs .",
-    "preview": "npm run build && wrangler dev",
+    "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "deploy": "npm run build && npm run hero && wrangler deploy"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
@@ -27,7 +27,6 @@
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.6.3",
     "vite": "^6.0.0",
-    "vitest": "^3.0.0",
-    "wrangler": "^4.0.0"
+    "vitest": "^3.0.0"
   }
 }

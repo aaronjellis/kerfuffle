@@ -18,7 +18,7 @@ import {
   resolvePieceDimensions,
 } from '../src/engine/googleFonts';
 
-describe('Boxer Parametric Geometry & Export Engine', () => {
+describe('Kerfuffle Parametric Geometry & Export Engine', () => {
   it('computes symmetric odd finger counts (>= 3)', () => {
     expect(computeOddFingerCount(100, 10)).toBe(11);
     expect(computeOddFingerCount(90, 10)).toBe(9);

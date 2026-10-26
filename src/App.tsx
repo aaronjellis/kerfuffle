@@ -375,7 +375,7 @@ export const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const slugBase = `boxer-${params.templateId}-${Math.round(model.innerDims.widthMm)}x${Math.round(model.innerDims.depthMm)}x${Math.round(model.innerDims.heightMm)}mm`;
+  const slugBase = `kerfuffle-${params.templateId}-${Math.round(model.innerDims.widthMm)}x${Math.round(model.innerDims.depthMm)}x${Math.round(model.innerDims.heightMm)}mm`;
 
   const handleDownloadSvg = (layerFilter: 'all' | 'score-only' | 'cut-only' = 'all') => {
     const svg = exportBoxSvg(model, artworks, layerFilter);
