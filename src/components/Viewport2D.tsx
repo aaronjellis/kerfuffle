@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   DisplayUnit,
   FaceArtwork,
@@ -80,6 +80,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
     origY: number;
   } | null>(null);
 
+  const panCapturedRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number; px: number; py: number }>({
     x: 0,
     y: 0,
@@ -87,6 +88,30 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
     py: 0,
   });
   const svgRef = useRef<SVGSVGElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Wheel zoom. React's wheel listener is passive, so it can't stop a trackpad pinch from
+  // zooming the page too; a native non-passive listener can.
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.12 : 0.89;
+      setZoom((z) => Math.max(0.35, Math.min(6, Number((z * factor).toFixed(3)))));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  /** Keeps a drag's moves on the sheet even when the pointer leaves it. */
+  const capture = (pointerId: number) => {
+    try {
+      svgRef.current?.setPointerCapture(pointerId);
+    } catch {
+      // The pointer is already gone.
+    }
+  };
 
   const viewW = Math.max(bed.widthMm, sheetWidthMm) + 40;
   const viewH = Math.max(bed.heightMm, sheetHeightMm) + 40;
@@ -102,15 +127,12 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
     return { dxMm: dxPx * scaleX, dyMm: dyPx * scaleY };
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.12 : 0.89;
-    setZoom((z) => Math.max(0.35, Math.min(6, Number((z * factor).toFixed(3)))));
-  };
-
   const handlePointerDownBg = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     setIsPanning(true);
+    // A pan captures the pointer only once it moves (see handlePointerMove): capturing on
+    // pointer-down would retarget the click and stop a face from being picked.
+    panCapturedRef.current = false;
     panStartRef.current = {
       x: e.clientX,
       y: e.clientY,
@@ -140,6 +162,13 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
     }
 
     if (isPanning) {
+      if (!panCapturedRef.current) {
+        const moved = Math.hypot(e.clientX - panStartRef.current.x, e.clientY - panStartRef.current.y);
+        if (moved > 4) {
+          panCapturedRef.current = true;
+          capture(e.pointerId);
+        }
+      }
       const { dxMm, dyMm } = clientDeltaToMm(
         e.clientX - panStartRef.current.x,
         e.clientY - panStartRef.current.y
@@ -162,7 +191,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
   const vbY = -20 + pan.y + (viewH - vbH) / 2;
 
   return (
-    <div className="viewport-2d-wrapper" onWheel={handleWheel}>
+    <div className="viewport-2d-wrapper" ref={wrapperRef}>
       <div className="viewport-2d-hud">
         {/* Zoom, legend and layer toggles: two rows on a wide stage, one scrolling row on a narrow one. */}
         <div className="hud-scroll">
@@ -272,6 +301,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
         onPointerDown={handlePointerDownBg}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onPointerLeave={handlePointerUp}
       >
         <defs>
@@ -517,6 +547,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
               data-ph-capture-attribute-artwork={artwork.textConfig ? 'text' : 'image'}
               onPointerDown={(e) => {
                 e.stopPropagation();
+                capture(e.pointerId);
                 onSelectFace(artwork.faceId);
                 onSelectArtwork(artwork.id);
                 setDragArt({

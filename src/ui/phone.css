@@ -87,6 +87,16 @@
     inset: -3px 0;
   }
 
+  /* iOS Safari zooms into a focused field under 16 px and stays zoomed, which pushes the sheet
+     and the split off-screen. The second selector matches the base field rule's specificity. */
+  .inspector input,
+  .inspector select,
+  .inspector textarea,
+  .inspector .inspect-fold-body input:is([type='text'], [type='search'], :not([type])),
+  .popover select {
+    font-size: 16px;
+  }
+
   .inspect-search-clear {
     right: 0;
     width: 44px;
