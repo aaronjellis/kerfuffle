@@ -16,7 +16,11 @@ interface Viewport3DProps {
   selectedFaceId: string;
   onSelectFace: (faceId: string) => void;
   showWireframe: boolean;
+  /** The scene's clear color; the stage passes its own so the canvas and the stage match. */
+  background?: string;
 }
+
+const DEFAULT_BACKGROUND = '#0f141c';
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
   model,
@@ -25,6 +29,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   selectedFaceId,
   onSelectFace,
   showWireframe,
+  background = DEFAULT_BACKGROUND,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -49,7 +54,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     if (!container) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#0f141c');
+    scene.background = new THREE.Color(background);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(
@@ -164,6 +169,11 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       renderer.dispose();
     };
   }, []);
+
+  // The clear color can change after the scene exists.
+  useEffect(() => {
+    if (sceneRef.current) sceneRef.current.background = new THREE.Color(background);
+  }, [background]);
 
   // 2. Rebuild 3D Panel Geometries & Face Artwork Textures when model or artworks change
   useEffect(() => {
