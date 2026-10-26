@@ -79,13 +79,17 @@ export function computePrintBoxDims(
 
   // One lid-height clamp for the whole 3D box. The base interior never drops below 5 mm.
   let lidInner = Math.min(innerH - 8, Math.max(10, params.lidHeightMm));
-  // The knuckle's fill prism reaches 2R below the lid rim, so the lid must be at least 2R + 1 tall
-  // to keep it above the bed. Raise the lid into the base if the base keeps its 5 mm interior;
-  // otherwise the box is too small for the hinge and it is dropped.
+  // The knuckle's fill prism reaches 2R below each part's rim, so both lidH and baseH must be at
+  // least 2R + 1 to keep it above the bed. Raise a short lid; cap a tall lid (toward its 10 mm
+  // minimum) so the base keeps 2R + 1 and its 5 mm interior. If no lid height satisfies both, the
+  // box is too small for the hinge and it is dropped, leaving the lid clamp untouched.
   let hingeFits = params.include3dHinge;
-  const hingeLidInner = 2 * R + 1 - floor;
-  if (hingeFits && lidInner < hingeLidInner) {
-    if (innerH - hingeLidInner >= MIN_BASE_INNER_H) lidInner = hingeLidInner;
+  if (hingeFits) {
+    const hingeH = 2 * R + 1;
+    const lo = hingeH - floor;
+    const hi = Math.min(innerH + floor - hingeH, innerH - MIN_BASE_INNER_H);
+    const target = Math.min(Math.max(lidInner, lo), hi);
+    if (target >= lo && target >= Math.min(10, lidInner)) lidInner = target;
     else hingeFits = false;
   }
   const baseH = Math.max(innerH - lidInner + floor, floor + MIN_BASE_INNER_H);

@@ -302,6 +302,21 @@ describe('knuckle hinge pieces', () => {
     expect(unionBox(buildHingePieces(t, 'lid')).min.z).toBeGreaterThanOrEqual(-1e-9);
   });
 
+  it('caps a tall lid so the base knuckle fill stays above the bed', () => {
+    // wall 4 -> R 5, both parts need 11; lidHeightMm 100 would leave the base only 10.
+    const t = computePrintBoxDims({ ...p, wallThickness3dMm: 4, lidHeightMm: 100 }, 30, 30, 30);
+    if (t.hinge) {
+      expect(t.baseH).toBeGreaterThanOrEqual(2 * t.hinge.R + 1 - 1e-9);
+      expect(t.lidH).toBeGreaterThanOrEqual(2 * t.hinge.R + 1 - 1e-9);
+      expect(t.baseH + t.lidH).toBeCloseTo(30 + 2 * t.floor, 6);
+    }
+    for (const part of ['base', 'lid'] as const) {
+      for (const piece of buildHingePieces(t, part)) {
+        expect(bbox(piece.geometry).min.z).toBeGreaterThanOrEqual(-1e-9);
+      }
+    }
+  });
+
   it('returns no pieces when the hinge is off', () => {
     const off = computePrintBoxDims({ ...p, include3dHinge: false }, 60, 60, 40);
     expect(buildHingePieces(off, 'base')).toEqual([]);
