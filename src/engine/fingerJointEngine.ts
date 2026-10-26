@@ -449,11 +449,12 @@ export function generateWoodFingerBox(
   const countW = computeOddFingerCount(innerW, params.fingerWidthMm);
   const countD = computeOddFingerCount(innerD, params.fingerWidthMm);
   const countH = computeOddFingerCount(innerH, params.fingerWidthMm);
-  // One ply each side; an open box has no lid ply on top.
+  // One ply each side; an open box and the organizer (which has no top) have no lid ply on top.
+  const hasTopPly = params.templateId !== 'finger-organizer' && params.woodLidStyle !== 'open';
   const outerDims: BoxDims = {
     widthMm: innerW + 2 * T,
     depthMm: innerD + 2 * T,
-    heightMm: innerH + (params.woodLidStyle === 'open' ? T : 2 * T),
+    heightMm: innerH + (hasTopPly ? 2 * T : T),
   };
 
   const panels2D: BoxPanel2D[] = [];

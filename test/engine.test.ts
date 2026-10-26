@@ -72,6 +72,40 @@ describe('Boxer Parametric Geometry & Export Engine', () => {
     expect(model.panels2D.length).toBe(6);
   });
 
+  it('reports the 3D print box outside height as inner height plus two floors', () => {
+    const model = generateBoxModel({
+      ...DEFAULT_BOX_PARAMETERS,
+      category: '3d-print',
+      templateId: '3d-snap-box',
+      dimensionReference: 'inner',
+    });
+    expect(model.outerDims.heightMm).toBeCloseTo(
+      model.innerDims.heightMm + 2 * DEFAULT_BOX_PARAMETERS.floorThickness3dMm
+    );
+  });
+
+  it('gives the finger organizer no top ply whatever the lid style', () => {
+    const T = 3;
+    const organizer = {
+      ...DEFAULT_BOX_PARAMETERS,
+      category: 'wood-finger' as const,
+      templateId: 'finger-organizer' as const,
+      materialThicknessMm: T,
+      woodLidStyle: 'flat-lid' as const,
+    };
+    const inner = generateBoxModel({ ...organizer, dimensionReference: 'inner', heightMm: 50 });
+    expect(inner.outerDims.heightMm).toBeCloseTo(50 + T);
+    const outer = generateBoxModel({
+      ...organizer,
+      dimensionReference: 'outer',
+      widthMm: 120,
+      depthMm: 80,
+      heightMm: 60,
+    });
+    expect(outer.innerDims.heightMm).toBeCloseTo(60 - T);
+    expect(outer.outerDims.heightMm).toBeCloseTo(60);
+  });
+
   it('generates valid 2D dielines and 3D transforms across all 8 box templates', () => {
     const templates: { id: BoxTemplateId; category: 'wood-finger' | 'cardboard-fold' | '3d-print' }[] = [
       { id: 'finger-basic', category: 'wood-finger' },

@@ -193,7 +193,7 @@ export function generate3DPrintBox(
     panels2D: [basePanel2D, lidPanel2D],
     panels3D,
     summary: `3D Print Shell (${fmt(wall)}mm wall, ${fmt(rIn)}mm inner fillet, ${fmt(params.outerChamferMm)}mm bed chamfer)`,
-    outerDims: { widthMm: outerW, depthMm: outerD, heightMm: innerH + 2 * wall },
+    outerDims: { widthMm: outerW, depthMm: outerD, heightMm: innerH + 2 * floor },
   };
 }
 
