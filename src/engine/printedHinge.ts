@@ -4,27 +4,37 @@ import { hingeHoleLayout } from './fingerJointEngine';
 import { geometriesToAsciiStl } from './stl';
 
 /**
- * A 3D-printed butt hinge for the laser-cut clamshell. Each leaf press-fits into the two 3.0 mm
- * holes the laser cuts 5 mm from the seam; a 1.75 mm filament pin runs through the knuckles.
+ * A 3D-printed flat offset hinge for the laser-cut clamshell. Each leaf prints flat with its bed
+ * face as the mounting face against the wood; the knuckle stands proud beyond the plate's edge, so
+ * its axis sits on the seam 2.5 mm off the wood. Separate printed pins pass through the leaf's
+ * holes into the 3.0 mm holes the laser cuts 5 mm from the seam; a 1.75 mm filament pin runs
+ * through the knuckles.
  */
 export interface PrintedHingeSpec {
   /** Distance between a hinge's two laser-cut holes (centre to centre). */
   spacing: number;
   /** Filament pin diameter. */
   pinMm: number;
-  /** Board thickness: the pegs are this long. */
+  /** Board thickness: the press-fit pins are plate + board long. */
   boardT: number;
 }
 
 const PLATE_T = 1.6;
 const PLATE_DEPTH = 10;
-const PEG_D = 3.1;
-const PEG_Y = 5;
+/** Gap between the axis-side plate edge and the plane through the axis (y = 0). */
+const RELIEF = 0.3;
+const HOLE_D = 3.2;
+/** Pin holes sit 5 mm from the axis, matching the laser holes 5 mm from the seam. */
+const HOLE_Y = 2.5;
 const KNUCKLE_R = 2.5;
+const AXIS_Y = -KNUCKLE_R;
+const AXIS_Z = KNUCKLE_R;
 const KNUCKLE_GAP = 0.3;
+const PIN_D = 3.0;
+const PIN_PITCH = 6;
+/** Gap between pieces laid out side by side in the STL. */
+const LAYOUT_GAP = 8;
 const SEGMENTS = 24;
-/** Pegs sink this far into the plate so they do not share a face with it. */
-const OVERLAP = 0.01;
 
 function circlePoints(cx: number, cy: number, r: number, n: number): THREE.Vector2[] {
   return Array.from({ length: n }, (_, i) => {
@@ -70,39 +80,37 @@ function mergePositions(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return out;
 }
 
-/** One knuckle segment from x0 to x1: the annulus plus a fill block that ties it to the plate. */
-function knuckle(x0: number, x1: number, holeR: number): THREE.BufferGeometry[] {
-  const axisZ = KNUCKLE_R;
-  const ring = new THREE.Shape(circlePoints(0, axisZ, KNUCKLE_R, SEGMENTS));
-  ring.holes.push(new THREE.Path(circlePoints(0, axisZ, holeR, SEGMENTS).reverse()));
-
-  // Fill block y 0..R, z 0..R under the knuckle, minus the quarter of the bore it would otherwise
-  // plug: the boundary follows the bore (on the same 24-gon vertices) from (holeR, axisZ) down to
-  // (0, axisZ - holeR).
-  const fillPts: THREE.Vector2[] = [
-    new THREE.Vector2(0, 0),
-    new THREE.Vector2(KNUCKLE_R, 0),
-    new THREE.Vector2(KNUCKLE_R, axisZ),
-  ];
-  for (let k = 0; k <= SEGMENTS / 4; k++) {
-    const a = -(k / SEGMENTS) * Math.PI * 2;
-    fillPts.push(new THREE.Vector2(holeR * Math.cos(a), axisZ + holeR * Math.sin(a)));
-  }
-  const fill = new THREE.Shape(fillPts);
-
-  return [extrudeAlongX(ring, x0, x1), extrudeAlongX(fill, x0, x1)];
+function rect(x0: number, y0: number, x1: number, y1: number): THREE.Shape {
+  return new THREE.Shape([
+    new THREE.Vector2(x0, y0),
+    new THREE.Vector2(x1, y0),
+    new THREE.Vector2(x1, y1),
+    new THREE.Vector2(x0, y1),
+  ]);
 }
 
 /**
- * The two hinge leaves, each laid flat for printing (Z up), pegs up. The plate spans
- * x 0..spacing + 8, y 0..10, z 0..1.6 with its knuckle edge at y = 0; the pegs sit at
- * x = centre ± spacing/2, y = 5. The knuckle axis runs along X at y = 0, z = 2.5, split into three
- * segments with 0.3 mm gaps: leaf A owns the outer two, leaf B the middle one, at the same X in
- * both frames so they interleave once B is turned to face A across the seam.
+ * One knuckle segment from x0 to x1: the annulus around the axis plus a web that ties it to the
+ * plate. The web spans y from 0.3 outside the bore to 0.01 past the plate's edge, z 0..2.5, so it
+ * overlaps both the knuckle solid and the plate and leaves the bore clear.
+ */
+function knuckle(x0: number, x1: number, boreR: number): THREE.BufferGeometry[] {
+  const ring = new THREE.Shape(circlePoints(AXIS_Y, AXIS_Z, KNUCKLE_R, SEGMENTS));
+  ring.holes.push(new THREE.Path(circlePoints(AXIS_Y, AXIS_Z, boreR, SEGMENTS).reverse()));
+  const web = rect(AXIS_Y + boreR + 0.3, 0, RELIEF + 0.01, AXIS_Z);
+  return [extrudeAlongX(ring, x0, x1), extrudeAlongX(web, x0, x1)];
+}
+
+/**
+ * The two hinge leaves, each laid flat for printing (Z up, bed face = mounting face). The plate
+ * spans x 0..spacing + 8, y 0.3..10, z 0..1.6, with two 3.2 mm through-holes at
+ * x = centre ± spacing/2, y = 2.5. The knuckle axis runs along X at y = -2.5, z = 2.5, split into
+ * three segments with 0.3 mm gaps: leaf A owns the outer two, leaf B the middle one, at the same X
+ * in both frames, so they interleave once B is turned 180 degrees about Z to face A across the seam.
  */
 export function buildPrintedHingeLeaves(spec: PrintedHingeSpec): THREE.BufferGeometry[] {
   const L = spec.spacing + 8;
-  const holeR = (spec.pinMm + 0.25) / 2;
+  const boreR = (spec.pinMm + 0.25) / 2;
   const seg = (L - 2 * KNUCKLE_GAP) / 3;
   const ranges: [number, number][] = [
     [0, seg],
@@ -110,31 +118,38 @@ export function buildPrintedHingeLeaves(spec: PrintedHingeSpec): THREE.BufferGeo
     [2 * seg + 2 * KNUCKLE_GAP, L],
   ];
 
-  const base = (): THREE.BufferGeometry[] => {
-    const plate = new THREE.Shape([
-      new THREE.Vector2(0, 0),
-      new THREE.Vector2(L, 0),
-      new THREE.Vector2(L, PLATE_DEPTH),
-      new THREE.Vector2(0, PLATE_DEPTH),
-    ]);
-    const parts = [extrudeZ(plate, 0, PLATE_T)];
+  const plate = (): THREE.BufferGeometry => {
+    const shape = rect(0, RELIEF, L, PLATE_DEPTH);
     for (const dx of [-spec.spacing / 2, spec.spacing / 2]) {
-      const peg = new THREE.Shape(circlePoints(L / 2 + dx, PEG_Y, PEG_D / 2, SEGMENTS));
-      parts.push(extrudeZ(peg, PLATE_T - OVERLAP, spec.boardT + OVERLAP));
+      shape.holes.push(new THREE.Path(circlePoints(L / 2 + dx, HOLE_Y, HOLE_D / 2, SEGMENTS).reverse()));
     }
-    return parts;
+    return extrudeZ(shape, 0, PLATE_T);
   };
 
-  const leafA = [...base(), ...knuckle(...ranges[0], holeR), ...knuckle(...ranges[2], holeR)];
-  const leafB = [...base(), ...knuckle(...ranges[1], holeR)];
+  const leafA = [plate(), ...knuckle(...ranges[0], boreR), ...knuckle(...ranges[2], boreR)];
+  const leafB = [plate(), ...knuckle(...ranges[1], boreR)];
   return [mergePositions(leafA), mergePositions(leafB)];
 }
 
-/** Both leaves side by side in one STL: A at the origin, B 8 mm to its right. */
+/**
+ * Four press-fit pins (two per leaf), each 3.0 mm across and plate + board long, standing on the
+ * bed in a row 6 mm apart starting at x = 0, centred on y = 5.
+ */
+export function buildPrintedHingePins(spec: PrintedHingeSpec): THREE.BufferGeometry[] {
+  return Array.from({ length: 4 }, (_, i) => {
+    const pin = new THREE.Shape(circlePoints(PIN_D / 2 + i * PIN_PITCH, PLATE_DEPTH / 2, PIN_D / 2, SEGMENTS));
+    return mergePositions([extrudeZ(pin, 0, spec.boardT + PLATE_T)]);
+  });
+}
+
+/** One hinge in one STL: leaf A at the origin, leaf B 8 mm to its right, then the four pins. */
 export function printedHingeStl(spec: PrintedHingeSpec): string {
+  const L = spec.spacing + 8;
   const [a, b] = buildPrintedHingeLeaves(spec);
-  b.translate(spec.spacing + 8 + 8, 0, 0);
-  return geometriesToAsciiStl('Kerfuffle_Printed_Hinge', [a, b]);
+  b.translate(L + LAYOUT_GAP, 0, 0);
+  const pins = buildPrintedHingePins(spec);
+  for (const pin of pins) pin.translate(2 * L + 2 * LAYOUT_GAP, 0, 0);
+  return geometriesToAsciiStl('Kerfuffle_Printed_Hinge', [a, b, ...pins]);
 }
 
 /** The printed hinge sized to the clamshell's laser-cut holes. One STL is one hinge; print two. */

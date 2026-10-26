@@ -1283,11 +1283,14 @@ function generateClamshellBox(
     },
   });
 
-  // Printed hinges on the outer back face: a leaf below the seam (stays with the base), a leaf
-  // above it (swings with the lid), and the knuckle along the seam.
+  // Printed flat offset hinges on the outer back face: a leaf below the seam (stays with the base),
+  // a leaf above it (swings with the lid), and the knuckle standing proud along the seam.
   if (isPrintedHinge) {
     const leafW = hingeLayout.spacing + 8;
     const leafT = 1.6;
+    // The plate runs 2.8 to 12.5 mm from the knuckle axis, which lies on the seam.
+    const leafH = 9.7;
+    const leafFromSeam = 7.65;
     const backFaceZ = -(innerD / 2 + T);
     const leafZ = backFaceZ - leafT / 2;
     const knuckleZ = backFaceZ - 2.5;
@@ -1300,11 +1303,11 @@ function generateClamshellBox(
         name: `Printed Hinge ${i} (Base Leaf)`,
         faceId: `printed-hinge-${i}-base`,
         widthMm: leafW,
-        heightMm: 10,
+        heightMm: leafH,
         thicknessMm: leafT,
         color: '#a3a3a3',
-        closedPos: [x, seamY - 5, leafZ],
-        explodedPos: [x, seamY - 5, leafZ - explodeDist * 1.15],
+        closedPos: [x, seamY - leafFromSeam, leafZ],
+        explodedPos: [x, seamY - leafFromSeam, leafZ - explodeDist * 1.15],
         rotation: [0, 0, 0],
       });
       panels3D.push({
@@ -1312,11 +1315,11 @@ function generateClamshellBox(
         name: `Printed Hinge ${i} (Lid Leaf)`,
         faceId: `printed-hinge-${i}-lid`,
         widthMm: leafW,
-        heightMm: 10,
+        heightMm: leafH,
         thicknessMm: leafT,
         color: '#a3a3a3',
-        closedPos: [x, seamY + 5, leafZ],
-        explodedPos: [x, seamY + 5 + explodeDist * 0.75, leafZ - explodeDist * 0.75],
+        closedPos: [x, seamY + leafFromSeam, leafZ],
+        explodedPos: [x, seamY + leafFromSeam + explodeDist * 0.75, leafZ - explodeDist * 0.75],
         rotation: [0, 0, 0],
         foldRig: {
           pivotOffset: hingePivot,

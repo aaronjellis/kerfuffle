@@ -5,7 +5,7 @@ import { generateBoxModel } from '../src/engine/boxGenerator';
 import { export3DPrintBoxStl, export3DPrintBoxStlParts } from '../src/engine/exporters';
 import { buildClaspPieces, buildHingePieces, buildShellPieces, computePrintBoxDims, type PrintPiece } from '../src/engine/printParts';
 import { hingeHoleLayout } from '../src/engine/fingerJointEngine';
-import { buildPrintedHingeLeaves, exportPrintedHingeStl, printedHingeStl } from '../src/engine/printedHinge';
+import { buildPrintedHingeLeaves, buildPrintedHingePins, exportPrintedHingeStl, printedHingeStl } from '../src/engine/printedHinge';
 const p = { ...DEFAULT_BOX_PARAMETERS, category: '3d-print' as const, templateId: '3d-snap-box' as const };
 describe('print box dims', () => {
   it('derives shells, lip, hinge and clasp from the spec values', () => {
@@ -505,7 +505,7 @@ describe('printed hinge', () => {
     expect(l.fromSeam).toBe(5);
   });
 
-  it('cuts four 3.0 mm peg holes in each back wall and shows the hinges in 3D', () => {
+  it('cuts four 3.0 mm pin holes in each back wall and shows the hinges in 3D', () => {
     const model = generateBoxModel({ ...clam, includeHingeScrewHoles: false });
     for (const id of ['base-back', 'lid-back']) {
       const panel = model.panels2D.find((x) => x.id === id)!;
@@ -523,7 +523,13 @@ describe('printed hinge', () => {
       for (const part of ['base', 'lid', 'knuckle']) expect(ids).toContain(`printed-hinge-${i}-${part}`);
     }
     const lidLeaf = model.panels3D.find((x) => x.id === 'printed-hinge-1-lid')!;
+    const baseLeaf = model.panels3D.find((x) => x.id === 'printed-hinge-1-base')!;
+    const knuckle3D = model.panels3D.find((x) => x.id === 'printed-hinge-1-knuckle')!;
     expect(lidLeaf.foldRig).toBeDefined();
+    expect(lidLeaf.heightMm).toBeCloseTo(9.7);
+    expect(baseLeaf.heightMm).toBeCloseTo(9.7);
+    expect(lidLeaf.closedPos[1] - knuckle3D.closedPos[1]).toBeCloseTo(7.65);
+    expect(knuckle3D.closedPos[1] - baseLeaf.closedPos[1]).toBeCloseTo(7.65);
     expect(model.panels3D.find((x) => x.id === 'printed-hinge-1-knuckle')!.foldRig).toBeUndefined();
   });
 
@@ -533,7 +539,7 @@ describe('printed hinge', () => {
   function knuckleRanges(g: THREE.BufferGeometry): [number, number][] {
     const pos = g.getAttribute('position');
     const xs: number[] = [];
-    for (let i = 0; i < pos.count; i++) if (pos.getY(i) < -0.01) xs.push(pos.getX(i));
+    for (let i = 0; i < pos.count; i++) if (pos.getY(i) < -2.6) xs.push(pos.getX(i));
     // Knuckles are prisms along X: their only vertices sit on the two end caps, so the sorted
     // distinct x values pair up into [x0, x1] ranges.
     const ends = [...new Set(xs.map((x) => x.toFixed(4)))].map(Number).sort((a, b) => a - b);
@@ -543,33 +549,19 @@ describe('printed hinge', () => {
     return ranges;
   }
 
-  it('builds two leaves with pegs, plate and interleaving knuckles', () => {
+  it('builds two flat leaves with the knuckle off the plate edge and interleaving segments', () => {
     const leaves = buildPrintedHingeLeaves(spec);
     expect(leaves.length).toBe(2);
     for (const leaf of leaves) {
       expect(leaf.index).toBeNull();
       const b = bbox(leaf);
-      expect(b.min.z).toBeCloseTo(0, 4);
-      // The Ø5 knuckle (axis at z = 2.5) tops out at 5, above the 1.6 + 3 peg tops.
-      expect(b.max.z).toBeCloseTo(Math.max(1.6 + 3, 5), 4);
-      expect(b.min.y).toBeCloseTo(-2.5, 2);
-      expect(b.max.y).toBeCloseTo(10, 4);
       expect(b.min.x).toBeCloseTo(0, 4);
       expect(b.max.x).toBeCloseTo(L, 4);
-      // Peg tops: vertices at z = 1.6 + boardT, clustered around ±spacing/2 from the leaf center.
-      const pos = leaf.getAttribute('position');
-      const left: number[] = [];
-      const right: number[] = [];
-      for (let i = 0; i < pos.count; i++) {
-        if (Math.abs(pos.getZ(i) - 4.6) > 1e-4) continue;
-        expect(Math.abs(pos.getY(i) - 5)).toBeLessThanOrEqual(1.55 + 1e-4);
-        (pos.getX(i) < L / 2 ? left : right).push(pos.getX(i));
-      }
-      expect(left.length).toBeGreaterThan(0);
-      expect(right.length).toBeGreaterThan(0);
-      const mid = (xs: number[]) => (Math.min(...xs) + Math.max(...xs)) / 2;
-      expect(mid(left) - L / 2).toBeCloseTo(-4.4, 3);
-      expect(mid(right) - L / 2).toBeCloseTo(4.4, 3);
+      expect(b.min.y).toBeCloseTo(-5, 2);
+      expect(b.max.y).toBeCloseTo(10, 4);
+      expect(b.min.z).toBeCloseTo(0, 4);
+      expect(b.max.z).toBeCloseTo(5, 2);
+      expect(signedVolume(leaf)).toBeGreaterThan(0);
     }
     const seg = (L - 0.6) / 3;
     const a = knuckleRanges(leaves[0]);
@@ -584,26 +576,72 @@ describe('printed hinge', () => {
     expect(a[1][1]).toBeCloseTo(L, 4);
   });
 
-  it('keeps the pin bore clear of the knuckle fill', () => {
-    const [leafA] = buildPrintedHingeLeaves(spec);
-    const pos = leafA.getAttribute('position');
-    const holeR = (spec.pinMm + 0.25) / 2;
-    // No triangle centroid lies strictly inside the bore.
-    for (let i = 0; i < pos.count; i += 3) {
-      const cy = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
-      const cz = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3;
-      expect(Math.hypot(cy, cz - 2.5)).toBeGreaterThan(holeR * Math.cos(Math.PI / 24) - 1e-3);
+  it('cuts two 3.2 mm pin holes through each plate, 5 mm from the axis', () => {
+    for (const leaf of buildPrintedHingeLeaves(spec)) {
+      const pos = leaf.getAttribute('position');
+      for (const dx of [-spec.spacing / 2, spec.spacing / 2]) {
+        const cx = L / 2 + dx;
+        let onRim = 0;
+        for (let i = 0; i < pos.count; i++) {
+          const z = pos.getZ(i);
+          if (z < -1e-6 || z > 1.6 + 1e-6) continue;
+          const r = Math.hypot(pos.getX(i) - cx, pos.getY(i) - 2.5);
+          expect(r).toBeGreaterThan(1.59);
+          if (Math.abs(r - 1.6) < 1e-4) onRim++;
+        }
+        expect(onRim).toBeGreaterThan(0);
+        // No plate triangle covers the hole.
+        for (let i = 0; i < pos.count; i += 3) {
+          const tx = (pos.getX(i) + pos.getX(i + 1) + pos.getX(i + 2)) / 3;
+          const ty = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
+          const tz = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3;
+          if (tz > 1.6 + 1e-6) continue;
+          expect(Math.hypot(tx - cx, ty - 2.5)).toBeGreaterThan(1.6 * Math.cos(Math.PI / 24) - 1e-3);
+        }
+      }
     }
   });
 
-  it('serializes both leaves side by side into one STL', () => {
+  it('keeps the pin bore clear of the web', () => {
+    const boreR = (spec.pinMm + 0.25) / 2;
+    for (const leaf of buildPrintedHingeLeaves(spec)) {
+      const pos = leaf.getAttribute('position');
+      let onBore = 0;
+      for (let i = 0; i < pos.count; i++) {
+        const r = Math.hypot(pos.getY(i) + 2.5, pos.getZ(i) - 2.5);
+        expect(r).toBeGreaterThan(boreR - 0.01);
+        if (Math.abs(r - boreR) < 1e-4) onBore++;
+      }
+      expect(onBore).toBeGreaterThan(0);
+      for (let i = 0; i < pos.count; i += 3) {
+        const cy = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
+        const cz = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3;
+        expect(Math.hypot(cy + 2.5, cz - 2.5)).toBeGreaterThan(boreR * Math.cos(Math.PI / 24) - 1e-3);
+      }
+    }
+  });
+
+  it('builds four 3.0 mm pins, plate plus board long, standing on the bed', () => {
+    const pins = buildPrintedHingePins(spec);
+    expect(pins.length).toBe(4);
+    for (const pin of pins) {
+      const b = bbox(pin);
+      expect(b.min.z).toBeCloseTo(0, 4);
+      expect(b.max.z).toBeCloseTo(spec.boardT + 1.6, 4);
+      expect(b.max.x - b.min.x).toBeCloseTo(3.0, 4);
+      expect(signedVolume(pin)).toBeGreaterThan(0);
+    }
+  });
+
+  it('serializes both leaves and the pins into one STL', () => {
     const stl = printedHingeStl(spec);
     expect(stl).toContain('solid Kerfuffle_Printed_Hinge');
     expect(stl).not.toContain('NaN');
     expect(count(stl, 'facet normal')).toBeGreaterThan(100);
     const x = xExtent(stl);
     expect(x.min).toBeCloseTo(0, 2);
-    expect(x.max).toBeCloseTo(2 * L + 8, 2);
+    // Leaf B ends at 2L + 8; the pins start 8 mm later, 6 mm apart.
+    expect(x.max).toBeCloseTo(2 * L + 16 + 3 * 6 + 3, 2);
   });
 
   it('exports the hinge STL from the clamshell parameters', () => {
