@@ -166,6 +166,24 @@ describe('mailer 2D sheet', () => {
     const eys = earScore.d.match(/-?\d+(\.\d+)?/g)!.filter((_, i) => i % 2 === 1).map(Number);
     expect(Math.max(...eys) - Math.min(...eys)).toBeGreaterThanOrEqual(3 - 1e-6);
   });
+  it('thin board degrades a front lock to a tuck top and says so', () => {
+    const m = model({ cardboardLockStyle: 'front-lock', materialThicknessMm: 0.6, thumbNotch: true });
+    const s = computeMailerSpans(m.params, 110, 80, 55);
+    expect(s.lock).toBeNull();
+    expect(s.lockNote).toMatch(/too thin/);
+    expect(s.notchR).toBeCloseTo(Math.min(12, 110 / 8));
+    expect(paths(m).some((p) => p.id.startsWith('mailer-slit-'))).toBe(false);
+    const earScore = paths(m).find((p) => p.id === 'score-ear-front-l')!;
+    const eys = earScore.d.match(/-?\d+(\.\d+)?/g)!.filter((_, i) => i % 2 === 1).map(Number);
+    // Full length: frontH less an ear inset (1.5T) at each end.
+    expect(Math.max(...eys) - Math.min(...eys)).toBeCloseTo(55 + 0.3 - 2 * 1.5 * 0.6, 2);
+    expect(m.stats.fingerCountSummary).toMatch(/tuck top \(board too thin for lock ears\)/);
+  });
+  it('summary names the effective closure and ear width', () => {
+    const m = model({ cardboardLockStyle: 'front-lock', materialThicknessMm: 1.5 });
+    expect(m.stats.fingerCountSummary).toContain('front lock, 4.5 mm ears');
+    expect(computeMailerSpans(m.params, 110, 80, 55).lockNote).toBeNull();
+  });
   it('perforated mode survives a crease shorter than one perforation', () => {
     const m = model({ cardboardLockStyle: 'front-lock', scoreLineMode: 'dashed-perf', perfCutMm: 3, perfGapMm: 1.5, heightMm: 15 });
     expect(m.panels2D[0].paths.every((p) => typeof p.d === 'string')).toBe(true);

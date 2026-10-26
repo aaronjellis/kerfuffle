@@ -35,8 +35,10 @@ export interface MailerSpans {
    * inset = centerFromCrease - width/2: the slot's edge nearest the side crease.
    */
   slot: { len: number; width: number; centerFromCrease: number; inset: number };
-  /** null for the 'tuck' lock style */
+  /** null for the 'tuck' lock style, or when the board is too thin for the lock ears */
   lock: { tabW: number; tabLen: number; slitLen: number } | null;
+  /** Why a requested front lock fell back to a tuck top; null otherwise */
+  lockNote: string | null;
   /** 0 when off or when a lock is set */
   notchR: number;
   /** 2D layout, blank origin top-left, x left to right, y top to bottom */
@@ -115,6 +117,7 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   };
 
   let lock: MailerSpans['lock'] = null;
+  let lockNote: string | null = null;
   if (params.cardboardLockStyle === 'front-lock') {
     // Sideways room runs from the tuck flap's edge to the outer side wall's inner face: roll + T.
     const upper = roll + T;
@@ -124,7 +127,9 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     // Keep at least 3 mm of front ear crease attached above the slit on low boxes.
     const slitLen = Math.min(clamp(params.lockTabDepthMm, 12, tuckH) + 1, frontH - 1.5 * T - 3);
     const tabLen = Math.max(0, Math.min(clamp(params.lockTabDepthMm, 12, tuckH), slitLen - 1));
-    lock = { tabW, tabLen, slitLen };
+    // Under 2 mm the ear cannot be cut: fall back to a tuck top (no slits, full ear crease, thumb notch).
+    if (tabW < 2) lockNote = 'board too thin for lock ears';
+    else lock = { tabW, tabLen, slitLen };
   }
   const notchR = params.thumbNotch && lock === null ? Math.min(12, W / 8) : 0;
 
@@ -184,6 +189,7 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     tab,
     slot,
     lock,
+    lockNote,
     notchR,
     x,
     y,
@@ -486,6 +492,12 @@ export function buildMailerSheet(
   };
 }
 
+/** The closure the sheet actually cuts: `front lock, 4.5 mm ears` or `tuck top (board too thin for lock ears)`. */
+function closureLabel(s: MailerSpans): string {
+  if (s.lock) return `front lock, ${fmt(s.lock.tabW)} mm ears`;
+  return s.lockNote ? `tuck top (${s.lockNote})` : 'tuck top';
+}
+
 export function generateMailerBox(
   params: BoxParameters,
   W: number,
@@ -496,7 +508,7 @@ export function generateMailerBox(
   return {
     panels2D: [buildMailerSheet(spans, params, W, D, H)],
     panels3D: buildMailerRig(spans, params, W, D, H),
-    summary: `Roll-end mailer (${fmt(spans.blankW)} × ${fmt(spans.blankH)} mm blank, ${spans.lock ? 'front lock' : 'tuck top'})`,
+    summary: `Roll-end mailer (${fmt(spans.blankW)} × ${fmt(spans.blankH)} mm blank, ${closureLabel(spans)})`,
   };
 }
 
