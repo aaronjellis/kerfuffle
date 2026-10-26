@@ -178,9 +178,10 @@ describe('shell and lip pieces', () => {
   it('adds the lip for the base only, anchored into the wall', () => {
     const base = buildShellPieces(d, 'base', p.outerChamferMm);
     const lips = base.filter((x) => x.partId === 'lip');
-    expect(lips).toHaveLength(2);
+    // The 45 degree staircase (ceil(1.4 / 0.25) = 6 rings), then the anchor ring and the visible ring.
+    expect(lips).toHaveLength(6 + 2);
     expect(buildShellPieces(d, 'lid', p.outerChamferMm).some((x) => x.partId === 'lip')).toBe(false);
-    const [anchor, visible] = lips.map((x) => bbox(x.geometry));
+    const [anchor, visible] = lips.slice(-2).map((x) => bbox(x.geometry));
     // Anchor ring reaches the wall's mid-thickness line, so the lip is joined to the base.
     expect(anchor.min.x).toBeCloseTo(d.wall / 2, 5);
     expect(anchor.max.x).toBeCloseTo(d.outerW - d.wall / 2, 5);
@@ -195,8 +196,59 @@ describe('shell and lip pieces', () => {
     expect((visible.min.x + visible.max.x) / 2).toBeCloseTo(d.outerW / 2, 3);
     expect((visible.min.y + visible.max.y) / 2).toBeCloseTo(d.outerD / 2, 3);
     const all = unionBox(lips);
-    expect(all.min.z).toBeCloseTo(d.baseH - 2, 5);
+    expect(all.min.z).toBeCloseTo(d.baseH - 2 - (d.lip.clearance + d.lip.thickness), 5);
     expect(all.max.z).toBeCloseTo(d.baseH + 3, 5);
+  });
+
+  /** X of a ring's inner boundary on the left side: its +/-x-facing side faces nearest the middle. */
+  function innerLeftX(g: THREE.BufferGeometry, outerW: number): number {
+    const pos = g.getAttribute('position');
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    let best = -Infinity;
+    for (let i = 0; i < pos.count; i += 3) {
+      a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2);
+      const n = b.clone().sub(a).cross(c.clone().sub(a)).normalize();
+      const cx = (a.x + b.x + c.x) / 3;
+      if (Math.abs(n.x) > 0.9999 && cx < outerW / 2) best = Math.max(best, cx);
+    }
+    return best;
+  }
+
+  it('carries the lip anchor on a 45 degree staircase from the inner wall face', () => {
+    for (const box of [
+      d,
+      computePrintBoxDims({ ...p, wallThickness3dMm: 6 }, 80, 80, 40),
+      computePrintBoxDims({ ...p, wallThickness3dMm: 1.2 }, 60, 60, 120),
+      computePrintBoxDims({ ...p, innerFilletMm: 0.5 }, 110, 80, 55),
+    ]) {
+      const ledge = box.lip.clearance + box.lip.thickness;
+      const anchorZ = box.baseH - 2;
+      // The supporting rings: every lip piece except the visible ring (the last), bottom to top.
+      const rings = buildShellPieces(box, 'base', p.outerChamferMm)
+        .filter((x) => x.partId === 'lip')
+        .slice(0, -1)
+        .map((x) => ({ b: bbox(x.geometry), innerX: innerLeftX(x.geometry, box.outerW) }))
+        .sort((u, v) => u.b.min.z - v.b.min.z);
+      expect(rings.length).toBe(Math.ceil(ledge / 0.25 - 1e-6) + 1);
+      for (const r of rings) expect(r.b.min.z).toBeGreaterThanOrEqual(anchorZ - ledge - 0.01);
+      expect(rings[0].b.min.z).toBeCloseTo(anchorZ - ledge, 5);
+      // The first step is one step in from the inner wall face; the last stair and the anchor ring
+      // reach the lip's inner boundary.
+      expect(rings[0].innerX - box.wall).toBeCloseTo(0.25, 4);
+      expect(rings[rings.length - 1].innerX - box.wall).toBeCloseTo(ledge, 4);
+      expect(rings[rings.length - 2].innerX - box.wall).toBeCloseTo(ledge, 4);
+      for (let i = 1; i < rings.length; i++) {
+        const step = rings[i].innerX - rings[i - 1].innerX;
+        // Monotonic inward, and no step overhangs more than the ring below it is tall (45 degrees).
+        expect(step).toBeGreaterThanOrEqual(-1e-6);
+        const below = rings[i - 1].b.max.z - rings[i - 1].b.min.z;
+        expect(step).toBeLessThanOrEqual(below + 1e-4);
+        // Each ring overlaps the next: no gap between them.
+        expect(rings[i].b.min.z).toBeLessThan(rings[i - 1].b.max.z);
+      }
+      // The first step's own overhang off the wall face is no wider than it is tall.
+      expect(rings[0].innerX - box.wall).toBeLessThanOrEqual(rings[0].b.max.z - rings[0].b.min.z + 1e-4);
+    }
   });
 
   it('overlaps plate and ring and keeps the plate depth positive', () => {

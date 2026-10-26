@@ -176,6 +176,12 @@ const CORNER_SEGMENTS = 8;
  * extends out to the wall's mid-thickness line, overlapping the wall by wall/2, and carries the lip.
  */
 const LIP_EMBED = 2;
+/**
+ * The anchor ring's underside would be a flat ledge clearance + thickness wide inside the cavity.
+ * A staircase of rings LIP_STEP tall, each stepping LIP_STEP further in from the inner wall face,
+ * carries it at 45 degrees instead.
+ */
+const LIP_STEP = 0.25;
 /** Overlap between pieces that would otherwise share a face. */
 const OVERLAP = 0.01;
 
@@ -278,9 +284,36 @@ export function buildShellPieces(
       Math.max(0.5, rOut - half),
       CORNER_SEGMENTS
     ).map((p) => ({ x: p.x + half, y: p.y + half }));
+    // 45 degree staircase under the anchor ring: ring k (from the bottom) is inset k * LIP_STEP from
+    // the inner wall outline (the last one reaches the lip's inner boundary), so no step overhangs
+    // its own height. The stack spans z anchorZ - ledge..anchorZ; each ring overlaps the next.
+    const anchorZ = dims.baseH - LIP_EMBED;
+    const ledge = clearance + thickness;
+    const steps = Math.ceil(ledge / LIP_STEP - 1e-6);
+    for (let k = 1; k <= steps; k++) {
+      const inset = Math.min(k * LIP_STEP, ledge);
+      const z0 = anchorZ - ledge + (k - 1) * LIP_STEP;
+      const z1 = Math.min(anchorZ - ledge + k * LIP_STEP, anchorZ);
+      // A step wholly inside the floor plate (a very short base with a thick wall) is not needed.
+      if (z1 <= floor) continue;
+      const bottom = Math.max(z0, floor - OVERLAP);
+      const stepInner =
+        k === steps
+          ? lipInner
+          : buildRoundedRectPoints(
+              innerW - 2 * inset,
+              innerD - 2 * inset,
+              Math.max(0.5, rIn - inset),
+              CORNER_SEGMENTS
+            ).map((p) => ({ x: p.x + wall + inset, y: p.y + wall + inset }));
+      pieces.push({
+        partId: 'lip',
+        geometry: extrudeRing(anchorOuter, stepInner, bottom, z1 - bottom + OVERLAP),
+      });
+    }
     pieces.push({
       partId: 'lip',
-      geometry: extrudeRing(anchorOuter, lipInner, dims.baseH - LIP_EMBED, LIP_EMBED),
+      geometry: extrudeRing(anchorOuter, lipInner, anchorZ, LIP_EMBED),
     });
     // Visible ring: inset by the clearance, rising `height` above the rim.
     pieces.push({
