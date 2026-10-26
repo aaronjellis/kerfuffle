@@ -370,6 +370,23 @@ describe('other cardboard templates', () => {
         expect(Math.abs(clearW - inner.widthMm)).toBeLessThanOrEqual(T / 2 + 1e-6);
         expect(Math.abs(clearD - inner.depthMm)).toBeLessThanOrEqual(T / 2 + 1e-6);
       });
+      it(`${templateId} sheet uses single-ply wall spans at T=${T}`, () => {
+        const p = { ...base, ...inner, templateId, materialThicknessMm: T, dimensionReference: 'inner' as const };
+        const sheet = generateBoxModel(p).panels2D[0];
+        const { widthMm: W, depthMm: D, heightMm: H } = inner;
+        if (templateId === 'cardboard-tuck-carton') {
+          // The carton exposes only inner-size sub-faces, so assert on the blank: glue flap + 2 W spans + 2 D spans.
+          const glueW = Math.max(10, p.glueFlapMm);
+          expect(sheet.widthMm).toBeCloseTo(glueW + 2 * (W + T) + 2 * (D + T), 2);
+          const tuckH = Math.max(12, p.tuckFlapMm);
+          expect(sheet.heightMm).toBeCloseTo(2 * tuckH + 2 * (D + T) + (H + 2 * T), 2);
+        } else {
+          // Base tray blank: floor span + two wall spans (H + T) on each axis.
+          const base = generateBoxModel(p).panels2D.find((q) => q.id === 'bottom')!;
+          expect(base.widthMm - 2 * (H + T)).toBeCloseTo(W + T, 2);
+          expect(base.heightMm - 2 * (H + T)).toBeCloseTo(D + T, 2);
+        }
+      });
     }
   }
 });

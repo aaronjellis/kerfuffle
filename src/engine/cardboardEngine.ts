@@ -109,9 +109,10 @@ function generateTuckCarton(
   const dustInset = Math.max(0.8, T);
   const tuckInset = Math.max(0.8, T);
 
-  // Score-to-score panel spans include material thickness on BOTH folding sides (+2*T)
-  const dSpan = D + 2 * T;
-  const wSpan = W + 2 * T;
+  // Single-ply walls straddle their creases, so a wall's score-to-score span is inner + T.
+  // The top/bottom panels (H) keep their 2*T allowance for the dust-flap and tuck folds.
+  const dSpan = D + T;
+  const wSpan = W + T;
   const hSpan = H + 2 * T;
 
   const x0 = 0;
@@ -260,17 +261,17 @@ function generateTuckCarton(
     faceLabel: 'CARTON DIELINE',
     widthMm: x5,
     heightMm: y5,
-    safeRect: { x: x2 + T, y: y2 + T, width: W, height: H },
+    safeRect: { x: x2 + T / 2, y: y2 + T, width: W, height: H },
     sheetX: 0,
     sheetY: 0,
     paths,
     subFaces: [
-      { id: 'front', name: 'Front Face', x: x2 + T, y: y2 + T, width: W, height: H },
-      { id: 'back', name: 'Back Face', x: x4 + T, y: y2 + T, width: W, height: H },
-      { id: 'left', name: 'Left Side', x: x1 + T, y: y2 + T, width: D, height: H },
-      { id: 'right', name: 'Right Side', x: x3 + T, y: y2 + T, width: D, height: H },
-      { id: 'top', name: 'Top Lid', x: x4 + T, y: y1 + T, width: W, height: D },
-      { id: 'bottom', name: 'Bottom Closure', x: botStartX + T, y: y3 + T, width: W, height: D },
+      { id: 'front', name: 'Front Face', x: x2 + T / 2, y: y2 + T, width: W, height: H },
+      { id: 'back', name: 'Back Face', x: x4 + T / 2, y: y2 + T, width: W, height: H },
+      { id: 'left', name: 'Left Side', x: x1 + T / 2, y: y2 + T, width: D, height: H },
+      { id: 'right', name: 'Right Side', x: x3 + T / 2, y: y2 + T, width: D, height: H },
+      { id: 'top', name: 'Top Lid', x: x4 + T / 2, y: y1 + T / 2, width: W, height: D },
+      { id: 'bottom', name: 'Bottom Closure', x: botStartX + T / 2, y: y3 + T / 2, width: W, height: D },
     ],
   };
 
@@ -644,9 +645,9 @@ function generateTelescopingBox(
     trayD: number,
     trayH: number
   ): BoxPanel2D => {
-    // Score-to-score tray floor spans include +2*T bend allowance (both opposite walls fold inward); corner glue tabs step out by T
-    const wSpan = trayW + 2 * T;
-    const dSpan = trayD + 2 * T;
+    // Single-ply walls straddle their creases, so score-to-score floor spans are inner + T; corner glue tabs step out by T
+    const wSpan = trayW + T;
+    const dSpan = trayD + T;
     const hSpan = trayH + T;
     const totalW = wSpan + 2 * hSpan;
     const totalH = dSpan + 2 * hSpan;
@@ -695,7 +696,7 @@ function generateTelescopingBox(
       faceLabel,
       widthMm: totalW,
       heightMm: totalH,
-      safeRect: { x: x1 + T, y: y1 + T, width: trayW, height: trayD },
+      safeRect: { x: x1 + T / 2, y: y1 + T / 2, width: trayW, height: trayD },
       sheetX: 0,
       sheetY: 0,
       paths,
