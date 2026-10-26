@@ -45,6 +45,7 @@ import {
 import { generateBoxModel } from './engine/boxGenerator';
 import {
   export3DPrintBoxStl,
+  export3DPrintBoxStlParts,
   exportBoxDxf,
   exportBoxPdf,
   exportBoxSvg,
@@ -417,6 +418,12 @@ export const App: React.FC = () => {
     );
   };
 
+  const handleDownloadStlParts = () => {
+    const { base, lid } = export3DPrintBoxStlParts(params);
+    triggerDownload(new Blob([base], { type: 'model/stl' }), `${slugBase}-base.stl`);
+    triggerDownload(new Blob([lid], { type: 'model/stl' }), `${slugBase}-lid.stl`);
+  };
+
   const activeTemplateMeta =
     BOX_TEMPLATES.find((t) => t.id === params.templateId) || BOX_TEMPLATES[0];
   const categoryTemplates = BOX_TEMPLATES.filter(
@@ -570,6 +577,17 @@ export const App: React.FC = () => {
             >
               <Printer size={14} />
               Export STL
+            </button>
+          )}
+          {params.category === '3d-print' && (
+            <button
+              type="button"
+              className="export-btn export-btn-3d"
+              onClick={handleDownloadStlParts}
+              title="Download the base and the lid as two separate STL files"
+            >
+              <Printer size={14} />
+              STL (two files)
             </button>
           )}
         </div>

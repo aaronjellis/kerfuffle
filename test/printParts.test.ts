@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import * as THREE from 'three';
+import { generateBoxModel } from '../src/engine/boxGenerator';
+import { export3DPrintBoxStl, export3DPrintBoxStlParts } from '../src/engine/exporters';
 import { buildClaspPieces, buildHingePieces, buildShellPieces, computePrintBoxDims, type PrintPiece } from '../src/engine/printParts';
 const p = { ...DEFAULT_BOX_PARAMETERS, category: '3d-print' as const, templateId: '3d-snap-box' as const };
 describe('print box dims', () => {
@@ -434,5 +436,51 @@ describe('snap clasp pieces', () => {
         expect(signedVolume(piece.geometry)).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('STL export from the shared print pieces', () => {
+  const count = (s: string, needle: string) => s.split(needle).length - 1;
+  const xExtent = (s: string) => {
+    const xs = [...s.matchAll(/vertex (\S+) \S+ \S+/g)].map((m) => parseFloat(m[1]));
+    return { min: Math.min(...xs), max: Math.max(...xs) };
+  };
+  const outerW = (() => {
+    const m = generateBoxModel(p);
+    return computePrintBoxDims(p, m.innerDims.widthMm, m.innerDims.depthMm, m.innerDims.heightMm).outerW;
+  })();
+
+  it('writes one solid with whole triangles and no NaN', () => {
+    const stl = export3DPrintBoxStl(p);
+    const facets = count(stl, 'facet normal');
+    expect(facets).toBeGreaterThan(200);
+    expect(stl).not.toContain('NaN');
+    expect(count(stl, 'vertex ')).toBe(3 * facets);
+    expect(stl.startsWith('solid Kerfuffle_3DPrint_Box')).toBe(true);
+    expect(stl.trimEnd().endsWith('endsolid Kerfuffle_3DPrint_Box')).toBe(true);
+  });
+  it('lays the lid 12 mm to the right of the base', () => {
+    const { min, max } = xExtent(export3DPrintBoxStl(p));
+    expect(min).toBeCloseTo(0, 2);
+    expect(max).toBeCloseTo(2 * outerW + 12, 2);
+  });
+  it('splits into base and lid files, each at the origin', () => {
+    const parts = export3DPrintBoxStlParts(p);
+    const all = export3DPrintBoxStl(p);
+    expect(parts.base).toContain('solid Kerfuffle_3DPrint_Base');
+    expect(parts.lid).toContain('solid Kerfuffle_3DPrint_Lid');
+    expect(count(parts.lid, 'facet normal')).toBeLessThan(count(all, 'facet normal'));
+    expect(count(parts.base, 'facet normal') + count(parts.lid, 'facet normal')).toBe(count(all, 'facet normal'));
+    const lid = xExtent(parts.lid);
+    expect(lid.min).toBeCloseTo(0, 2);
+    expect(lid.max).toBeCloseTo(outerW, 2);
+    const base = xExtent(parts.base);
+    expect(base.min).toBeCloseTo(0, 2);
+    expect(base.max).toBeCloseTo(outerW, 2);
+  });
+  it('has fewer facets with the hinge and clasp off', () => {
+    const full = count(export3DPrintBoxStl(p), 'facet normal');
+    const bare = count(export3DPrintBoxStl({ ...p, include3dHinge: false, includeSnapClasp: false }), 'facet normal');
+    expect(bare).toBeLessThan(full);
   });
 });

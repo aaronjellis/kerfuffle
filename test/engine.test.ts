@@ -244,9 +244,9 @@ describe('Boxer Parametric Geometry & Export Engine', () => {
       category: '3d-print',
       templateId: '3d-snap-box',
     });
-    expect(stl).toContain('solid BoxerTool_3DPrint_Box');
+    expect(stl).toContain('solid Kerfuffle_3DPrint_Box');
     expect(stl).toContain('facet normal');
-    expect(stl).toContain('endsolid BoxerTool_3DPrint_Box');
+    expect(stl).toContain('endsolid Kerfuffle_3DPrint_Box');
   });
 
   it('toggles rear seam joinery on Clamshell boxes and reports exact physical panel cut dimensions', () => {

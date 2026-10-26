@@ -6,7 +6,7 @@ import {
 } from './types';
 import { EXPORT_PROFILES } from './presets';
 import { fmt, translateSvgPath } from './fingerJointEngine';
-import { export3DPrintBoxStl } from './print3dEngine';
+import { export3DPrintBoxStl, export3DPrintBoxStlParts } from './printStl';
 
 const MM_TO_PT = 72 / 25.4;
 
@@ -429,7 +429,7 @@ export function exportBoxDxf(model: GeneratedBoxModel): string {
   return lines.join('\n');
 }
 
-export { export3DPrintBoxStl };
+export { export3DPrintBoxStl, export3DPrintBoxStlParts };
 
 interface LineSegment2D {
   x1: number;
