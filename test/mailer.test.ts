@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
-import { computeMailerSpans } from '../src/engine/mailerEngine';
+import { applySideOverflow, computeMailerSpans } from '../src/engine/mailerEngine';
 
 const base = { ...DEFAULT_BOX_PARAMETERS, category: 'cardboard-fold' as const, templateId: 'cardboard-mailer' as const };
 
@@ -37,9 +37,69 @@ describe('mailer ply model', () => {
     expect(tuck.lock).toBeNull();
     expect(tuck.notchR).toBeCloseTo(Math.min(12, 110 / 8));
   });
-  it('keeps a shallow box printable: inner wall ≥ 8 and tab shallower than the wall', () => {
+  it('keeps a shallow box printable: tab shallower than the inner wall', () => {
     const s = computeMailerSpans({ ...base, materialThicknessMm: 3 }, 60, 60, 15);
-    expect(s.innerSideH).toBeGreaterThanOrEqual(8);
-    expect(s.tab.depth).toBeLessThan(s.innerSideH);
+    expect(s.innerSideH).toBeCloseTo(13.5);
+    expect(s.tab.depth).toBeCloseTo(11.5); // innerSideH - 2, below the unclamped 2T + 6 = 12
+  });
+  it('floors the inner wall at 8 and clamps the tab to fit it', () => {
+    const s = computeMailerSpans({ ...base, materialThicknessMm: 3 }, 60, 60, 8);
+    expect(s.innerSideH).toBeCloseTo(8); // H - T/2 would be 6.5
+    expect(s.tab.depth).toBeCloseTo(6); // innerSideH - 2
+  });
+  it('lays out the default box', () => {
+    const s = computeMailerSpans({ ...base, materialThicknessMm: 3, includeLidFlaps: true }, 110, 80, 55);
+    expect(s.x.tabL).toBe(0);
+    expect(s.x.innerL).toBeCloseTo(12);
+    expect(s.x.rollL).toBeCloseTo(65.5);
+    expect(s.x.outerL).toBeCloseTo(74.5);
+    expect(s.x.floorL).toBeCloseTo(131);
+    expect(s.x.floorR).toBeCloseTo(262);
+    expect(s.x.outerR).toBeCloseTo(318.5);
+    expect(s.x.rollR).toBeCloseTo(327.5);
+    expect(s.x.innerR).toBeCloseTo(381);
+    expect(s.x.tabR).toBeCloseTo(393);
+    expect(s.blankW).toBeCloseTo(393);
+    expect(s.tuckH).toBeCloseTo(30);
+    expect(s.y.tuckTop).toBe(0);
+    expect(s.y.lidTop).toBeCloseTo(30);
+    expect(s.y.backTop).toBeCloseTo(30 + 89);
+    expect(s.y.floorTop).toBeCloseTo(30 + 89 + 58);
+    expect(s.y.frontTop).toBeCloseTo(30 + 89 + 58 + 86);
+    expect(s.y.frontBottom).toBeCloseTo(30 + 89 + 58 + 86 + 58);
+    expect(s.blankH).toBeCloseTo(30 + 89 + 58 + 86 + 58);
+    expect(s.tuckR).toBeCloseTo(8);
+    expect(s.earW).toBeCloseTo(37);
+    expect(s.earH).toBeCloseTo(49);
+    expect(s.lidFlapLen).toBeCloseTo(77); // D - T
+    expect(s.tab.len).toBeCloseTo(20);
+    expect(s.tab.centers).toEqual([0.25, 0.75]);
+  });
+  it('turns the thumb notch off when asked', () => {
+    const s = computeMailerSpans({ ...base, cardboardLockStyle: 'tuck', thumbNotch: false }, 110, 80, 55);
+    expect(s.notchR).toBe(0);
+  });
+  it('caps the lock tab at the room that fits on a thin board', () => {
+    // T = 1.5, flaps on: roll 4.5, room = roll + T = 6, which is under the 8 mm floor.
+    const s = computeMailerSpans({ ...base, materialThicknessMm: 1.5, cardboardLockStyle: 'front-lock' }, 110, 80, 55);
+    expect(s.lock?.tabW).toBeCloseTo(6);
+  });
+});
+
+describe('applySideOverflow', () => {
+  const x = { tabL: 0, innerL: 5, rollL: 8, outerL: 10, floorL: 12, floorR: 50, outerR: 52, rollR: 54, innerR: 57, tabR: 62 };
+  it('leaves the layout alone when nothing overhangs', () => {
+    const r = applySideOverflow(x, 12);
+    expect(r.x).toEqual(x);
+    expect(r.blankW).toBe(62);
+  });
+  it('shifts every x right by the left overflow and widens blankW by both sides', () => {
+    // reach 30: left overflow 18, right overflow = 50 + 30 - 62 = 18
+    const r = applySideOverflow(x, 30);
+    for (const k of Object.keys(x) as (keyof typeof x)[]) expect(r.x[k]).toBeCloseTo(x[k] + 18);
+    expect(Math.min(...Object.values(r.x))).toBeGreaterThanOrEqual(0);
+    expect(r.x.floorL - 30).toBeCloseTo(0);
+    expect(r.blankW).toBeCloseTo(62 + 18 + 18);
+    expect(r.x.floorR + 30).toBeCloseTo(r.blankW);
   });
 });

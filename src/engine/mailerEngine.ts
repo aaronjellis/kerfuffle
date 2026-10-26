@@ -61,6 +61,22 @@ export interface MailerSpans {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
+/**
+ * Keeps sideways projections (lid flaps, dust ears) on the blank.
+ * `sideReach` is how far they extend past `floorL` and `floorR`. If they would
+ * land at a negative x, every x shifts right by that left overflow. `blankW` is
+ * the original `tabR` widened by the left and right overflow.
+ */
+export function applySideOverflow(
+  x: MailerSpans['x'],
+  sideReach: number,
+): { x: MailerSpans['x']; blankW: number } {
+  const left = Math.max(0, sideReach - x.floorL);
+  const right = Math.max(0, x.floorR + sideReach - x.tabR);
+  const shifted = Object.fromEntries(Object.entries(x).map(([k, v]) => [k, v + left])) as MailerSpans['x'];
+  return { x: shifted, blankW: x.tabR + left + right };
+}
+
 export function computeMailerSpans(params: BoxParameters, W: number, D: number, H: number): MailerSpans {
   const T = params.materialThicknessMm;
   const roll = params.includeLidFlaps ? 3 * T : 2 * T;
@@ -103,41 +119,29 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   const notchR = params.thumbNotch && lock === null ? Math.min(12, W / 8) : 0;
 
   // 2D layout, before any overflow shift.
-  const xL = {
-    tabL: 0,
-    innerL: tab.depth,
-    rollL: 0,
-    outerL: 0,
-    floorL: 0,
-  };
-  xL.rollL = xL.innerL + innerSideH;
-  xL.outerL = xL.rollL + roll;
-  xL.floorL = xL.outerL + outerSideH;
-  const floorR = xL.floorL + floorW;
+  const innerL = tab.depth;
+  const rollL = innerL + innerSideH;
+  const outerL = rollL + roll;
+  const floorL = outerL + outerSideH;
+  const floorR = floorL + floorW;
   const outerR = floorR + outerSideH;
   const rollR = outerR + roll;
   const innerR = rollR + innerSideH;
-  const tabR = innerR + tab.depth;
-
-  // Lid flaps (lid row) and dust ears (wall rows) extend sideways past the
-  // floor edges. Shift everything right if they would land at a negative x.
-  const sideReach = Math.max(lidFlapDepth, earW);
-  const leftOverflow = Math.max(0, sideReach - xL.floorL);
-  const rightOverflow = Math.max(0, floorR + sideReach - tabR);
-  const dx = leftOverflow;
-
-  const x: MailerSpans['x'] = {
-    tabL: xL.tabL + dx,
-    innerL: xL.innerL + dx,
-    rollL: xL.rollL + dx,
-    outerL: xL.outerL + dx,
-    floorL: xL.floorL + dx,
-    floorR: floorR + dx,
-    outerR: outerR + dx,
-    rollR: rollR + dx,
-    innerR: innerR + dx,
-    tabR: tabR + dx,
+  const xUnshifted: MailerSpans['x'] = {
+    tabL: 0,
+    innerL,
+    rollL,
+    outerL,
+    floorL,
+    floorR,
+    outerR,
+    rollR,
+    innerR,
+    tabR: innerR + tab.depth,
   };
+
+  // Lid flaps (lid row) and dust ears (wall rows) extend sideways past the floor edges.
+  const { x, blankW } = applySideOverflow(xUnshifted, Math.max(lidFlapDepth, earW));
 
   const y: MailerSpans['y'] = {
     tuckTop: 0,
@@ -173,7 +177,7 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     notchR,
     x,
     y,
-    blankW: tabR + leftOverflow + rightOverflow,
+    blankW,
     blankH: y.frontBottom,
   };
 }
