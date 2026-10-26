@@ -32,11 +32,12 @@ describe('print box dims', () => {
     expect(d.hinge!.R).toBe(2.6);
   });
   it('keeps the clasp between the corner fillets and drops it when it cannot fit', () => {
-    const small = computePrintBoxDims({ ...p, outerFilletMm: 4 }, 15, 15, 20);
+    // 30 mm tall so the base clears the clasp's height rule (baseH >= 10.5).
+    const small = computePrintBoxDims({ ...p, outerFilletMm: 4 }, 15, 15, 30);
     expect(small.outerW).toBeCloseTo(19.8);
     expect(small.clasp!.width).toBeLessThanOrEqual(19.8 - 12 + 1e-9);
     expect(small.clasp!.width).toBeCloseTo(7.8);
-    const none = computePrintBoxDims({ ...p, outerFilletMm: 6 }, 15, 15, 20);
+    const none = computePrintBoxDims({ ...p, outerFilletMm: 6 }, 15, 15, 30);
     expect(none.clasp).toBeNull();
   });
   it('nulls features that are switched off', () => {
@@ -75,7 +76,7 @@ describe('print box dims', () => {
   it('sets the clasp constants and ridge position', () => {
     const c = computePrintBoxDims(p, 110, 80, 55).clasp!;
     expect(c).toMatchObject({ tongueT: 1.6, hang: 8, hookProud: 0.8, standoff: 1.0, ridgeH: 1.5 });
-    expect(c.ridgeTop).toBeCloseTo(8 - 0.8 - 1.5 - 0.1);
+    expect(c.ridgeTop).toBeCloseTo(8 - 0.8 - 1.5 - 0.3);
   });
 });
 
@@ -364,8 +365,8 @@ describe('snap clasp pieces', () => {
     const b = bbox(base[0].geometry);
     expect(b.min.y).toBeCloseTo(-c.hookProud, 4);
     expect(b.max.y).toBeCloseTo(d.wall / 2, 4);
-    expect(b.min.z).toBeCloseTo(d.baseH - 7.1, 4);
-    expect(b.max.z).toBeCloseTo(d.baseH - 5.6, 4);
+    expect(b.min.z).toBeCloseTo(d.baseH - 6.9, 4);
+    expect(b.max.z).toBeCloseTo(d.baseH - 5.4, 4);
     expect(b.max.x - b.min.x).toBeCloseTo(c.width + 1, 4);
     expect(b.min.x + b.max.x).toBeCloseTo(d.outerW, 4);
   });
@@ -374,7 +375,7 @@ describe('snap clasp pieces', () => {
     // The hook: the lid piece that lies between the tongue and the front face.
     const hook = buildClaspPieces(d, 'lid').find((piece) => {
       const b = bbox(piece.geometry);
-      return b.max.y < 0 && b.min.y > -c.standoff - 1e-6;
+      return b.max.y < 0 && b.min.y > -c.standoff - 0.1;
     });
     expect(hook).toBeDefined();
     const hb = bbox(hook!.geometry);
@@ -383,25 +384,38 @@ describe('snap clasp pieces', () => {
     const hookTopBelowSeam = hb.min.z - d.lidH;
     const ridgeBottomBelowSeam = d.baseH - ridge.min.z;
     expect(hookTopBelowSeam).toBeCloseTo(7.2, 4);
-    expect(ridgeBottomBelowSeam).toBeCloseTo(7.1, 4);
+    expect(ridgeBottomBelowSeam).toBeCloseTo(6.9, 4);
     expect(hb.max.z - d.lidH).toBeCloseTo(c.hang, 4);
-    // Engagement is 0.6 mm in Y (hook -1.0..-0.2 vs ridge -0.8..0), with 0.1 mm Z clearance
+    // Engagement is 0.6 mm in Y (hook -1.0..-0.2 vs ridge -0.8..0), with 0.3 mm Z clearance
     // between the ridge's underside and the hook's catch face after the snap.
     const yOverlap = Math.min(hb.max.y, ridge.max.y) - Math.max(hb.min.y, ridge.min.y);
     expect(yOverlap).toBeCloseTo(0.6, 6);
-    expect(hookTopBelowSeam - ridgeBottomBelowSeam).toBeCloseTo(0.1, 6);
+    // Precision 5: both terms are float32 differences near 30 mm (~8e-7 rounding).
+    expect(hookTopBelowSeam - ridgeBottomBelowSeam).toBeCloseTo(0.3, 5);
   });
 
   it('keeps the clasp between the corner fillets on a small, round box', () => {
-    const t = computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 20);
-    if (t.clasp) expect(t.clasp.width).toBeLessThanOrEqual(t.outerW - 2 * (8 + 2) + 1e-9);
-    else expect(buildClaspPieces(t, 'lid')).toEqual([]);
+    // 30 mm tall: at 20 mm the base is only 10 mm, under the clasp's 10.5 mm height rule.
+    const t = computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 30);
+    expect(t.clasp).not.toBeNull();
+    expect(t.clasp!.width).toBeLessThanOrEqual(t.outerW - 2 * (8 + 2) + 1e-9);
     for (const part of ['base', 'lid'] as const) {
-      const pieces = buildClaspPieces(t, part);
-      if (pieces.length) {
-        const u = unionBox(pieces);
-        expect(u.min.x).toBeGreaterThanOrEqual(8 - 1e-9);
-        expect(u.max.x).toBeLessThanOrEqual(t.outerW - 8 + 1e-9);
+      const u = unionBox(buildClaspPieces(t, part));
+      expect(u.min.x).toBeGreaterThanOrEqual(8 - 1e-4);
+      expect(u.max.x).toBeLessThanOrEqual(t.outerW - 8 + 1e-4);
+    }
+    expect(computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 20).clasp).toBeNull();
+  });
+
+  it('drops the clasp when the base is too short for the tongue', () => {
+    const t = computePrintBoxDims({ ...p, floorThickness3dMm: 1.2, lidHeightMm: 100 }, 30, 30, 20);
+    if (t.clasp) expect(t.baseH).toBeGreaterThanOrEqual(10.5 - 1e-9);
+    else expect(buildClaspPieces(t, 'lid')).toEqual([]);
+    // Whenever a clasp exists, the lid's pieces in the world stay above the base's bed: print
+    // z = lidH + k is k below the seam, and the seam is baseH above the bed.
+    for (const box of [t, d, computePrintBoxDims(p, 30, 30, 30)]) {
+      for (const piece of buildClaspPieces(box, 'lid')) {
+        expect(bbox(piece.geometry).max.z - box.lidH).toBeLessThanOrEqual(box.baseH + 1e-4);
       }
     }
   });

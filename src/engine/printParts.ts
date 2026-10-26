@@ -57,6 +57,10 @@ const MIN_HINGE_R = 2.6;
 const PIN_CLEARANCE = 0.25;
 const LIP_HEIGHT = 3;
 const MIN_BASE_INNER_H = 5;
+const CLASP_HANG = 8;
+/** The tongue runs this far past the hook (the thumb lip). */
+const CLASP_TIP = 2;
+const CATCH_CLEARANCE = 0.3;
 
 /** Smallest odd integer >= n. */
 function oddUp(n: number): number {
@@ -112,12 +116,14 @@ export function computePrintBoxDims(
   }
 
   // The clasp sits on the flat front face, so it stays clear of the corner fillets. Below 4 mm
-  // wide it is dropped, the same as when the toggle is off.
+  // wide it is dropped, the same as when the toggle is off. The lid's tongue reaches hang + 2 below
+  // the seam, so a base shorter than that plus 0.5 mm drops it too: the tongue would pass the bed.
   const claspWidth = Math.max(
     0,
     Math.min(Math.min(18, Math.max(10, outerW * 0.25)), outerW - 2 * (params.outerFilletMm + 2))
   );
-  const clasp: PrintBoxDims['clasp'] = params.includeSnapClasp && claspWidth >= 4
+  const claspFits = baseH >= CLASP_HANG + CLASP_TIP + 0.5;
+  const clasp: PrintBoxDims['clasp'] = params.includeSnapClasp && claspWidth >= 4 && claspFits
     ? {
         width: claspWidth,
         tongueT: 1.6,
@@ -125,7 +131,8 @@ export function computePrintBoxDims(
         hookProud: 0.8,
         standoff: 1.0,
         ridgeH: 1.5,
-        ridgeTop: 8 - 0.8 - 1.5 - 0.1,
+        // 0.3 mm catch clearance under the ridge, to survive FDM droop on the 0.8 mm catch faces.
+        ridgeTop: CLASP_HANG - 0.8 - 1.5 - CATCH_CLEARANCE,
       }
     : null;
 
@@ -352,7 +359,7 @@ export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
 /** How far the boss reaches down the lid's front face from the rim, print z. */
 const BOSS_H = 4;
 /** Thumb lip: the tongue's last THUMB_LEN mm flare THUMB_FLARE mm away from the box. */
-const THUMB_LEN = 2;
+const THUMB_LEN = CLASP_TIP;
 const THUMB_FLARE = 1;
 
 /** A Y-Z polygon (shape x -> world y, shape y -> world z) extruded across x0..x1. */
@@ -375,7 +382,7 @@ function yzPrism(pts: [number, number][], x0: number, x1: number): PrintPiece {
  * `hookProud` toward the box, a 45 degree triangle at z rim + hang - hookProud .. rim + hang; and a
  * thumb lip on the tongue's outer face over its last 2 mm. The lid prints rim-down in the world, so
  * print "up" is world "down": the hook's flat face at z = rim + hang - hookProud is its top in the
- * world (it seats 0.1 mm under the ridge's underside), and its 45 degree ramp is the lead-in.
+ * world (it seats 0.3 mm under the ridge's underside), and its 45 degree ramp is the lead-in.
  */
 export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): PrintPiece[] {
   const { clasp, outerW, wall } = dims;
@@ -437,23 +444,26 @@ export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
     ),
     // Hook: a 45 degree triangle, flat catch face at hookZ0, ramp back to the tongue at hookZ1.
     // Engagement is hookProud - (standoff - hookProud) = 0.6 mm in Y (hook -1.0..-0.2 vs ridge
-    // -0.8..0), with 0.1 mm Z clearance under the ridge after the snap: the catch face is
-    // hang - hookProud = 7.2 below the seam in the world, the ridge underside 7.1.
+    // -0.8..0), with 0.3 mm Z clearance under the ridge after the snap: the catch face is
+    // hang - hookProud = 7.2 below the seam in the world, the ridge underside 6.9. The hook's back
+    // edge reaches OVERLAP into the tongue so the two do not merely share a face.
     yzPrism(
       [
-        [inY, hookZ0],
+        [inY - OVERLAP, hookZ0],
         [inY + hookProud, hookZ0],
         [inY, hookZ1],
+        [inY - OVERLAP, hookZ1],
       ],
       x0,
       x1
     ),
-    // Thumb lip on the tongue's outer face.
+    // Thumb lip on the tongue's outer face, reaching OVERLAP into the tongue.
     yzPrism(
       [
-        [outY, tipZ - THUMB_LEN],
-        [outY, tipZ],
+        [outY + OVERLAP, tipZ - THUMB_LEN],
+        [outY + OVERLAP, tipZ],
         [outY - THUMB_FLARE, tipZ],
+        [outY, tipZ - THUMB_LEN],
       ],
       x0,
       x1
