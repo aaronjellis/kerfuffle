@@ -1,7 +1,7 @@
 import { GeneratedBoxModel } from './types';
 import { EXPORT_PROFILES, laserSettingsFor } from './presets';
 import { translateSvgPath } from './fingerJointEngine';
-import { svgPathToPolylines } from './exporters';
+import { effectiveLayer, svgPathToPolylines } from './exporters';
 
 /** One PATH shape on an xTool Studio canvas (`canvas[0].displays[]` in a `.xcs` file). */
 export interface XcsDisplay {
@@ -81,7 +81,6 @@ export function buildXcsDisplays(
   const displays: XcsDisplay[] = [];
   const layerOf = new Map<string, 'cut' | 'score'>();
   const cutThrough = new Set<string>();
-  const perforated = model.params.scoreLineMode === 'dashed-perf';
   const groupOf = new Map<string, string>();
 
   for (const panel of model.panels2D) {
@@ -157,7 +156,7 @@ export function buildXcsDisplays(
         graphicY: 0,
       });
       layerOf.set(id, layer);
-      if (layer === 'score' && perforated && path.isFoldScore) cutThrough.add(id);
+      if (layer === 'score' && effectiveLayer(path, model.params) === 'cut') cutThrough.add(id);
     }
   }
 

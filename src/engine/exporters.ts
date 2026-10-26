@@ -1,6 +1,8 @@
 import { PDFDocument, rgb } from 'pdf-lib';
 import {
+  BoxParameters,
   BoxPanel2D,
+  DielinePath,
   FaceArtwork,
   GeneratedBoxModel,
 } from './types';
@@ -59,6 +61,15 @@ export function resolveSheetArtworks(
   }
 
   return result;
+}
+
+/**
+ * The layer a path is processed on. Dashed perforation segments are fold scores that must
+ * cut through, so they count as cut; everything else keeps its own layer.
+ */
+export function effectiveLayer(path: DielinePath, params: BoxParameters): 'cut' | 'score' | 'guide' {
+  if (path.layer === 'score' && path.isFoldScore && params.scoreLineMode === 'dashed-perf') return 'cut';
+  return path.layer;
 }
 
 const escapeAttr = (s: string) =>
@@ -166,14 +177,13 @@ export function exportBoxSvg(
     const panelCutSubpaths: string[] = [];
 
     for (const path of panel.paths) {
-      if (path.layer === 'guide') continue;
+      const layer = effectiveLayer(path, params);
+      if (layer === 'guide') continue;
       const bakedD = translateSvgPath(path.d, panel.sheetX, panel.sheetY, unitScale);
-      // Dashed perforation segments must cut through, so they share the cut layer.
-      const isPerf = path.layer === 'score' && path.isFoldScore && params.scoreLineMode === 'dashed-perf';
-      if (path.layer === 'score' && !isPerf && includeScore) {
+      if (layer === 'score' && includeScore) {
         panelScoreSubpaths.push(bakedD);
         allScoreSubpaths.push(bakedD);
-      } else if ((path.layer === 'cut' || isPerf) && includeCut) {
+      } else if (layer === 'cut' && includeCut) {
         panelCutSubpaths.push(bakedD);
         allCutSubpaths.push(bakedD);
       }
@@ -342,7 +352,7 @@ export async function exportBoxPdf(
 
   for (const panel of panels2D) {
     for (const layer of ['score', 'cut'] as const) {
-      const layerPaths = panel.paths.filter((p) => p.layer === layer);
+      const layerPaths = panel.paths.filter((p) => effectiveLayer(p, params) === layer);
       if (layerPaths.length === 0) continue;
 
       const subpathsPt: string[] = [];
@@ -400,9 +410,10 @@ export function exportBoxDxf(model: GeneratedBoxModel): string {
 
   for (const panel of panels2D) {
     for (const path of panel.paths) {
-      if (path.layer === 'guide') continue;
-      const layerName = path.layer === 'cut' ? 'CUT' : 'SCORE';
-      const colorCode = path.layer === 'cut' ? '1' : '5'; // 1 = Red, 5 = Blue
+      const layer = effectiveLayer(path, model.params);
+      if (layer === 'guide') continue;
+      const layerName = layer === 'cut' ? 'CUT' : 'SCORE';
+      const colorCode = layer === 'cut' ? '1' : '5'; // 1 = Red, 5 = Blue
       const polylines = svgPathToPolylines(path.d, panel.sheetX, panel.sheetY);
       for (const poly of polylines) {
         if (poly.points.length < 2) continue;

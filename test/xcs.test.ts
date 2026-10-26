@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS, EXPORT_PROFILES, MATERIAL_PRESETS, laserSettingsFor } from '../src/engine/presets';
 import { generateBoxModel } from '../src/engine/boxGenerator';
 import { XCS_DEVICE_M2, buildXcsDisplays, buildXcsProject, uuidV4 } from '../src/engine/xcsExporter';
-import { exportBoxSvg, exportXcsProject } from '../src/engine/exporters';
+import { effectiveLayer, exportBoxDxf, exportBoxSvg, exportXcsProject } from '../src/engine/exporters';
 import type { BoxParameters, GeneratedBoxModel } from '../src/engine/types';
 
 describe('laserSettingsFor', () => {
@@ -390,5 +390,40 @@ describe('perforations in the SVG', () => {
 
   it('keeps solid fold scores on the score color', () => {
     expect(scoreSvg('solid-score')).toContain(`stroke="${profile.scoreColor}"`);
+  });
+});
+
+describe('effectiveLayer', () => {
+  const score = { id: 's', layer: 'score' as const, d: 'M 0 0 L 1 0', closed: false, isFoldScore: true };
+  const solid = { ...DEFAULT_BOX_PARAMETERS, scoreLineMode: 'solid-score' as const };
+  const dashed = { ...DEFAULT_BOX_PARAMETERS, scoreLineMode: 'dashed-perf' as const };
+
+  it('turns dashed fold scores into cuts and leaves everything else alone', () => {
+    expect(effectiveLayer(score, dashed)).toBe('cut');
+    expect(effectiveLayer(score, solid)).toBe('score');
+    expect(effectiveLayer({ ...score, isFoldScore: false }, dashed)).toBe('score');
+    expect(effectiveLayer({ ...score, layer: 'cut' }, dashed)).toBe('cut');
+    expect(effectiveLayer({ ...score, layer: 'guide' }, dashed)).toBe('guide');
+  });
+});
+
+describe('perforations in the DXF', () => {
+  const layersOf = (dxf: string) => {
+    const rows = dxf.split('\n');
+    const out: string[] = [];
+    rows.forEach((r, i) => {
+      if (r.trim() === 'LWPOLYLINE') out.push(rows[i + 2].trim());
+    });
+    return out;
+  };
+
+  it('puts perforation entities on CUT in dashed mode and SCORE in solid mode', () => {
+    const dashed = mailerModel({ scoreLineMode: 'dashed-perf' });
+    const solid = mailerModel({ scoreLineMode: 'solid-score' });
+    const foldCount = dashed.panels2D.flatMap((p) => p.paths).filter((p) => p.isFoldScore).length;
+    expect(foldCount).toBeGreaterThan(0);
+    expect(layersOf(exportBoxDxf(dashed))).toContain('CUT');
+    expect(layersOf(exportBoxDxf(dashed))).not.toContain('SCORE');
+    expect(layersOf(exportBoxDxf(solid))).toContain('SCORE');
   });
 });
