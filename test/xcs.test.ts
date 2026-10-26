@@ -274,3 +274,31 @@ describe('exportXcsProject', () => {
     expect(project.canvas[0].displays.map((d: { dPath: string }) => d.dPath)).toEqual(displays.map((d) => d.dPath));
   });
 });
+
+describe('perforation processing', () => {
+  const processingOf = (model: GeneratedBoxModel) => {
+    const ids = seqIds();
+    const { layerOf } = buildXcsDisplays(model, seqIds());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const project = buildXcsProject(model, XCS_DEVICE_M2, 0, ids) as any;
+    return { layerOf, map: processingMap(project), displays: project.canvas[0].displays as { id: string; layerColor: string }[] };
+  };
+
+  it('cuts dashed perforations through while keeping the score color', () => {
+    const model = mailerModel({ scoreLineMode: 'dashed-perf' });
+    const { layerOf, map, displays } = processingOf(model);
+    const perfs = displays.filter((d) => layerOf.get(d.id) === 'score' && map.get(d.id)!.processingType === 'VECTOR_CUTTING');
+    expect(perfs.length).toBeGreaterThan(0);
+    for (const d of perfs) {
+      expect(d.layerColor).toBe('#0000FF');
+      expect(map.get(d.id)!.data.VECTOR_CUTTING.parameter.customize).toMatchObject({ power: 90, speed: 10, repeat: 1 });
+    }
+  });
+
+  it('engraves every score-layer display in solid-score mode', () => {
+    const { layerOf, map, displays } = processingOf(mailerModel({ scoreLineMode: 'solid-score' }));
+    const scores = displays.filter((d) => layerOf.get(d.id) === 'score');
+    expect(scores.length).toBeGreaterThan(0);
+    for (const d of scores) expect(map.get(d.id)!.processingType).toBe('VECTOR_ENGRAVING');
+  });
+});
