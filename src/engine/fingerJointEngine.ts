@@ -883,6 +883,23 @@ export function generateWoodFingerBox(
 }
 
 /**
+ * Where the clamshell's rear hinges sit: two hinges at 22% and 78% across the back wall (2D x,
+ * measured from the panel's left edge), each with two holes `spacing` apart, `fromSeam` mm from
+ * the lid/base seam. Shared by the butt-hardware pilot holes and the printed hinge's peg holes.
+ */
+export function hingeHoleLayout(
+  params: BoxParameters,
+  innerW: number
+): { centersX: number[]; spacing: number; fromSeam: number } {
+  const T = params.materialThicknessMm;
+  return {
+    centersX: [T + innerW * 0.22, T + innerW * 0.78],
+    spacing: Math.min(12, Math.max(6, innerW * 0.08)),
+    fromSeam: 5,
+  };
+}
+
+/**
  * Generates a Clamshell / Treasure Chest Box with Base + Hinged Lid
  */
 function generateClamshellBox(
@@ -918,20 +935,24 @@ function generateClamshellBox(
     return pts;
   };
 
-  // Helper to generate optional brass butt-hinge pilot screw holes along the flat rear seam
+  const hingeLayout = hingeHoleLayout(params, innerW);
+  const isPrintedHinge = params.clamshellHingeType === 'printed-hinge';
+
+  // Rear hinge holes along the flat seam: brass butt-hinge pilot screw holes (optional), or the
+  // 3.0 mm holes the printed hinge's pegs press into (always cut for that hinge type).
   const buildHardwareHingeHoles = (
     panelId: string,
     yHoleMm: number
   ): { paths: DielinePath[]; holes3D: Point2D[][] } => {
     const paths: DielinePath[] = [];
     const holes3D: Point2D[][] = [];
-    if (params.clamshellHingeType !== 'butt-hardware' || !params.includeHingeScrewHoles) {
+    const isButt = params.clamshellHingeType === 'butt-hardware' && params.includeHingeScrewHoles;
+    if (!isButt && !isPrintedHinge) {
       return { paths, holes3D };
     }
-    const r = Math.max(0.6, (params.hingePinDiameterMm || 2.0) / 2);
-    // Two standard butt hinges positioned at 22% and 78% across the back wall width, each with 2 screw holes
-    const hingeCentersX = [T + innerW * 0.22, T + innerW * 0.78];
-    const holeSpacing = Math.min(12, Math.max(6, innerW * 0.08));
+    const r = isPrintedHinge ? 1.5 : Math.max(0.6, (params.hingePinDiameterMm || 2.0) / 2);
+    const hingeCentersX = hingeLayout.centersX;
+    const holeSpacing = hingeLayout.spacing;
     for (let hIdx = 0; hIdx < hingeCentersX.length; hIdx++) {
       const hx = hingeCentersX[hIdx];
       for (const [sIdx, dx] of [
@@ -990,7 +1011,7 @@ function generateClamshellBox(
     const topMode: EdgeJointMode =
       !isFront && params.clamshellHingeType === 'knuckle-pin' ? 'even-tabs' : 'flat-inner';
     const baseHingeHoles = !isFront
-      ? buildHardwareHingeHoles('base-back', T + 5.0)
+      ? buildHardwareHingeHoles('base-back', T + hingeLayout.fromSeam)
       : { paths: [], holes3D: [] };
     const res = specToPanel2D({
       id: `base-${side}`,
@@ -1128,7 +1149,7 @@ function generateClamshellBox(
       !isFront && params.clamshellHingeType === 'knuckle-pin' ? 'odd-tabs' : 'flat-inner';
     // In 2D shifted coordinates for Lid Back, topEdge has tabs (height T) + lidH, so bottom flat seam is at y = T + lidH
     const lidHingeHoles = !isFront
-      ? buildHardwareHingeHoles('lid-back', T + lidH - 5.0)
+      ? buildHardwareHingeHoles('lid-back', T + lidH - hingeLayout.fromSeam)
       : { paths: [], holes3D: [] };
     const res = specToPanel2D({
       id: `lid-${side}`,
@@ -1261,6 +1282,64 @@ function generateClamshellBox(
       stage: [0.45, 1.0],
     },
   });
+
+  // Printed hinges on the outer back face: a leaf below the seam (stays with the base), a leaf
+  // above it (swings with the lid), and the knuckle along the seam.
+  if (isPrintedHinge) {
+    const leafW = hingeLayout.spacing + 8;
+    const leafT = 1.6;
+    const backFaceZ = -(innerD / 2 + T);
+    const leafZ = backFaceZ - leafT / 2;
+    const knuckleZ = backFaceZ - 2.5;
+    hingeLayout.centersX.forEach((cx2D, idx) => {
+      const i = idx + 1;
+      // The back wall is turned by pi about Y, so its 2D x runs toward world -x.
+      const x = innerW / 2 + T - cx2D;
+      panels3D.push({
+        id: `printed-hinge-${i}-base`,
+        name: `Printed Hinge ${i} (Base Leaf)`,
+        faceId: `printed-hinge-${i}-base`,
+        widthMm: leafW,
+        heightMm: 10,
+        thicknessMm: leafT,
+        color: '#a3a3a3',
+        closedPos: [x, seamY - 5, leafZ],
+        explodedPos: [x, seamY - 5, leafZ - explodeDist * 1.15],
+        rotation: [0, 0, 0],
+      });
+      panels3D.push({
+        id: `printed-hinge-${i}-lid`,
+        name: `Printed Hinge ${i} (Lid Leaf)`,
+        faceId: `printed-hinge-${i}-lid`,
+        widthMm: leafW,
+        heightMm: 10,
+        thicknessMm: leafT,
+        color: '#a3a3a3',
+        closedPos: [x, seamY + 5, leafZ],
+        explodedPos: [x, seamY + 5 + explodeDist * 0.75, leafZ - explodeDist * 0.75],
+        rotation: [0, 0, 0],
+        foldRig: {
+          pivotOffset: hingePivot,
+          axis: 'x',
+          flatAngleRad: -Math.PI * 0.55,
+          foldedAngleRad: 0,
+          stage: [0.45, 1.0],
+        },
+      });
+      panels3D.push({
+        id: `printed-hinge-${i}-knuckle`,
+        name: `Printed Hinge ${i} (Knuckle)`,
+        faceId: `printed-hinge-${i}-knuckle`,
+        widthMm: leafW,
+        heightMm: 5,
+        thicknessMm: 5,
+        color: '#a3a3a3',
+        closedPos: [x, seamY, knuckleZ],
+        explodedPos: [x, seamY + explodeDist * 0.35, knuckleZ - explodeDist * 1.3],
+        rotation: [0, 0, 0],
+      });
+    });
+  }
 
   return {
     panels2D,

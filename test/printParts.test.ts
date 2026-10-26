@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { generateBoxModel } from '../src/engine/boxGenerator';
 import { export3DPrintBoxStl, export3DPrintBoxStlParts } from '../src/engine/exporters';
 import { buildClaspPieces, buildHingePieces, buildShellPieces, computePrintBoxDims, type PrintPiece } from '../src/engine/printParts';
+import { hingeHoleLayout } from '../src/engine/fingerJointEngine';
+import { buildPrintedHingeLeaves, exportPrintedHingeStl, printedHingeStl } from '../src/engine/printedHinge';
 const p = { ...DEFAULT_BOX_PARAMETERS, category: '3d-print' as const, templateId: '3d-snap-box' as const };
 describe('print box dims', () => {
   it('derives shells, lip, hinge and clasp from the spec values', () => {
@@ -439,12 +441,13 @@ describe('snap clasp pieces', () => {
   });
 });
 
+const count = (s: string, needle: string) => s.split(needle).length - 1;
+const xExtent = (s: string) => {
+  const xs = [...s.matchAll(/vertex (\S+) \S+ \S+/g)].map((m) => parseFloat(m[1]));
+  return { min: Math.min(...xs), max: Math.max(...xs) };
+};
+
 describe('STL export from the shared print pieces', () => {
-  const count = (s: string, needle: string) => s.split(needle).length - 1;
-  const xExtent = (s: string) => {
-    const xs = [...s.matchAll(/vertex (\S+) \S+ \S+/g)].map((m) => parseFloat(m[1]));
-    return { min: Math.min(...xs), max: Math.max(...xs) };
-  };
   const outerW = (() => {
     const m = generateBoxModel(p);
     return computePrintBoxDims(p, m.innerDims.widthMm, m.innerDims.depthMm, m.innerDims.heightMm).outerW;
@@ -482,5 +485,130 @@ describe('STL export from the shared print pieces', () => {
     const full = count(export3DPrintBoxStl(p), 'facet normal');
     const bare = count(export3DPrintBoxStl({ ...p, include3dHinge: false, includeSnapClasp: false }), 'facet normal');
     expect(bare).toBeLessThan(full);
+  });
+});
+
+describe('printed hinge', () => {
+  const T = DEFAULT_BOX_PARAMETERS.materialThicknessMm;
+  const clam = {
+    ...DEFAULT_BOX_PARAMETERS,
+    category: 'wood-finger' as const,
+    templateId: 'finger-clamshell' as const,
+    clamshellHingeType: 'printed-hinge' as const,
+  };
+
+  it('lays out the hinge holes at 22% and 78% across the back wall', () => {
+    const l = hingeHoleLayout(DEFAULT_BOX_PARAMETERS, 110);
+    expect(l.centersX[0]).toBeCloseTo(T + 24.2);
+    expect(l.centersX[1]).toBeCloseTo(T + 85.8);
+    expect(l.spacing).toBeCloseTo(8.8);
+    expect(l.fromSeam).toBe(5);
+  });
+
+  it('cuts four 3.0 mm peg holes in each back wall and shows the hinges in 3D', () => {
+    const model = generateBoxModel({ ...clam, includeHingeScrewHoles: false });
+    for (const id of ['base-back', 'lid-back']) {
+      const panel = model.panels2D.find((x) => x.id === id)!;
+      const holes = panel.paths.filter((x) => x.layer === 'cut' && x.id.includes('hinge-hole'));
+      expect(holes.length).toBe(4);
+      for (const h of holes) {
+        const nums = h.d.match(/-?\d+(\.\d+)?/g)!.map(Number);
+        // "M x0 y A r r 0 1 0 x1 y ...": radius 1.5, extent x1 - x0 = 3.0
+        expect(nums[2]).toBeCloseTo(1.5);
+        expect(nums[7] - nums[0]).toBeCloseTo(3.0);
+      }
+    }
+    const ids = model.panels3D.map((x) => x.id);
+    for (const i of [1, 2]) {
+      for (const part of ['base', 'lid', 'knuckle']) expect(ids).toContain(`printed-hinge-${i}-${part}`);
+    }
+    const lidLeaf = model.panels3D.find((x) => x.id === 'printed-hinge-1-lid')!;
+    expect(lidLeaf.foldRig).toBeDefined();
+    expect(model.panels3D.find((x) => x.id === 'printed-hinge-1-knuckle')!.foldRig).toBeUndefined();
+  });
+
+  const spec = { spacing: 8.8, pinMm: 1.75, boardT: 3 };
+  const L = spec.spacing + 8;
+
+  function knuckleRanges(g: THREE.BufferGeometry): [number, number][] {
+    const pos = g.getAttribute('position');
+    const xs: number[] = [];
+    for (let i = 0; i < pos.count; i++) if (pos.getY(i) < -0.01) xs.push(pos.getX(i));
+    // Knuckles are prisms along X: their only vertices sit on the two end caps, so the sorted
+    // distinct x values pair up into [x0, x1] ranges.
+    const ends = [...new Set(xs.map((x) => x.toFixed(4)))].map(Number).sort((a, b) => a - b);
+    expect(ends.length % 2).toBe(0);
+    const ranges: [number, number][] = [];
+    for (let i = 0; i < ends.length; i += 2) ranges.push([ends[i], ends[i + 1]]);
+    return ranges;
+  }
+
+  it('builds two leaves with pegs, plate and interleaving knuckles', () => {
+    const leaves = buildPrintedHingeLeaves(spec);
+    expect(leaves.length).toBe(2);
+    for (const leaf of leaves) {
+      expect(leaf.index).toBeNull();
+      const b = bbox(leaf);
+      expect(b.min.z).toBeCloseTo(0, 4);
+      // The Ø5 knuckle (axis at z = 2.5) tops out at 5, above the 1.6 + 3 peg tops.
+      expect(b.max.z).toBeCloseTo(Math.max(1.6 + 3, 5), 4);
+      expect(b.min.y).toBeCloseTo(-2.5, 2);
+      expect(b.max.y).toBeCloseTo(10, 4);
+      expect(b.min.x).toBeCloseTo(0, 4);
+      expect(b.max.x).toBeCloseTo(L, 4);
+      // Peg tops: vertices at z = 1.6 + boardT, clustered around ±spacing/2 from the leaf center.
+      const pos = leaf.getAttribute('position');
+      const left: number[] = [];
+      const right: number[] = [];
+      for (let i = 0; i < pos.count; i++) {
+        if (Math.abs(pos.getZ(i) - 4.6) > 1e-4) continue;
+        expect(Math.abs(pos.getY(i) - 5)).toBeLessThanOrEqual(1.55 + 1e-4);
+        (pos.getX(i) < L / 2 ? left : right).push(pos.getX(i));
+      }
+      expect(left.length).toBeGreaterThan(0);
+      expect(right.length).toBeGreaterThan(0);
+      const mid = (xs: number[]) => (Math.min(...xs) + Math.max(...xs)) / 2;
+      expect(mid(left) - L / 2).toBeCloseTo(-4.4, 3);
+      expect(mid(right) - L / 2).toBeCloseTo(4.4, 3);
+    }
+    const seg = (L - 0.6) / 3;
+    const a = knuckleRanges(leaves[0]);
+    const bR = knuckleRanges(leaves[1]);
+    expect(a.length).toBe(2);
+    expect(bR.length).toBe(1);
+    expect(a[0][0]).toBeCloseTo(0, 4);
+    expect(a[0][1]).toBeCloseTo(seg, 4);
+    expect(bR[0][0] - a[0][1]).toBeCloseTo(0.3, 4);
+    expect(bR[0][1] - bR[0][0]).toBeCloseTo(seg, 4);
+    expect(a[1][0] - bR[0][1]).toBeCloseTo(0.3, 4);
+    expect(a[1][1]).toBeCloseTo(L, 4);
+  });
+
+  it('keeps the pin bore clear of the knuckle fill', () => {
+    const [leafA] = buildPrintedHingeLeaves(spec);
+    const pos = leafA.getAttribute('position');
+    const holeR = (spec.pinMm + 0.25) / 2;
+    // No triangle centroid lies strictly inside the bore.
+    for (let i = 0; i < pos.count; i += 3) {
+      const cy = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
+      const cz = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3;
+      expect(Math.hypot(cy, cz - 2.5)).toBeGreaterThan(holeR * Math.cos(Math.PI / 24) - 1e-3);
+    }
+  });
+
+  it('serializes both leaves side by side into one STL', () => {
+    const stl = printedHingeStl(spec);
+    expect(stl).toContain('solid Kerfuffle_Printed_Hinge');
+    expect(stl).not.toContain('NaN');
+    expect(count(stl, 'facet normal')).toBeGreaterThan(100);
+    const x = xExtent(stl);
+    expect(x.min).toBeCloseTo(0, 2);
+    expect(x.max).toBeCloseTo(2 * L + 8, 2);
+  });
+
+  it('exports the hinge STL from the clamshell parameters', () => {
+    const stl = exportPrintedHingeStl(clam, 110);
+    expect(stl).toContain('Kerfuffle_Printed_Hinge');
+    expect(stl).not.toContain('NaN');
   });
 });

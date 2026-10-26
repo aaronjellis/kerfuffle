@@ -43,6 +43,7 @@ import {
   MATERIAL_PRESETS,
 } from './engine/presets';
 import { generateBoxModel } from './engine/boxGenerator';
+import { exportPrintedHingeStl } from './engine/printedHinge';
 import {
   export3DPrintBoxStl,
   export3DPrintBoxStlParts,
@@ -418,6 +419,11 @@ export const App: React.FC = () => {
     );
   };
 
+  const handleDownloadHingeStl = () => {
+    const stl = exportPrintedHingeStl(params, model.innerDims.widthMm);
+    triggerDownload(new Blob([stl], { type: 'model/stl' }), `${slugBase}-hinge.stl`);
+  };
+
   const handleDownloadStlParts = () => {
     const { base, lid } = export3DPrintBoxStlParts(params);
     triggerDownload(new Blob([base], { type: 'model/stl' }), `${slugBase}-base.stl`);
@@ -590,6 +596,18 @@ export const App: React.FC = () => {
               STL (two files)
             </button>
           )}
+          {params.templateId === 'finger-clamshell' &&
+            params.clamshellHingeType === 'printed-hinge' && (
+              <button
+                type="button"
+                className="export-btn export-btn-3d"
+                onClick={handleDownloadHingeStl}
+                title="Print two of these"
+              >
+                <Printer size={14} />
+                Export hinge STL
+              </button>
+            )}
         </div>
       </header>
 
@@ -955,6 +973,7 @@ export const App: React.FC = () => {
                         <option value="knuckle-pin">
                           Interlocking Finger Seam (Custom Hinge Fingers)
                         </option>
+                        <option value="printed-hinge">Printed hinge (STL)</option>
                       </select>
                     </label>
                     <div className="two-col-inputs">
@@ -989,7 +1008,10 @@ export const App: React.FC = () => {
                         </label>
                       ) : (
                         <label className="field-block">
-                          <span>Hole Ø ({uLabel})</span>
+                          <span>
+                            {params.clamshellHingeType === 'printed-hinge' ? 'Pin Ø' : 'Hole Ø'} (
+                            {uLabel})
+                          </span>
                           <NumberField
                             valueMm={params.hingePinDiameterMm}
                             minMm={1.0}

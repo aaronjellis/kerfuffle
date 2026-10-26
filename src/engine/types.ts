@@ -11,7 +11,7 @@ export type BoxTemplateId =
   | '3d-snap-box';
 
 export type WoodLidStyle = 'closed' | 'open' | 'flat-lid' | 'inset-lid' | 'sliding-lid';
-export type ClamshellHingeType = 'butt-hardware' | 'side-pivot' | 'knuckle-pin';
+export type ClamshellHingeType = 'butt-hardware' | 'side-pivot' | 'knuckle-pin' | 'printed-hinge';
 export type LivingHingeAttachMode =
   | 'one-piece-back'
   | 'finger-joint-back'
