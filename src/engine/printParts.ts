@@ -302,6 +302,18 @@ function circlePoints(cx: number, cy: number, r: number, n: number): THREE.Vecto
 }
 
 /**
+ * The bore's lower semicircle from (cy + r, cz) clockwise under the axis to (cy - r, cz): the
+ * KNUCKLE_SEGMENTS / 2 edges of the bore's inscribed polygon that lie below the axis.
+ */
+function boreUnderside(cy: number, cz: number, r: number): THREE.Vector2[] {
+  const half = KNUCKLE_SEGMENTS / 2;
+  return Array.from({ length: half + 1 }, (_, i) => {
+    const a = -(i / half) * Math.PI;
+    return new THREE.Vector2(cy + r * Math.cos(a), cz + r * Math.sin(a));
+  });
+}
+
+/**
  * Extrudes a shape drawn in the Y-Z plane (shape x -> world y, shape y -> world z) along +X from
  * x0 to x1. ExtrudeGeometry extrudes along local Z; the cyclic axis swap (x, y, z) -> (z, x, y) is a
  * proper rotation (det +1, so winding is preserved) that sends local Z to world +X.
@@ -316,8 +328,9 @@ function extrudeAlongX(shape: THREE.Shape, x0: number, x1: number): THREE.Buffer
 /**
  * The knuckles one part owns, in that part's print frame (open side up). Each knuckle is an
  * annulus (outer R, inner hole/2) around the hinge axis (y = axisY, z = rim), plus a fill prism
- * whose Y-Z cross-section is the quadrilateral (outerD - wall/2, rim - 2R) -> (outerD, rim - 2R)
- * -> (outerD + 2R, rim) -> (outerD - wall/2, rim). The prism runs from the back wall out under the
+ * whose Y-Z cross-section is (outerD - wall/2, rim - 2R) -> (outerD, rim - 2R) -> (outerD + 2R, rim)
+ * -> along z = rim to the bore, under the bore's lower semicircle, and on along z = rim back to
+ * (outerD - wall/2, rim). The prism runs from the back wall out under the
  * cylinder at 45 degrees, so nothing overhangs more than 45 degrees and the knuckle prints without
  * supports. Its wall-side edge sits at the wall's mid-thickness line, so the knuckle is embedded
  * in the wall rather than touching its face.
@@ -344,10 +357,13 @@ export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
     ring.holes.push(new THREE.Path(circlePoints(axisY, rim, hole / 2, KNUCKLE_SEGMENTS).reverse()));
     pieces.push({ partId: 'hinge', geometry: extrudeAlongX(ring, x0, x1) });
 
+    // The fill's top edge dips under the bore along its lower semicircle (the same vertices as the
+    // bore's inscribed 24-gon), so fill and annulus together leave the whole bore open.
     const fill = new THREE.Shape([
       new THREE.Vector2(embedY, rim - 2 * R),
       new THREE.Vector2(outerD, rim - 2 * R),
       new THREE.Vector2(outerD + 2 * R, rim),
+      ...boreUnderside(axisY, rim, hole / 2),
       new THREE.Vector2(embedY, rim),
     ]);
     pieces.push({ partId: 'hinge', geometry: extrudeAlongX(fill, x0, x1) });

@@ -106,6 +106,32 @@ function signedVolume(g: THREE.BufferGeometry): number {
   return vol;
 }
 
+const RAY_DIRS = [
+  [1, 0.3713, 0.1931],
+  [0.2137, 1, 0.4411],
+  [0.3313, 0.1771, 1],
+].map((v) => new THREE.Vector3(...v).normalize());
+
+/** Ray-parity point-in-mesh test on a closed triangle soup, voting over three skew rays. */
+function insideMesh(g: THREE.BufferGeometry, p: THREE.Vector3): boolean {
+  const b = bbox(g);
+  if (!b.containsPoint(p)) return false;
+  const pos = g.getAttribute('position');
+  const a = new THREE.Vector3(), c = new THREE.Vector3(), d = new THREE.Vector3();
+  const hit = new THREE.Vector3();
+  let votes = 0;
+  for (const dir of RAY_DIRS) {
+    const ray = new THREE.Ray(p, dir);
+    let n = 0;
+    for (let i = 0; i < pos.count; i += 3) {
+      a.fromBufferAttribute(pos, i); c.fromBufferAttribute(pos, i + 1); d.fromBufferAttribute(pos, i + 2);
+      if (ray.intersectTriangle(a, c, d, false, hit)) n++;
+    }
+    if (n % 2 === 1) votes++;
+  }
+  return votes >= 2;
+}
+
 describe('shell and lip pieces', () => {
   const d = computePrintBoxDims(p, 110, 80, 55);
 
@@ -261,6 +287,37 @@ describe('knuckle hinge pieces', () => {
         expect(minR).toBeGreaterThan(h.hole / 2 - 0.01);
         // A solid 24-gon has vertices only at R; the inscribed bore puts them exactly at hole/2.
         expect(minR).toBeCloseTo(h.hole / 2, 2);
+      }
+    }
+  });
+
+  it('keeps the whole pin bore open: no hinge piece fills it', () => {
+    const boxes = [
+      d,
+      computePrintBoxDims({ ...p, hingePinDiameterMm: 3, wallThickness3dMm: 6 }, 80, 80, 40),
+      computePrintBoxDims(p, 30, 30, 20),
+    ];
+    for (const box of boxes) {
+      const hg = box.hinge!;
+      expect(hg).not.toBeNull();
+      for (const part of ['base', 'lid'] as const) {
+        const rim = part === 'base' ? box.baseH : box.lidH;
+        const pieces = buildHingePieces(box, part);
+        const seg = hg.segments.find((s) => s.owner === part)!;
+        const [x0, x1] = part === 'base' ? [seg.x0, seg.x1] : [box.outerW - seg.x1, box.outerW - seg.x0];
+        for (const t of [0.2, 0.5, 0.8]) {
+          const x = x0 + t * (x1 - x0);
+          // Control: a point in the knuckle's wall is inside a hinge piece.
+          const wallR = (hg.hole / 2 + hg.R) / 2;
+          const solid = new THREE.Vector3(x, hg.axisY, rim - wallR);
+          expect(pieces.some((q) => insideMesh(q.geometry, solid))).toBe(true);
+          for (let k = 0; k < 24; k++) {
+            const a = ((k + 0.5) / 24) * 2 * Math.PI;
+            const r = 0.6 * (hg.hole / 2);
+            const q = new THREE.Vector3(x, hg.axisY + r * Math.cos(a), rim + r * Math.sin(a));
+            expect(pieces.some((piece) => insideMesh(piece.geometry, q))).toBe(false);
+          }
+        }
       }
     }
   });
