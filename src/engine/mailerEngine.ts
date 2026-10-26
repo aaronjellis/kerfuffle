@@ -18,7 +18,7 @@ export interface MailerSpans {
   backH: number; // H + T
   frontH: number; // H + T/2: floor mid-plane up to the lid's underside
   outerSideH: number; // H: floor mid-plane up to the roll bridge's mid-plane
-  innerSideH: number; // H (never below 8)
+  innerSideH: number; // H - T/2 (never below 8): roll bridge's mid-plane down to the floor top
   innerSideLen: number; // D - T (along the depth)
   rollLen: number; // D (along the depth)
   lidD: number; // D + 3T
@@ -91,7 +91,7 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   const backH = H + T;
   const frontH = H + T / 2;
   const outerSideH = H;
-  const innerSideH = Math.max(8, H);
+  const innerSideH = Math.max(8, H - T / 2);
   const lidD = D + 3 * T;
   const tuckH = Math.min(params.tuckFlapMm, H - T);
   const tuckW = W - 2 * T;

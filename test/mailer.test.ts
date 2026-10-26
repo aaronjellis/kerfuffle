@@ -14,7 +14,7 @@ describe('mailer ply model', () => {
       expect(s.backH).toBeCloseTo(55 + T);
       expect(s.frontH).toBeCloseTo(55 + T / 2);
       expect(s.outerSideH).toBeCloseTo(55);
-      expect(s.innerSideH).toBeCloseTo(55);
+      expect(s.innerSideH).toBeCloseTo(55 - T / 2);
       expect(s.lidD).toBeCloseTo(80 + 3 * T);
       expect(s.tuckW).toBeCloseTo(110 - 2 * T);
       expect(s.lidFlapDepth).toBeCloseTo(55 - T);
@@ -41,27 +41,27 @@ describe('mailer ply model', () => {
   });
   it('keeps a shallow box printable: tab shallower than the inner wall', () => {
     const s = computeMailerSpans({ ...base, materialThicknessMm: 3 }, 60, 60, 15);
-    expect(s.innerSideH).toBeCloseTo(15);
-    expect(s.tab.depth).toBeCloseTo(8); // T + 5, under innerSideH - 2 = 13
+    expect(s.innerSideH).toBeCloseTo(13.5);
+    expect(s.tab.depth).toBeCloseTo(8); // T + 5, under innerSideH - 2 = 11.5
   });
   it('floors the inner wall at 8 and clamps the tab to fit it', () => {
     const s = computeMailerSpans({ ...base, materialThicknessMm: 3 }, 60, 60, 8);
-    expect(s.innerSideH).toBeCloseTo(8);
+    expect(s.innerSideH).toBeCloseTo(8); // H - T/2 would be 6.5
     expect(s.tab.depth).toBeCloseTo(6); // innerSideH - 2
   });
   it('lays out the default box', () => {
     const s = computeMailerSpans({ ...base, materialThicknessMm: 3, includeLidFlaps: true }, 110, 80, 55);
     expect(s.x.tabL).toBe(0);
     expect(s.x.innerL).toBeCloseTo(8);
-    expect(s.x.rollL).toBeCloseTo(63);
-    expect(s.x.outerL).toBeCloseTo(69);
-    expect(s.x.floorL).toBeCloseTo(124);
-    expect(s.x.floorR).toBeCloseTo(255);
-    expect(s.x.outerR).toBeCloseTo(310);
-    expect(s.x.rollR).toBeCloseTo(316);
-    expect(s.x.innerR).toBeCloseTo(371);
-    expect(s.x.tabR).toBeCloseTo(379);
-    expect(s.blankW).toBeCloseTo(379);
+    expect(s.x.rollL).toBeCloseTo(61.5);
+    expect(s.x.outerL).toBeCloseTo(67.5);
+    expect(s.x.floorL).toBeCloseTo(122.5);
+    expect(s.x.floorR).toBeCloseTo(253.5);
+    expect(s.x.outerR).toBeCloseTo(308.5);
+    expect(s.x.rollR).toBeCloseTo(314.5);
+    expect(s.x.innerR).toBeCloseTo(368);
+    expect(s.x.tabR).toBeCloseTo(376);
+    expect(s.blankW).toBeCloseTo(376);
     expect(s.tuckH).toBeCloseTo(30);
     expect(s.y.tuckTop).toBe(0);
     expect(s.y.lidTop).toBeCloseTo(30);
@@ -250,6 +250,10 @@ describe('mailer 3D rig', () => {
         expect(tuck.closedPos[2] - T / 2 - (back.closedPos[2] + T / 2)).toBeCloseTo(80, 1);
         const floor = closed(m, 'bottom'), top = closed(m, 'top');
         expect(top.closedPos[1] - T / 2 - (floor.closedPos[1] + T / 2)).toBeCloseTo(55, 1);
+        // The inner walls' free edges land on the floor top.
+        for (const w of [li, ri]) {
+          expect(Math.abs(w.closedPos[1] - w.heightMm / 2 - (floor.closedPos[1] + T / 2))).toBeLessThan(0.01);
+        }
         if (includeLidFlaps) {
           const innerWallFace = Math.abs(ri.closedPos[0]) - T / 2;
           for (const id of ['lid-flap-l', 'lid-flap-r']) {
