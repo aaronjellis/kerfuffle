@@ -6,7 +6,7 @@ Browser-based parametric laser-cutting, cardboard packaging, and 3D-printed encl
 
 - **Wood & MDF Finger-Joint Boxes**:
   - 6-Panel Finger-Joint Box (Open tray, 6-sided closed, flat lift-off lid, inset retainer rim lid)
-  - Treasure Chest / Clamshell Box (integrated rear knuckle fingers or side-wall pivot pins)
+  - Treasure Chest / Clamshell Box (integrated rear knuckle fingers, side-wall pivot pins, butt-hinge screw holes, or a printed hinge (STL) that fits the same holes)
   - Living-Hinge Curved Lid Box (parametric kerf-cut lattice)
   - Slotted Organizer Grid Box (interlocking $X \times Y$ compartment dividers)
 - **Score-and-Fold Cardboard Packaging**:
@@ -15,7 +15,7 @@ Browser-based parametric laser-cutting, cardboard packaging, and 3D-printed encl
   - Two-Piece Telescoping Tray & Slip Lid Box
   - Supports both **Continuous Vector Score** and **Dashed Perforation (`Cut / Bridge`)** for thick corrugated flutes
 - **3D-Printed Parametric Enclosure Utility**:
-  - Customizable wall/floor thickness, inner fillets, outer fillets, 45° print-bed chamfers, snap-fit front clasp, and rear hinge lugs with direct `.STL` export
+  - Customizable wall/floor thickness, inner fillets, outer fillets, and 45° print-bed chamfers; registration lip, filament-pin knuckle hinge, cantilever snap clasp; STL as one file or two
 - **Face Artwork & 1:1 Print-Then-Cut Export**:
   - Place and scale SVG/PNG graphics on any box face, preview in 3D and 2D, and export 1:1 millimeter **Layered SVG**, **Layered PDF (`pdf-lib`)**, **DXF**, or **STL** with presets for **xTool Studio (xTool M2 Print + Cut)**, **LightBurn**, **Adobe Illustrator**, and **Glowforge**.
 
