@@ -102,8 +102,15 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
     });
   }
 
-  const download = (f: Format) => {
-    f.run();
+  // The PDF builds asynchronously: the popover stays open, its button disabled, until it lands.
+  // The event fires only for a download that succeeded.
+  const download = async (f: Format) => {
+    try {
+      await f.run();
+    } catch (err) {
+      console.error(`Export ${f.format} failed`, err);
+      return;
+    }
     window.posthog?.capture('export_downloaded', {
       format: f.format,
       template: params.templateId,
@@ -166,7 +173,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
                 title={f.title}
                 disabled={f.busy}
                 data-ph-capture-attribute-format={f.format}
-                onClick={() => download(f)}
+                onClick={() => void download(f)}
               >
                 <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
                 <span className="pop-item-text">

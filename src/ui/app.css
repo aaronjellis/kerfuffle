@@ -466,7 +466,7 @@ h4 {
   display: flex;
   gap: 0.5rem;
   margin: 0;
-  color: rgb(255 255 255 / 0.72);
+  color: var(--stage-ink);
   font-size: var(--fs-label);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -479,17 +479,55 @@ h4 {
 }
 
 .stage-caption-warn {
-  color: var(--danger);
+  color: var(--stage-danger);
   font-weight: var(--w-medium);
 }
 
-/* The caption gives way to the pill when the stage is narrow. */
+/* On a narrow stage the pill takes the bottom row, so the caption sits just above it, at the
+   right, and wraps to two lines. It stays clear of the 2D view's HUD along the top. */
 @media (max-width: 1099px) {
   .stage-caption {
-    top: 1rem;
-    bottom: auto;
-    right: 1rem;
+    bottom: calc(1rem + 44px + 0.5rem);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    column-gap: 0.5rem;
+    row-gap: 0;
+    max-width: 15rem;
+    white-space: normal;
+    text-align: right;
   }
+
+  .stage-caption > span {
+    white-space: nowrap;
+  }
+}
+
+/* The fold readout beside the range. */
+.stage-readout {
+  flex: none;
+  min-width: 11ch;
+  color: var(--muted);
+  font-size: var(--fs-label);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 899px) {
+  .stage-readout {
+    display: none;
+  }
+}
+
+/* The first-visit hint over the 3D view; it goes after the first click. */
+.stage-hint {
+  position: absolute;
+  z-index: 1;
+  top: 1rem;
+  left: 1rem;
+  margin: 0;
+  color: var(--stage-ink);
+  font-size: var(--fs-label);
+  pointer-events: none;
 }
 
 /* ---------- inspector header ---------- */

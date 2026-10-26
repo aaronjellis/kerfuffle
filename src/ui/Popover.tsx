@@ -44,7 +44,9 @@ export const Popover: React.FC<PopoverProps> = ({
     let left = a.left;
     if (left + w > window.innerWidth - EDGE) left = a.right - w;
     left = Math.max(EDGE, left);
-    setPos({ top: a.bottom + GAP, left });
+    const top = a.bottom + GAP;
+    // Unchanged on most scroll and resize events; keep the same object so nothing re-renders.
+    setPos((prev) => (prev && prev.top === top && prev.left === left ? prev : { top, left }));
   }, [anchorRef]);
 
   useLayoutEffect(() => {
@@ -80,14 +82,25 @@ export const Popover: React.FC<PopoverProps> = ({
       const focusable = (t as Element).closest?.(FOCUSABLE + ', a[href], textarea, canvas, svg');
       onClose(!focusable);
     };
+    // Tabbing out of both the panel and the trigger closes it. A null target (the window lost
+    // focus, or a control was disabled) is left alone.
+    const onFocusOut = (e: FocusEvent) => {
+      const from = e.target as Node;
+      const to = e.relatedTarget as Node | null;
+      const inside = (n: Node) => panelRef.current?.contains(n) || anchorRef.current?.contains(n);
+      if (!inside(from) || !to || inside(to)) return;
+      onClose(false);
+    };
     const onReflow = () => place();
     document.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('focusout', onFocusOut);
     window.addEventListener('resize', onReflow);
     window.addEventListener('scroll', onReflow, true);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('focusout', onFocusOut);
       window.removeEventListener('resize', onReflow);
       window.removeEventListener('scroll', onReflow, true);
     };

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import type { BoxParameters, DisplayUnit, FaceArtwork, GeneratedBoxModel } from '../engine/types';
 import { MACHINE_BED_PRESETS } from '../engine/presets';
@@ -61,9 +61,14 @@ export const Stage: React.FC<StageProps> = ({
   const { totalCutLengthMm, totalScoreLengthMm } = model.stats;
   const isLaser = params.category !== '3d-print';
   const pct = Math.round(assemblyProgress * 100);
+  const openWord = params.category === 'cardboard-fold' ? 'Unfolded' : 'Exploded';
+  const foldText = pct === 0 ? `${openWord} 0%` : `Closed ${pct}%`;
+  // The orbit hint shows until the first click on the stage; it isn't remembered.
+  const [hintDone, setHintDone] = useState(false);
+  const shows3d = viewMode === 'split' || viewMode === '3d';
 
   return (
-    <main className="stage" aria-label="Preview">
+    <main className="stage" aria-label="Preview" onPointerDown={() => setHintDone(true)}>
       <div className={`viewports-grid stage-views mode-${viewMode}`}>
         {(viewMode === 'split' || viewMode === '3d') && (
           <div className="viewport-pane">
@@ -95,7 +100,9 @@ export const Stage: React.FC<StageProps> = ({
         )}
       </div>
 
-      <div className="stage-pill" role="toolbar" aria-label="View">
+      {shows3d && !hintDone && <p className="stage-hint">Click a part to select it. Drag to orbit.</p>}
+
+      <div className="stage-pill" role="group" aria-label="View controls">
         <Segmented<ViewMode>
           ariaLabel="View"
           value={viewMode}
@@ -128,9 +135,12 @@ export const Stage: React.FC<StageProps> = ({
           step={0.01}
           value={assemblyProgress}
           aria-label="Fold progress"
-          aria-valuetext={`${pct}% ${params.category === 'cardboard-fold' ? 'folded' : 'assembled'}`}
+          aria-valuetext={foldText}
           onChange={(e) => onScrub(Number(e.target.value))}
         />
+        <span className="stage-readout" aria-hidden="true">
+          {foldText}
+        </span>
         <button
           type="button"
           role="switch"

@@ -24,6 +24,9 @@
   --accent-fg: #ffffff;
   --accent-soft: #e9f1dc;
   --stage: #2b3036;
+  /* Text on the stage, which stays dark in both themes. */
+  --stage-ink: rgb(255 255 255 / 0.72);
+  --stage-danger: #f2a39c;
   --danger: #b3261e;
   --ok: #2e7d4f;
 
