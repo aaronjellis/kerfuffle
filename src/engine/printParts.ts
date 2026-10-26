@@ -95,9 +95,15 @@ export function computePrintBoxDims(
     hinge = { R, hole, runLen, segments, axisY: outerD + R };
   }
 
-  const clasp: PrintBoxDims['clasp'] = params.includeSnapClasp
+  // The clasp sits on the flat front face, so it stays clear of the corner fillets. Below 4 mm
+  // wide it is dropped, the same as when the toggle is off.
+  const claspWidth = Math.max(
+    0,
+    Math.min(Math.min(18, Math.max(10, outerW * 0.25)), outerW - 2 * (params.outerFilletMm + 2))
+  );
+  const clasp: PrintBoxDims['clasp'] = params.includeSnapClasp && claspWidth >= 4
     ? {
-        width: Math.min(18, Math.max(10, outerW * 0.25)),
+        width: claspWidth,
         tongueT: 1.6,
         hang: 8,
         hookProud: 0.8,

@@ -200,8 +200,9 @@ export function generate3DPrintBox(
  * Generates an ASCII STL file string for the parametric 3D-printed box (Base + Lid arranged side-by-side on the print bed).
  */
 export function export3DPrintBoxStl(params: BoxParameters): string {
-  const T = params.wallThickness3dMm;
-  const floor = params.floorThickness3dMm;
+  // Same clamps as computePrintBoxDims, so the STL and the model agree below 1.2 mm inputs.
+  const T = Math.max(1.2, params.wallThickness3dMm);
+  const floor = Math.max(1.2, params.floorThickness3dMm);
   const innerW =
     params.dimensionReference === 'inner' ? params.widthMm : Math.max(10, params.widthMm - 2 * T);
   const innerD =

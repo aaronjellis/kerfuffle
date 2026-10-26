@@ -26,6 +26,18 @@ describe('print box dims', () => {
     const d = computePrintBoxDims({ ...p, hingePinDiameterMm: 3, wallThickness3dMm: 1.2 }, 60, 60, 40);
     expect(d.hinge!.R).toBeGreaterThanOrEqual(2.6);
   });
+  it('floors the knuckle radius at 2.6 with the default pin and a thin wall', () => {
+    const d = computePrintBoxDims({ ...p, hingePinDiameterMm: 1.75, wallThickness3dMm: 1.2 }, 60, 60, 40);
+    expect(d.hinge!.R).toBe(2.6);
+  });
+  it('keeps the clasp between the corner fillets and drops it when it cannot fit', () => {
+    const small = computePrintBoxDims({ ...p, outerFilletMm: 4 }, 15, 15, 20);
+    expect(small.outerW).toBeCloseTo(19.8);
+    expect(small.clasp!.width).toBeLessThanOrEqual(19.8 - 12 + 1e-9);
+    expect(small.clasp!.width).toBeCloseTo(7.8);
+    const none = computePrintBoxDims({ ...p, outerFilletMm: 6 }, 15, 15, 20);
+    expect(none.clasp).toBeNull();
+  });
   it('nulls features that are switched off', () => {
     const d = computePrintBoxDims({ ...p, include3dHinge: false, includeSnapClasp: false }, 60, 60, 40);
     expect(d.hinge).toBeNull(); expect(d.clasp).toBeNull();
