@@ -110,6 +110,15 @@ export const App: React.FC = () => {
     setParams((prev) => ({ ...prev, [key]: value }));
   };
 
+  /** xTool Studio imports one group per piece cleanly, so picking it also groups the SVG by piece. */
+  const handleSelectProfile = (exportProfile: ExportProfileId) => {
+    setParams((prev) => ({
+      ...prev,
+      exportProfile,
+      ...(exportProfile === 'xtool-studio' ? { svgGroupingMode: 'by-piece' as const } : {}),
+    }));
+  };
+
   const updateFaceLabel = (faceId: string, text: string) => {
     setParams((prev) => ({
       ...prev,
@@ -536,9 +545,7 @@ export const App: React.FC = () => {
             <span className="profile-label">Target Tool</span>
             <select
               value={params.exportProfile}
-              onChange={(e) =>
-                updateParam('exportProfile', e.target.value as ExportProfileId)
-              }
+              onChange={(e) => handleSelectProfile(e.target.value as ExportProfileId)}
               className="profile-select"
             >
               {Object.values(EXPORT_PROFILES).map((prof) => (

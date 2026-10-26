@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_BOX_PARAMETERS, MATERIAL_PRESETS, laserSettingsFor } from '../src/engine/presets';
+import { DEFAULT_BOX_PARAMETERS, EXPORT_PROFILES, MATERIAL_PRESETS, laserSettingsFor } from '../src/engine/presets';
 import { generateBoxModel } from '../src/engine/boxGenerator';
 import { XCS_DEVICE_M2, buildXcsDisplays, buildXcsProject, uuidV4 } from '../src/engine/xcsExporter';
-import { exportXcsProject } from '../src/engine/exporters';
+import { exportBoxSvg, exportXcsProject } from '../src/engine/exporters';
 import type { BoxParameters, GeneratedBoxModel } from '../src/engine/types';
 
 describe('laserSettingsFor', () => {
@@ -341,5 +341,54 @@ describe('uuidV4', () => {
 
   it('uses crypto.randomUUID when present', () => {
     expect(uuidV4({ randomUUID: () => 'fixed' })).toBe('fixed');
+  });
+});
+
+describe('SVG grouped by piece', () => {
+  const colorOf = (tag: string) => /stroke="([^"]+)"/.exec(tag)?.[1];
+  const profile = EXPORT_PROFILES['xtool-studio'];
+
+  it('emits one group per panel with a data-name, no Cut_Lines layer', () => {
+    const model = fingerModel({ exportProfile: 'xtool-studio', svgGroupingMode: 'by-piece' });
+    const svg = exportBoxSvg(model, []);
+    expect(svg).not.toContain('<g id="Cut_Lines"');
+    expect(svg).not.toContain('<g id="Score_Lines"');
+
+    const groups = [...svg.matchAll(/<g id="Piece_([^"]+)"[^>]*>([\s\S]*?)<\/g>/g)];
+    expect(groups.length).toBe(model.panels2D.length);
+    for (const panel of model.panels2D) {
+      const g = groups.find((m) => m[1] === panel.id);
+      expect(g, panel.id).toBeDefined();
+      expect(g![0]).toContain(`data-name="${panel.name}"`);
+      const paths = [...g![2].matchAll(/<path [^>]*>/g)].map((m) => colorOf(m[0]));
+      expect(paths.filter((c) => c === profile.cutColor).length).toBeLessThanOrEqual(1);
+      expect(paths.filter((c) => c === profile.scoreColor).length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('escapes quotes in data-name', () => {
+    const model = fingerModel({ exportProfile: 'xtool-studio', svgGroupingMode: 'by-piece' });
+    model.panels2D[0].name = 'Lid "A" & <B>';
+    const svg = exportBoxSvg(model, []);
+    expect(svg).toContain('data-name="Lid &quot;A&quot; &amp; &lt;B&gt;"');
+  });
+});
+
+describe('perforations in the SVG', () => {
+  const scoreSvg = (mode: 'solid-score' | 'dashed-perf') =>
+    exportBoxSvg(mailerModel({ scoreLineMode: mode, exportProfile: 'xtool-studio' }), []);
+  const profile = EXPORT_PROFILES['xtool-studio'];
+
+  it('cuts dashed perforations (red) in every grouping mode', () => {
+    for (const mode of ['by-layer', 'by-piece', 'flat-2-objects'] as const) {
+      const model = mailerModel({ scoreLineMode: 'dashed-perf', exportProfile: 'xtool-studio', svgGroupingMode: mode });
+      const svg = exportBoxSvg(model, []);
+      expect(svg, mode).not.toContain(`stroke="${profile.scoreColor}"`);
+    }
+    expect(scoreSvg('dashed-perf')).toContain(`stroke="${profile.cutColor}"`);
+  });
+
+  it('keeps solid fold scores on the score color', () => {
+    expect(scoreSvg('solid-score')).toContain(`stroke="${profile.scoreColor}"`);
   });
 });

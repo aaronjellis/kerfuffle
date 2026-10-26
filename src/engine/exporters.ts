@@ -61,6 +61,9 @@ export function resolveSheetArtworks(
   return result;
 }
 
+const escapeAttr = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 /**
  * Generates a 1:1 physical-scale SVG string with separate layers for Artwork, Score Lines, and Cut Lines.
  * All panel positions are baked directly into <path d="..."> coordinates (zero transform="translate" matrices)
@@ -165,10 +168,12 @@ export function exportBoxSvg(
     for (const path of panel.paths) {
       if (path.layer === 'guide') continue;
       const bakedD = translateSvgPath(path.d, panel.sheetX, panel.sheetY, unitScale);
-      if (path.layer === 'score' && includeScore) {
+      // Dashed perforation segments must cut through, so they share the cut layer.
+      const isPerf = path.layer === 'score' && path.isFoldScore && params.scoreLineMode === 'dashed-perf';
+      if (path.layer === 'score' && !isPerf && includeScore) {
         panelScoreSubpaths.push(bakedD);
         allScoreSubpaths.push(bakedD);
-      } else if (path.layer === 'cut' && includeCut) {
+      } else if ((path.layer === 'cut' || isPerf) && includeCut) {
         panelCutSubpaths.push(bakedD);
         allCutSubpaths.push(bakedD);
       }
@@ -189,7 +194,7 @@ export function exportBoxSvg(
 
     if (scorePathTag || cutPathTag) {
       pieceGroups.push(
-        `  <g id="Piece_${panel.id}" inkscape:groupmode="layer" inkscape:label="Piece: ${panel.name}">\n${[
+        `  <g id="Piece_${panel.id}" inkscape:groupmode="layer" inkscape:label="Piece: ${escapeAttr(panel.name)}" data-name="${escapeAttr(panel.name)}">\n${[
           scorePathTag,
           cutPathTag,
         ]
