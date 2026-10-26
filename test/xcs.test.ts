@@ -277,29 +277,53 @@ describe('exportXcsProject', () => {
 
 describe('perforation processing', () => {
   const processingOf = (model: GeneratedBoxModel) => {
-    const ids = seqIds();
-    const { layerOf } = buildXcsDisplays(model, seqIds());
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const project = buildXcsProject(model, XCS_DEVICE_M2, 0, ids) as any;
-    return { layerOf, map: processingMap(project), displays: project.canvas[0].displays as { id: string; layerColor: string }[] };
+    const project = parse(model);
+    return {
+      map: processingMap(project),
+      displays: project.canvas[0].displays as { id: string; name: string; layerColor: string; layerTag: string }[],
+    };
   };
+  const profile = EXPORT_PROFILES['xtool-studio'];
 
-  it('cuts dashed perforations through while keeping the score color', () => {
-    const model = mailerModel({ scoreLineMode: 'dashed-perf' });
-    const { layerOf, map, displays } = processingOf(model);
-    const perfs = displays.filter((d) => layerOf.get(d.id) === 'score' && map.get(d.id)!.processingType === 'VECTOR_CUTTING');
-    expect(perfs.length).toBeGreaterThan(0);
-    for (const d of perfs) {
-      expect(d.layerColor).toBe('#0000FF');
+  it('puts dashed perforations on the cut color with cut processing; labels stay scores', () => {
+    const model = mailerModel({ scoreLineMode: 'dashed-perf', scoreInnerFaceLabels: true });
+    const paths = model.panels2D.flatMap((p) => p.paths);
+    const folds = paths.filter((p) => p.layer === 'score' && p.isFoldScore);
+    expect(folds.length).toBeGreaterThan(0);
+    const { map, displays } = processingOf(model);
+
+    // Cut-colored displays are the cut paths plus every dashed fold.
+    const cuts = displays.filter((d) => d.layerColor === profile.cutColor);
+    expect(cuts.length).toBe(paths.filter((p) => p.layer === 'cut').length + folds.length);
+    for (const d of cuts) {
+      expect(d.layerTag).toBe(profile.cutColor);
+      expect(d.name.endsWith('· cut')).toBe(true);
+      expect(map.get(d.id)!.processingType).toBe('VECTOR_CUTTING');
       expect(map.get(d.id)!.data.VECTOR_CUTTING.parameter.customize).toMatchObject({ power: 90, speed: 10, repeat: 1 });
     }
+
+    const labels = displays.filter((d) => d.layerColor === profile.scoreColor);
+    expect(labels.length).toBeGreaterThan(0);
+    for (const d of labels) {
+      expect(d.layerTag).toBe(profile.scoreColor);
+      expect(d.name.endsWith('· score')).toBe(true);
+      expect(map.get(d.id)!.processingType).toBe('VECTOR_ENGRAVING');
+    }
+    expect(labels.length).toBe(paths.filter((p) => p.layer === 'score' && !p.isFoldScore).length);
   });
 
-  it('engraves every score-layer display in solid-score mode', () => {
-    const { layerOf, map, displays } = processingOf(mailerModel({ scoreLineMode: 'solid-score' }));
-    const scores = displays.filter((d) => layerOf.get(d.id) === 'score');
-    expect(scores.length).toBeGreaterThan(0);
-    for (const d of scores) expect(map.get(d.id)!.processingType).toBe('VECTOR_ENGRAVING');
+  it('keeps fold scores on the score color with engrave processing in solid-score mode', () => {
+    const model = mailerModel({ scoreLineMode: 'solid-score' });
+    const { map, displays } = processingOf(model);
+    const scores = displays.filter((d) => d.layerColor === profile.scoreColor);
+    const folds = model.panels2D.flatMap((p) => p.paths).filter((p) => p.isFoldScore);
+    expect(folds.length).toBeGreaterThan(0);
+    expect(scores.length).toBe(model.panels2D.flatMap((p) => p.paths).filter((p) => p.layer === 'score').length);
+    for (const d of scores) {
+      expect(d.layerTag).toBe(profile.scoreColor);
+      expect(map.get(d.id)!.processingType).toBe('VECTOR_ENGRAVING');
+      expect(map.get(d.id)!.data.VECTOR_ENGRAVING.parameter.customize).toMatchObject({ power: 18, speed: 100, repeat: 1 });
+    }
   });
 });
 

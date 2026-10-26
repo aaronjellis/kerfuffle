@@ -70,23 +70,22 @@ const mm = (n: number) => Math.round(n * 1000) / 1000;
 /**
  * One display per cut or score path across every nested panel, in absolute sheet mm.
  * All paths of a panel share one `groupTag`, so each dieline piece selects as a unit in Studio.
- * `cutThrough` holds the score-layer displays that are dashed perforations: they keep the
- * score color but must be processed as cuts.
+ * `effectiveLayer` decides each display's layer, so dashed perforations take the cut color:
+ * with `isProcessByLayer`, Studio processes one color as one layer.
  */
 export function buildXcsDisplays(
   model: GeneratedBoxModel,
   newId: XcsIdGenerator = randomId
-): { displays: XcsDisplay[]; layerOf: Map<string, 'cut' | 'score'>; cutThrough: Set<string> } {
+): { displays: XcsDisplay[]; layerOf: Map<string, 'cut' | 'score'> } {
   const profile = EXPORT_PROFILES[model.params.exportProfile];
   const displays: XcsDisplay[] = [];
   const layerOf = new Map<string, 'cut' | 'score'>();
-  const cutThrough = new Set<string>();
   const groupOf = new Map<string, string>();
 
   for (const panel of model.panels2D) {
     for (const path of panel.paths) {
-      if (path.layer !== 'cut' && path.layer !== 'score') continue;
-      const layer = path.layer;
+      const layer = effectiveLayer(path, model.params);
+      if (layer === 'guide') continue;
       const dPath = translateSvgPath(path.d, panel.sheetX, panel.sheetY, 1);
       const pts = svgPathToPolylines(dPath, 0, 0).flatMap((p) => p.points);
       if (pts.length === 0) continue;
@@ -156,11 +155,10 @@ export function buildXcsDisplays(
         graphicY: 0,
       });
       layerOf.set(id, layer);
-      if (layer === 'score' && effectiveLayer(path, model.params) === 'cut') cutThrough.add(id);
     }
   }
 
-  return { displays, layerOf, cutThrough };
+  return { displays, layerOf };
 }
 
 /** The machine a `.xcs` project targets: written to the envelope and to `device`. */
@@ -213,7 +211,8 @@ function processingEntry(processingType: XcsProcessingType, power: number, speed
 
 /**
  * The full xTool Studio project: one canvas holding the dieline, plus a processing map
- * that assigns cut paths and dashed perforations to VECTOR_CUTTING and score paths to VECTOR_ENGRAVING.
+ * that assigns cut-layer displays (dashed perforations included) to VECTOR_CUTTING and score
+ * displays to VECTOR_ENGRAVING.
  */
 export function buildXcsProject(
   model: GeneratedBoxModel,
@@ -221,7 +220,7 @@ export function buildXcsProject(
   now: number = Date.now(),
   newId: XcsIdGenerator = randomId
 ): object {
-  const { displays, layerOf, cutThrough } = buildXcsDisplays(model, newId);
+  const { displays, layerOf } = buildXcsDisplays(model, newId);
   const laser = laserSettingsFor(model.params);
   const canvasId = newId();
 
@@ -234,7 +233,7 @@ export function buildXcsProject(
 
   const entries = displays.map((d) => [
     d.id,
-    layerOf.get(d.id) === 'cut' || cutThrough.has(d.id)
+    layerOf.get(d.id) === 'cut'
       ? processingEntry('VECTOR_CUTTING', laser.cutPower, laser.cutSpeed, laser.cutPasses)
       : processingEntry('VECTOR_ENGRAVING', laser.scorePower, laser.scoreSpeed, 1),
   ]);
