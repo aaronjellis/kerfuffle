@@ -131,18 +131,37 @@ describe('shell and lip pieces', () => {
     expect(bbox(plate).min.x).toBeCloseTo(0, 3);
   });
 
-  it('adds the lip for the base only, centred in the shell', () => {
+  it('adds the lip for the base only, anchored into the wall', () => {
     const base = buildShellPieces(d, 'base', p.outerChamferMm);
     const lips = base.filter((x) => x.partId === 'lip');
-    expect(lips).toHaveLength(1);
+    expect(lips).toHaveLength(2);
     expect(buildShellPieces(d, 'lid', p.outerChamferMm).some((x) => x.partId === 'lip')).toBe(false);
-    const b = bbox(lips[0].geometry);
-    expect(b.max.z).toBeCloseTo(d.baseH + 3, 3);
-    expect(b.min.z).toBeCloseTo(d.baseH - 2, 3);
-    expect(b.max.x - b.min.x).toBeCloseTo(d.innerW - 0.4, 3);
-    expect(b.max.y - b.min.y).toBeCloseTo(d.innerD - 0.4, 3);
-    expect((b.min.x + b.max.x) / 2).toBeCloseTo(d.outerW / 2, 3);
-    expect((b.min.y + b.max.y) / 2).toBeCloseTo(d.outerD / 2, 3);
+    const [anchor, visible] = lips.map((x) => bbox(x.geometry));
+    // Anchor ring reaches the wall's mid-thickness line, so the lip is joined to the base.
+    expect(anchor.min.x).toBeCloseTo(d.wall / 2, 5);
+    expect(anchor.max.x).toBeCloseTo(d.outerW - d.wall / 2, 5);
+    expect(anchor.min.z).toBeCloseTo(d.baseH - 2, 5);
+    expect(anchor.max.z).toBeCloseTo(d.baseH, 5);
+    // Visible ring: inset 0.2 from the inner wall, centred, 3 above the rim.
+    expect(visible.min.x).toBeCloseTo(d.wall + 0.2, 5);
+    expect(visible.max.z).toBeCloseTo(d.baseH + 3, 5);
+    expect(visible.min.z).toBeLessThanOrEqual(d.baseH);
+    expect(visible.max.x - visible.min.x).toBeCloseTo(d.innerW - 0.4, 3);
+    expect(visible.max.y - visible.min.y).toBeCloseTo(d.innerD - 0.4, 3);
+    expect((visible.min.x + visible.max.x) / 2).toBeCloseTo(d.outerW / 2, 3);
+    expect((visible.min.y + visible.max.y) / 2).toBeCloseTo(d.outerD / 2, 3);
+    const all = unionBox(lips);
+    expect(all.min.z).toBeCloseTo(d.baseH - 2, 5);
+    expect(all.max.z).toBeCloseTo(d.baseH + 3, 5);
+  });
+
+  it('overlaps plate and ring and keeps the plate depth positive', () => {
+    for (const chamfer of [0, 1.2, 50]) {
+      const [plate, ring] = buildShellPieces(d, 'lid', chamfer);
+      expect(bbox(ring.geometry).min.z).toBeLessThan(d.floor);
+      expect(bbox(plate.geometry).max.z).toBeGreaterThanOrEqual(d.floor - 1e-6);
+      expect(bbox(plate.geometry).min.z).toBeCloseTo(0, 6);
+    }
   });
 
   it('emits non-indexed triangle geometry with a position attribute', () => {

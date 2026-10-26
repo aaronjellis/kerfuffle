@@ -146,8 +146,14 @@ export interface PrintPiece {
 }
 
 const CORNER_SEGMENTS = 8;
-/** How far the lip reaches below the rim, buried in the base wall's inner face. */
+/**
+ * How far the lip's anchor ring reaches below the rim. The visible lip is inset from the inner wall
+ * by the clearance, so on its own it would float. The anchor ring (z baseH - LIP_EMBED..baseH)
+ * extends out to the wall's mid-thickness line, overlapping the wall by wall/2, and carries the lip.
+ */
 const LIP_EMBED = 2;
+/** Overlap between pieces that would otherwise share a face. */
+const OVERLAP = 0.01;
 
 function toShape(pts: { x: number; y: number }[]): THREE.Shape {
   return new THREE.Shape(pts.map((p) => new THREE.Vector2(p.x, p.y)));
@@ -178,7 +184,7 @@ function extrudeRing(
  * The plate is a separate piece from the wall ring. With a chamfer, the plate's outline is inset
  * by the bevel size so the bevel brings it back out to exactly the outer footprint at mid height,
  * and the plate stays inside z 0..floor. The ring starts one bevel thickness below the plate top so
- * it covers the plate's upper bevel; otherwise the bevel would leave a ledge around the wall base.
+ * it covers the plate's upper bevel (and by OVERLAP with no chamfer); otherwise the bevel would leave a ledge around the wall base.
  */
 export function buildShellPieces(
   dims: PrintBoxDims,
@@ -192,7 +198,7 @@ export function buildShellPieces(
   // Same bevel rule as the old STL exporter.
   const bevelOn = chamfer > 0;
   const bevelSize = bevelOn ? Math.min(chamfer, wall * 0.4) : 0;
-  const bevelThickness = bevelOn ? Math.min(chamfer, floor * 0.5) : 0;
+  const bevelThickness = bevelOn ? Math.min(chamfer, floor * 0.4) : 0;
 
   const plateOutline = buildRoundedRectPoints(
     outerW - 2 * bevelSize,
@@ -216,7 +222,7 @@ export function buildShellPieces(
     x: p.x + wall,
     y: p.y + wall,
   }));
-  const ringStart = floor - bevelThickness;
+  const ringStart = floor - Math.max(bevelThickness, OVERLAP);
   pieces.push({
     partId: 'shell',
     geometry: extrudeRing(outerPts, innerPts, ringStart, rimH - ringStart),
@@ -240,9 +246,22 @@ export function buildShellPieces(
       x: p.x + wall + clearance + thickness,
       y: p.y + wall + clearance + thickness,
     }));
+    // Anchor ring: wall mid-thickness line in, lip inner boundary out. Overlaps the wall by wall/2.
+    const half = wall / 2;
+    const anchorOuter = buildRoundedRectPoints(
+      outerW - wall,
+      outerD - wall,
+      Math.max(0.5, rOut - half),
+      CORNER_SEGMENTS
+    ).map((p) => ({ x: p.x + half, y: p.y + half }));
     pieces.push({
       partId: 'lip',
-      geometry: extrudeRing(lipOuter, lipInner, dims.baseH - LIP_EMBED, height + LIP_EMBED),
+      geometry: extrudeRing(anchorOuter, lipInner, dims.baseH - LIP_EMBED, LIP_EMBED),
+    });
+    // Visible ring: inset by the clearance, rising `height` above the rim.
+    pieces.push({
+      partId: 'lip',
+      geometry: extrudeRing(lipOuter, lipInner, dims.baseH - OVERLAP, height + OVERLAP),
     });
   }
 
