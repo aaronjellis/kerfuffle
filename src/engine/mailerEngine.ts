@@ -115,8 +115,10 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     // lockTabWidthMm is a ceiling, not a target. The 8 mm floor applies only when 8 mm fits.
     const capped = Math.min(params.lockTabWidthMm, upper);
     const tabW = upper >= 8 ? Math.max(8, capped) : Math.max(0, capped);
-    const tabLen = clamp(params.lockTabDepthMm, 12, tuckH);
-    lock = { tabW, tabLen, slitLen: tabLen + 1 };
+    // Keep at least 3 mm of front ear crease attached above the slit on low boxes.
+    const slitLen = Math.min(clamp(params.lockTabDepthMm, 12, tuckH) + 1, frontH - 1.5 * T - 3);
+    const tabLen = Math.min(clamp(params.lockTabDepthMm, 12, tuckH), slitLen - 1);
+    lock = { tabW, tabLen, slitLen };
   }
   const notchR = params.thumbNotch && lock === null ? Math.min(12, W / 8) : 0;
 
@@ -209,7 +211,8 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
   if (rc > 0) nodes.push({ x: tx1, y: y.tuckTop + rc, q: { x: tx1, y: y.tuckTop } });
   if (s.lock) {
     const { tabW, tabLen } = s.lock;
-    const rootDrop = tabLen * Math.tan((15 * Math.PI) / 180);
+    // Root edge tilts 15° off the perpendicular to the flap's side edge.
+    const rootDrop = tabW * Math.tan((15 * Math.PI) / 180);
     const rt = Math.max(0, Math.min(4, tabW, tabLen - rootDrop));
     const ox = tx1 + tabW;
     nodes.push({ x: tx1, y: tabTop });
@@ -350,12 +353,12 @@ export function buildMailerSheet(
     paths.push({ id: `mailer-slot-r-${i + 1}`, layer: 'cut', d: rect(fr - s.slot.inset - s.slot.width), closed: true });
   });
 
-  // Front lock: a slit down each front ear crease from the front wall's rim.
-  if (s.lock) {
+  // Front lock: a slit down each front ear crease, starting where the perimeter leaves the crease.
+  if (s.lock && s.lock.slitLen > 1.5 * T) {
     const slit = (sx: number) =>
       pointsToSvgPath(
         [
-          { x: sx, y: y.frontBottom },
+          { x: sx, y: y.frontBottom - 1.5 * T },
           { x: sx, y: y.frontBottom - s.lock!.slitLen },
         ],
         false,
@@ -381,7 +384,7 @@ export function buildMailerSheet(
   ] as const) {
     if (s.lidFlapDepth > 0) vertical(`score-lid-flap-${side}`, edge, y.lidTop + T, y.lidTop + T + s.lidFlapLen);
     vertical(`score-ear-back-${side}`, edge, y.backTop + 1.5 * T, y.floorTop - 1.5 * T);
-    vertical(`score-ear-front-${side}`, edge, y.frontTop + 1.5 * T, frontEarEnd);
+    scores.push([`score-ear-front-${side}`, edge, y.frontTop + 1.5 * T, edge, frontEarEnd]);
     vertical(`score-floor-side-${side}`, edge, y.floorTop, y.frontTop);
     vertical(`score-roll-${side}-1`, outer, y.floorTop + T, y.frontTop - T);
     vertical(`score-roll-${side}-2`, roll, y.floorTop + 1.5 * T, y.frontTop - 1.5 * T);

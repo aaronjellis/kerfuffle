@@ -125,8 +125,8 @@ describe('mailer 2D sheet', () => {
     const slit = paths(m).find((p) => p.id === 'mailer-slit-l')!;
     expect(slit.layer).toBe('cut');
     const ys = slit.d.match(/-?\d+(\.\d+)?/g)!.filter((_, i) => i % 2 === 1).map(Number);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(s.lock!.slitLen, 1);
-    expect(Math.max(...ys)).toBeCloseTo(s.y.frontBottom, 1);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(s.lock!.slitLen - 1.5 * s.T, 1);
+    expect(Math.max(...ys)).toBeCloseTo(s.y.frontBottom - 1.5 * s.T, 1);
     const earScore = paths(m).find((p) => p.id === 'score-ear-front-l')!;
     const eys = earScore.d.match(/-?\d+(\.\d+)?/g)!.filter((_, i) => i % 2 === 1).map(Number);
     expect(Math.max(...eys)).toBeLessThanOrEqual(s.y.frontBottom - s.lock!.slitLen + 0.01);
@@ -153,6 +153,14 @@ describe('mailer 2D sheet', () => {
     const s = computeMailerSpans({ ...base, depthMm: 40 }, 110, 40, 55);
     const gap = (0.75 - 0.25) * s.floorD - s.tab.len;
     expect(gap).toBeGreaterThanOrEqual(2);
+  });
+  it('low front-lock box clamps the slit so the front ear crease stays attached', () => {
+    const m = model({ cardboardLockStyle: 'front-lock', heightMm: 15, materialThicknessMm: 3, scoreLineMode: 'solid-score' });
+    const s = computeMailerSpans(m.params, 110, 80, 15);
+    expect(s.lock!.slitLen).toBeLessThanOrEqual(s.frontH - 1.5 * s.T - 3 + 1e-9);
+    const earScore = paths(m).find((p) => p.id === 'score-ear-front-l')!;
+    const eys = earScore.d.match(/-?\d+(\.\d+)?/g)!.filter((_, i) => i % 2 === 1).map(Number);
+    expect(Math.max(...eys) - Math.min(...eys)).toBeGreaterThanOrEqual(3 - 1e-6);
   });
   it('perforated mode survives a crease shorter than one perforation', () => {
     const m = model({ cardboardLockStyle: 'front-lock', scoreLineMode: 'dashed-perf', perfCutMm: 3, perfGapMm: 1.5, heightMm: 15 });
