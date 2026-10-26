@@ -97,7 +97,7 @@ export function generate3DPrintBox(
   const basePanel2D: BoxPanel2D = {
     id: 'base-3d-plan',
     name: `3D Print Base Shell (${fmt(outerW)}×${fmt(outerD)}×${fmt(baseH)} mm)`,
-    faceLabel: '3D BASE SHELL (PRINT BED)',
+    faceLabel: '3D base shell (print bed)',
     widthMm: outerW,
     heightMm: basePlan.heightMm,
     safeRect: { x: wall, y: wall + basePlan.oy, width: innerW, height: innerD },
@@ -109,7 +109,7 @@ export function generate3DPrintBox(
   const lidPanel2D: BoxPanel2D = {
     id: 'lid-3d-plan',
     name: `3D Print Hinged Lid (${fmt(outerW)}×${fmt(outerD)}×${fmt(lidTotalH)} mm)`,
-    faceLabel: '3D LID SHELL (PRINT BED)',
+    faceLabel: '3D lid shell (print bed)',
     widthMm: outerW,
     heightMm: lidPlan.heightMm,
     safeRect: { x: wall, y: wall + lidPlan.oy, width: innerW, height: innerD },
