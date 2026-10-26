@@ -30,7 +30,8 @@ const KNUCKLE_R = 2.5;
 const AXIS_Y = -KNUCKLE_R;
 const AXIS_Z = KNUCKLE_R;
 const KNUCKLE_GAP = 0.3;
-const PIN_D = 3.0;
+// FDM prints the 3.2 hole ~0.1-0.2 under size and kerf opens the 3.0 laser hole to ~3.1: press fit in both.
+const PIN_D = 3.1;
 const PIN_PITCH = 6;
 /** Gap between pieces laid out side by side in the STL. */
 const LAYOUT_GAP = 8;
@@ -132,7 +133,7 @@ export function buildPrintedHingeLeaves(spec: PrintedHingeSpec): THREE.BufferGeo
 }
 
 /**
- * Four press-fit pins (two per leaf), each 3.0 mm across and plate + board long, standing on the
+ * Four press-fit pins (two per leaf), each 3.1 mm across and plate + board long, standing on the
  * bed in a row 6 mm apart starting at x = 0, centred on y = 5.
  */
 export function buildPrintedHingePins(spec: PrintedHingeSpec): THREE.BufferGeometry[] {

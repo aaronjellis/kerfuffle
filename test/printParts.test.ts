@@ -621,14 +621,14 @@ describe('printed hinge', () => {
     }
   });
 
-  it('builds four 3.0 mm pins, plate plus board long, standing on the bed', () => {
+  it('builds four 3.1 mm pins, plate plus board long, standing on the bed', () => {
     const pins = buildPrintedHingePins(spec);
     expect(pins.length).toBe(4);
     for (const pin of pins) {
       const b = bbox(pin);
       expect(b.min.z).toBeCloseTo(0, 4);
       expect(b.max.z).toBeCloseTo(spec.boardT + 1.6, 4);
-      expect(b.max.x - b.min.x).toBeCloseTo(3.0, 4);
+      expect(b.max.x - b.min.x).toBeCloseTo(3.1, 4);
       expect(signedVolume(pin)).toBeGreaterThan(0);
     }
   });
@@ -641,7 +641,7 @@ describe('printed hinge', () => {
     const x = xExtent(stl);
     expect(x.min).toBeCloseTo(0, 2);
     // Leaf B ends at 2L + 8; the pins start 8 mm later, 6 mm apart.
-    expect(x.max).toBeCloseTo(2 * L + 16 + 3 * 6 + 3, 2);
+    expect(x.max).toBeCloseTo(2 * L + 16 + 3 * 6 + 3.1, 2);
   });
 
   it('exports the hinge STL from the clamshell parameters', () => {
