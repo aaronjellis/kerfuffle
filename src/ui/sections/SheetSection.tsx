@@ -32,7 +32,7 @@ export const SheetSection: React.FC<SectionProps> = ({ params, updateParam, disp
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
-            ariaLabel="Part Gap"
+            ariaLabel="Part gap"
             onChangeMm={(mm) => updateParam('partSpacingMm', mm)}
           />
         </Field>
@@ -45,7 +45,7 @@ export const SheetSection: React.FC<SectionProps> = ({ params, updateParam, disp
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
-            ariaLabel="Sheet Margin"
+            ariaLabel="Sheet margin"
             onChangeMm={(mm) => updateParam('sheetMarginMm', mm)}
           />
         </Field>

@@ -34,7 +34,7 @@ export const ScoreLinesSection: React.FC<SectionProps> = ({ params, updateParam,
               displayUnit={displayUnit}
               inDecimals={3}
               mmDecimals={2}
-              ariaLabel="Perforation Cut Length"
+              ariaLabel="Perforation cut length"
               onChangeMm={(mm) => updateParam('perfCutMm', mm)}
             />
           </Field>
@@ -47,7 +47,7 @@ export const ScoreLinesSection: React.FC<SectionProps> = ({ params, updateParam,
               displayUnit={displayUnit}
               inDecimals={3}
               mmDecimals={2}
-              ariaLabel="Perforation Bridge Length"
+              ariaLabel="Perforation bridge length"
               onChangeMm={(mm) => updateParam('perfGapMm', mm)}
             />
           </Field>
@@ -66,7 +66,7 @@ export const ScoreLinesSection: React.FC<SectionProps> = ({ params, updateParam,
                 displayUnit={displayUnit}
                 inDecimals={2}
                 mmDecimals={1}
-                ariaLabel="Tuck Flap Length"
+                ariaLabel="Tuck flap length"
                 onChangeMm={(mm) => updateParam('tuckFlapMm', mm)}
               />
             </Field>
@@ -79,7 +79,7 @@ export const ScoreLinesSection: React.FC<SectionProps> = ({ params, updateParam,
                 displayUnit={displayUnit}
                 inDecimals={2}
                 mmDecimals={1}
-                ariaLabel="Glue Flap Width"
+                ariaLabel="Glue flap width"
                 onChangeMm={(mm) => updateParam('glueFlapMm', mm)}
               />
             </Field>
@@ -108,7 +108,7 @@ export const ScoreLinesSection: React.FC<SectionProps> = ({ params, updateParam,
               displayUnit={displayUnit}
               inDecimals={2}
               mmDecimals={1}
-              ariaLabel="Lid Height"
+              ariaLabel="Lid height"
               onChangeMm={(mm) => updateParam('lidHeightMm', mm)}
             />
           </Field>
@@ -121,7 +121,7 @@ export const ScoreLinesSection: React.FC<SectionProps> = ({ params, updateParam,
               displayUnit={displayUnit}
               inDecimals={3}
               mmDecimals={2}
-              ariaLabel="Telescope Clearance"
+              ariaLabel="Telescope clearance"
               onChangeMm={(mm) => updateParam('telescopeClearanceMm', mm)}
             />
           </Field>

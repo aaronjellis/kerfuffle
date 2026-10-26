@@ -293,7 +293,7 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
           fontSize="4.2"
           fontFamily="monospace"
         >
-          {bed.name} {model.fitsOnBed ? '— Fits on 1 Sheet' : '— Exceeds Single Bed Area'}
+          {bed.name} {model.fitsOnBed ? '— fits on one sheet' : '— too big for one bed'}
         </text>
 
         {/* Registration Marks for xTool M2 Print-then-Cut */}

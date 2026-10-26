@@ -52,7 +52,7 @@ export const Switch: React.FC<SwitchProps> = ({ checked, onChange, label, disabl
     disabled={disabled}
     onClick={() => onChange(!checked)}
   >
-    <span className="switch-label">{label}</span>
+    <span>{label}</span>
     <span className="switch-track" aria-hidden="true">
       <span className="switch-thumb" />
     </span>

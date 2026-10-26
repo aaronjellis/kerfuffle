@@ -73,7 +73,7 @@ export const Stage: React.FC<StageProps> = ({
 
   return (
     <main className="stage" aria-label="Preview" onPointerDown={() => setHintDone(true)}>
-      <div className={`viewports-grid stage-views mode-${viewMode}`}>
+      <div className={`stage-views mode-${viewMode}`}>
         {(viewMode === 'split' || viewMode === '3d') && (
           <div className="viewport-pane">
             <Viewport3D

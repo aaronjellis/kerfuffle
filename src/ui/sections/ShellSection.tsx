@@ -25,7 +25,7 @@ export const ShellSection: React.FC<SectionProps> = ({ params, updateParam, disp
             displayUnit={displayUnit}
             inDecimals={3}
             mmDecimals={2}
-            ariaLabel="Wall Thickness"
+            ariaLabel="Wall thickness"
             onChangeMm={(mm) => updateParam('wallThickness3dMm', mm)}
           />
         </Field>
@@ -38,7 +38,7 @@ export const ShellSection: React.FC<SectionProps> = ({ params, updateParam, disp
             displayUnit={displayUnit}
             inDecimals={3}
             mmDecimals={2}
-            ariaLabel="Floor Thickness"
+            ariaLabel="Floor thickness"
             onChangeMm={(mm) => updateParam('floorThickness3dMm', mm)}
           />
         </Field>
@@ -54,7 +54,7 @@ export const ShellSection: React.FC<SectionProps> = ({ params, updateParam, disp
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
-            ariaLabel="Inner Fillet"
+            ariaLabel="Inner fillet"
             onChangeMm={(mm) => updateParam('innerFilletMm', mm)}
           />
         </Field>
@@ -67,7 +67,7 @@ export const ShellSection: React.FC<SectionProps> = ({ params, updateParam, disp
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
-            ariaLabel="Outer Fillet"
+            ariaLabel="Outer fillet"
             onChangeMm={(mm) => updateParam('outerFilletMm', mm)}
           />
         </Field>
@@ -83,7 +83,7 @@ export const ShellSection: React.FC<SectionProps> = ({ params, updateParam, disp
             displayUnit={displayUnit}
             inDecimals={3}
             mmDecimals={2}
-            ariaLabel="Bed Chamfer"
+            ariaLabel="Bed chamfer"
             onChangeMm={(mm) => updateParam('outerChamferMm', mm)}
           />
         </Field>
@@ -96,7 +96,7 @@ export const ShellSection: React.FC<SectionProps> = ({ params, updateParam, disp
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
-            ariaLabel="Lid Split Height"
+            ariaLabel="Lid split height"
             onChangeMm={(mm) => updateParam('lidHeightMm', mm)}
           />
         </Field>

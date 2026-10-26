@@ -183,6 +183,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
       boxGroup.children.forEach(disposeObject);
+      disposeObject(grid);
       renderer.dispose();
     };
   }, []);

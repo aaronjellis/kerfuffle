@@ -19,7 +19,7 @@ export const JointsSection: React.FC<SectionProps> = ({ params, updateParam, dis
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
-            ariaLabel="Target Finger Size"
+            ariaLabel="Target finger size"
             onChangeMm={(mm) => updateParam('fingerWidthMm', mm)}
           />
         </div>

@@ -43,7 +43,7 @@ export const LabelsSection: React.FC<SectionProps> = ({ params, updateParam, dis
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
-            ariaLabel="Label Text Size"
+            ariaLabel="Label text size"
             onChangeMm={(mm) => updateParam('faceLabelSizeMm', mm)}
           />
         </Field>
@@ -81,7 +81,6 @@ export const LabelsSection: React.FC<SectionProps> = ({ params, updateParam, dis
             <Field key={f.id} label={f.label}>
               <input
                 type="text"
-                className="text-field"
                 placeholder={`e.g. ${DEFAULT_FACE_LABELS[f.id]}`}
                 value={params.customFaceLabels?.[f.id] ?? DEFAULT_FACE_LABELS[f.id] ?? ''}
                 onChange={(e) => handlers.updateFaceLabel(f.id, e.target.value)}

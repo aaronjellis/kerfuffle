@@ -62,7 +62,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
         Pick a piece, add text in any Google Font or an SVG or PNG graphic, then snap it to an edge or the center.
       </p>
 
-      <div className="chip-row face-pills" role="group" aria-label="Piece">
+      <div className="chip-row" role="group" aria-label="Piece">
         {FACE_OPTIONS.map((f) => {
           const count = artworks.filter((a) => a.faceId === f.id).length;
           return (
@@ -112,7 +112,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
         <span className="mini-heading">
           <Sparkles size={16} strokeWidth={1.75} aria-hidden="true" /> Sample graphics
         </span>
-        <div className="chip-row sample-stamp-btns">
+        <div className="chip-row" role="group" aria-label="Sample graphics">
           {SAMPLE_ARTWORK_PRESETS.map((sample) => (
             <button
               key={sample.id}
@@ -133,7 +133,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
           <span className="mini-heading">
             Items on {FACE_OPTIONS.find((f) => f.id === selectedFaceId)?.label}
           </span>
-          <div className="chip-row layer-chips">
+          <div className="chip-row" role="group" aria-label="Items on this piece">
             {artworks
               .filter((a) => a.faceId === selectedFaceId)
               .map((item) => (
@@ -206,7 +206,6 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
               <Field label="Text">
                 <textarea
                   rows={2}
-                  className="text-area-field"
                   value={selectedArtwork.textConfig.text}
                   onChange={(e) =>
                     updateTextConfig(selectedArtwork, { text: e.target.value })
@@ -269,7 +268,6 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
               <div className="custom-font-row">
                 <input
                   type="text"
-                  className="text-field"
                   placeholder="Or any Google Font, like Lobster"
                   value={customFontInput}
                   onChange={(e) => setCustomFontInput(e.target.value)}
@@ -351,7 +349,6 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                     {selectedArtwork.mode === 'print' && (
                       <input
                         type="color"
-                        className="color-swatch-input"
                         value={selectedArtwork.textConfig.color}
                         onChange={(e) =>
                           updateTextConfig(selectedArtwork, { color: e.target.value })
@@ -394,7 +391,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                     <button
                       key={`${ax}_${ay}`}
                       type="button"
-                      className={`anchor-dot-btn ${ax === 0 && ay === 0 ? 'center-dot' : ''}`}
+                      className={ax === 0 && ay === 0 ? 'anchor-dot-btn center-dot' : 'anchor-dot-btn'}
                       onClick={() => alignArtwork(selectedArtwork, ax, ay)}
                       title={anchorName(ax, ay)}
                       aria-label={anchorName(ax, ay)}

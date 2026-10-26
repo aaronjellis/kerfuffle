@@ -76,7 +76,7 @@ export const HingeSection: React.FC<SectionProps> = ({ params, updateParam, disp
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
-            ariaLabel="Hinge Finger Width"
+            ariaLabel="Hinge finger width"
             onChangeMm={(mm) => updateParam('hingeFingerWidthMm', mm)}
           />
         </Field>
@@ -90,7 +90,7 @@ export const HingeSection: React.FC<SectionProps> = ({ params, updateParam, disp
             displayUnit={displayUnit}
             inDecimals={3}
             mmDecimals={2}
-            ariaLabel={printed ? 'Filament pin diameter' : 'Hinge Hole Diameter'}
+            ariaLabel={printed ? 'Filament pin diameter' : 'Hinge hole diameter'}
             onChangeMm={(mm) => updateParam('hingePinDiameterMm', mm)}
           />
         </Field>

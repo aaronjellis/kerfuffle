@@ -64,7 +64,7 @@ export const MaterialSection: React.FC<SectionProps> = ({ params, updateParam, d
             displayUnit={displayUnit}
             inDecimals={3}
             mmDecimals={2}
-            ariaLabel="Material Thickness"
+            ariaLabel="Material thickness"
             onChangeMm={(mm) =>
               // NumberField commits on blur too; keep the preset unless the value actually changed.
               setParams((prev) =>
@@ -84,7 +84,7 @@ export const MaterialSection: React.FC<SectionProps> = ({ params, updateParam, d
             displayUnit={displayUnit}
             inDecimals={4}
             mmDecimals={2}
-            ariaLabel="Laser Kerf"
+            ariaLabel="Laser kerf"
             onChangeMm={(mm) => updateParam('kerfMm', mm)}
           />
         </Field>

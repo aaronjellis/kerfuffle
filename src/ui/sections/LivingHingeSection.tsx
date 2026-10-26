@@ -34,7 +34,7 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
             displayUnit={displayUnit}
             inDecimals={3}
             mmDecimals={2}
-            ariaLabel="Living Hinge Pitch"
+            ariaLabel="Living hinge pitch"
             onChangeMm={(mm) => updateParam('livingHingePitchMm', mm)}
           />
         </div>

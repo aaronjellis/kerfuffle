@@ -34,7 +34,7 @@ export const LidSection: React.FC<SectionProps> = ({ params, updateParam, displa
             displayUnit={displayUnit}
             inDecimals={2}
             mmDecimals={1}
-            ariaLabel="Lid Height"
+            ariaLabel="Lid height"
             onChangeMm={(mm) => updateParam('lidHeightMm', mm)}
           />
         </Field>

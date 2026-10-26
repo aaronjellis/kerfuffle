@@ -37,7 +37,7 @@ export const ClosureSection: React.FC<SectionProps> = ({ params, updateParam, di
               displayUnit={displayUnit}
               inDecimals={2}
               mmDecimals={1}
-              ariaLabel="Lock Tab Width"
+              ariaLabel="Lock tab width"
               onChangeMm={(mm) => updateParam('lockTabWidthMm', mm)}
             />
           </Field>
@@ -50,7 +50,7 @@ export const ClosureSection: React.FC<SectionProps> = ({ params, updateParam, di
               displayUnit={displayUnit}
               inDecimals={2}
               mmDecimals={1}
-              ariaLabel="Lock Tab Depth"
+              ariaLabel="Lock tab depth"
               onChangeMm={(mm) => updateParam('lockTabDepthMm', mm)}
             />
           </Field>
@@ -66,7 +66,7 @@ export const ClosureSection: React.FC<SectionProps> = ({ params, updateParam, di
           displayUnit={displayUnit}
           inDecimals={2}
           mmDecimals={1}
-          ariaLabel="Tuck Flap Length"
+          ariaLabel="Tuck flap length"
           onChangeMm={(mm) => updateParam('tuckFlapMm', mm)}
         />
       </Field>

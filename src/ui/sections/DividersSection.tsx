@@ -13,7 +13,7 @@ export const DividersSection: React.FC<SectionProps> = ({ params, updateParam })
         maxMm={6}
         step={1}
         isRawCount
-        ariaLabel="Divider Columns"
+        ariaLabel="Divider columns"
         onChangeMm={(n) => updateParam('dividerCols', n)}
       />
     </Field>
@@ -24,7 +24,7 @@ export const DividersSection: React.FC<SectionProps> = ({ params, updateParam })
         maxMm={6}
         step={1}
         isRawCount
-        ariaLabel="Divider Rows"
+        ariaLabel="Divider rows"
         onChangeMm={(n) => updateParam('dividerRows', n)}
       />
     </Field>
