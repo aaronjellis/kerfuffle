@@ -398,8 +398,11 @@ export const App: React.FC = () => {
     );
   };
 
+  // A 3D-print box has no laser settings (its preset is all zeros), so it gets no .xcs.
   const showXcsExport =
-    params.exportProfile === 'xtool-studio' && import.meta.env.VITE_XCS_EXPORT === '1';
+    params.exportProfile === 'xtool-studio' &&
+    params.category !== '3d-print' &&
+    import.meta.env.VITE_XCS_EXPORT === '1';
 
   const handleDownloadXcs = () => {
     triggerDownload(
