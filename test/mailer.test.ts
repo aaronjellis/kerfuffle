@@ -103,3 +103,59 @@ describe('applySideOverflow', () => {
     expect(r.x.floorR + 30).toBeCloseTo(r.blankW);
   });
 });
+
+import { generateBoxModel } from '../src/engine/boxGenerator';
+
+describe('mailer 2D sheet', () => {
+  const model = (over = {}) => generateBoxModel({ ...base, widthMm: 110, depthMm: 80, heightMm: 55, materialThicknessMm: 1.5, ...over });
+  const paths = (m: ReturnType<typeof generateBoxModel>) => m.panels2D[0].paths;
+  it('cuts two slots per side under the inner wall landing line', () => {
+    const m = model();
+    const s = computeMailerSpans(m.params, 110, 80, 55);
+    const slots = paths(m).filter((p) => p.id.startsWith('mailer-slot-'));
+    expect(slots).toHaveLength(4);
+    const left1 = slots.find((p) => p.id === 'mailer-slot-l-1')!;
+    const xs = left1.d.match(/-?\d+(\.\d+)?/g)!.filter((_, i) => i % 2 === 0).map(Number);
+    expect(Math.min(...xs)).toBeCloseTo(s.x.floorL + s.slot.inset, 1);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(s.slot.width, 1);
+  });
+  it('front lock cuts a slit along each front ear crease and no notch', () => {
+    const m = model({ cardboardLockStyle: 'front-lock' });
+    const s = computeMailerSpans(m.params, 110, 80, 55);
+    const slit = paths(m).find((p) => p.id === 'mailer-slit-l')!;
+    expect(slit.layer).toBe('cut');
+    const ys = slit.d.match(/-?\d+(\.\d+)?/g)!.filter((_, i) => i % 2 === 1).map(Number);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(s.lock!.slitLen, 1);
+    expect(Math.max(...ys)).toBeCloseTo(s.y.frontBottom, 1);
+    const earScore = paths(m).find((p) => p.id === 'score-ear-front-l')!;
+    const eys = earScore.d.match(/-?\d+(\.\d+)?/g)!.filter((_, i) => i % 2 === 1).map(Number);
+    expect(Math.max(...eys)).toBeLessThanOrEqual(s.y.frontBottom - s.lock!.slitLen + 0.01);
+    expect(paths(m).find((p) => p.id === 'score-tuck')).toBeTruthy();
+  });
+  it('tuck top has no slits and the perimeter carries an arc for the notch', () => {
+    const m = model({ cardboardLockStyle: 'tuck', thumbNotch: true });
+    expect(paths(m).some((p) => p.id.startsWith('mailer-slit-'))).toBe(false);
+    expect(paths(m).find((p) => p.id === 'mailer-perimeter-cut')!.d).toMatch(/A /);
+  });
+  it('lid flaps add two creases and widen the blank; off removes them', () => {
+    const on = model({ includeLidFlaps: true });
+    const off = model({ includeLidFlaps: false });
+    expect(paths(on).some((p) => p.id === 'score-lid-flap-l')).toBe(true);
+    expect(paths(off).some((p) => p.id === 'score-lid-flap-l')).toBe(false);
+    expect(on.panels2D[0].widthMm).toBeGreaterThan(off.panels2D[0].widthMm);
+  });
+  it('narrow front-lock box keeps tabs inside the lid width', () => {
+    const m = model({ widthMm: 30, cardboardLockStyle: 'front-lock' });
+    const s = computeMailerSpans(m.params, 30, 80, 55);
+    expect(s.tuckW + 2 * s.lock!.tabW).toBeLessThanOrEqual(s.floorW + 0.01);
+  });
+  it('short depth keeps the two floor tabs apart', () => {
+    const s = computeMailerSpans({ ...base, depthMm: 40 }, 110, 40, 55);
+    const gap = (0.75 - 0.25) * s.floorD - s.tab.len;
+    expect(gap).toBeGreaterThanOrEqual(2);
+  });
+  it('perforated mode survives a crease shorter than one perforation', () => {
+    const m = model({ cardboardLockStyle: 'front-lock', scoreLineMode: 'dashed-perf', perfCutMm: 3, perfGapMm: 1.5, heightMm: 15 });
+    expect(m.panels2D[0].paths.every((p) => typeof p.d === 'string')).toBe(true);
+  });
+});
