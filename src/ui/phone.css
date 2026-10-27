@@ -165,6 +165,12 @@
     display: none;
   }
 
+  /* The Project menu goes icon-only with the categories. */
+  .project-menu-btn {
+    min-width: 44px;
+    margin-left: 0.25rem;
+  }
+
   .app-bar .segmented-toggle button {
     min-width: 44px;
     padding: 0 0.75rem;
@@ -179,14 +185,20 @@
   }
 }
 
-/* Smallest phones: the wordmark drops its icon and a size so the bar holds one row. */
+/* Smallest phones: the brand shows as its icon, so the Project button and the centred
+   categories both fit on one row. The name stays for screen readers. */
 @media (max-width: 419px) {
-  .app-brand-icon {
-    display: none;
+  .app-wordmark {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
-  .app-wordmark {
-    font-size: var(--fs-h3);
+  .project-menu-btn {
+    margin-left: 0;
   }
 }
 

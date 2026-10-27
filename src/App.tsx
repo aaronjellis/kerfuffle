@@ -16,6 +16,7 @@ import {
 } from './engine/presets';
 import { generateBoxModel } from './engine/boxGenerator';
 import { generateKerfTestModel, kerfTestValues } from './engine/kerfTest';
+import { parseProject, PROJECT_EXTENSION, ProjectFileError, serializeProject } from './engine/projectFile';
 import { exportPrintedHingeStl } from './engine/printedHinge';
 import {
   export3DPrintBoxStl,
@@ -107,6 +108,21 @@ export const App: React.FC = () => {
   const [scrollRequest, setScrollRequest] = useState<{ id: PartId; n: number } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const projectInputRef = useRef<HTMLInputElement>(null);
+
+  // A project is unsaved when its box or artwork differs from the last one saved, opened or started.
+  const snapshot = useMemo(() => JSON.stringify({ params, artworks }), [params, artworks]);
+  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
+  const unsaved = snapshot !== savedSnapshot;
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [unsaved]);
 
   const model = useMemo(() => generateBoxModel(params), [params]);
 
@@ -468,6 +484,76 @@ export const App: React.FC = () => {
   /** The test pieces carry no artwork. */
   const activeArtworks = kerfTestModel ? [] : artworks;
 
+  const confirmDiscard = () =>
+    !unsaved || window.confirm('Your changes to this box aren’t saved. Continue and lose them?');
+
+  /** Puts a project on screen and counts it as saved. */
+  const loadProject = (next: BoxParameters, nextArtworks: FaceArtwork[]) => {
+    setParams(next);
+    setArtworks(nextArtworks);
+    setSelectedArtworkId(null);
+    setSelectedFaceId('top');
+    setSelectedPart('size');
+    setSettingQuery('');
+    setSavedSnapshot(JSON.stringify({ params: next, artworks: nextArtworks }));
+  };
+
+  /** A new project starts from the default box, with the kerf test's fit if there is one. */
+  const handleNewProject = () => {
+    if (!confirmDiscard()) return;
+    loadProject({ ...DEFAULT_BOX_PARAMETERS, ...readFit() }, []);
+    window.posthog?.capture('project_new', { project: ANALYTICS_PROJECT });
+  };
+
+  const handleSaveProject = () => {
+    const box = `kerfuffle-${params.templateId}-${Math.round(model.innerDims.widthMm)}x${Math.round(model.innerDims.depthMm)}x${Math.round(model.innerDims.heightMm)}mm`;
+    triggerDownload(
+      new Blob([serializeProject({ params, artworks, displayUnit })], { type: 'application/json' }),
+      `${box}${PROJECT_EXTENSION}`
+    );
+    setSavedSnapshot(snapshot);
+    window.posthog?.capture('project_saved', { template: params.templateId, project: ANALYTICS_PROJECT });
+  };
+
+  const handleOpenProject = () => {
+    if (!confirmDiscard()) return;
+    projectInputRef.current?.click();
+  };
+
+  const handleProjectFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const project = parseProject(await file.text());
+      setKerfTest(null);
+      setDisplayUnit(project.displayUnit);
+      loadProject(project.params, project.artworks);
+      window.posthog?.capture('project_opened', { template: project.params.templateId, project: ANALYTICS_PROJECT });
+    } catch (err) {
+      window.alert(err instanceof ProjectFileError ? err.message : 'This file couldn’t be opened.');
+    }
+  };
+
+  // ⌘S / Ctrl+S saves and ⌘O / Ctrl+O opens, in place of the browser's own save and open.
+  const shortcutsRef = useRef({ save: handleSaveProject, open: handleOpenProject });
+  shortcutsRef.current = { save: handleSaveProject, open: handleOpenProject };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      const key = e.key.toLowerCase();
+      if (key === 's') {
+        e.preventDefault();
+        shortcutsRef.current.save();
+      } else if (key === 'o') {
+        e.preventDefault();
+        shortcutsRef.current.open();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const handleDownloadSvg = (layerFilter: 'all' | 'score-only' | 'cut-only' = 'all') => {
     const svg = exportBoxSvg(activeModel, activeArtworks, layerFilter);
     const suffix = layerFilter === 'score-only' ? '-score' : layerFilter === 'cut-only' ? '-cut' : '';
@@ -575,6 +661,7 @@ export const App: React.FC = () => {
         onSelectCategory={handleSelectCategory}
         displayUnit={displayUnit}
         onSelectUnit={setDisplayUnit}
+        projectMenu={{ onNew: handleNewProject, onOpen: handleOpenProject, onSave: handleSaveProject, unsaved }}
         exportMenu={{
           params,
           onSelectProfile: handleSelectProfile,
@@ -591,6 +678,15 @@ export const App: React.FC = () => {
             hingeStl: handleDownloadHingeStl,
           },
         }}
+      />
+      <input
+        ref={projectInputRef}
+        type="file"
+        accept={`${PROJECT_EXTENSION},application/json`}
+        className="visually-hidden-input"
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={handleProjectFile}
       />
       <div className="app-body">
         <Stage

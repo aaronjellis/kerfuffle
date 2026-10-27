@@ -248,6 +248,19 @@ h4 {
 
 /* Segmented, buttons, inputs and chips live in controls.css. */
 
+/* The Project menu sits beside the wordmark; a dot marks unsaved changes. */
+.project-menu-btn {
+  margin-left: 0.5rem;
+  gap: 0.3rem;
+}
+
+.unsaved-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--accent);
+  border-radius: var(--r-pill);
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;

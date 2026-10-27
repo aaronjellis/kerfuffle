@@ -3,6 +3,7 @@ import { Box, Hammer, Package } from 'lucide-react';
 import type { BoxCategory, DisplayUnit } from '../engine/types';
 import { Segmented } from './Field';
 import { ExportMenu, type ExportMenuProps } from './ExportMenu';
+import { ProjectMenu, type ProjectMenuProps } from './ProjectMenu';
 
 interface AppBarProps {
   category: BoxCategory;
@@ -10,22 +11,25 @@ interface AppBarProps {
   displayUnit: DisplayUnit;
   onSelectUnit: (unit: DisplayUnit) => void;
   exportMenu: ExportMenuProps;
+  projectMenu: ProjectMenuProps;
 }
 
 const ICON = { size: 18, strokeWidth: 1.75, 'aria-hidden': true } as const;
 
-/** Wordmark, the three categories (icons only on a narrow phone), units, and Export. */
+/** Wordmark and Project menu, the three categories (icons only on a narrow phone), units, and Export. */
 export const AppBar: React.FC<AppBarProps> = ({
   category,
   onSelectCategory,
   displayUnit,
   onSelectUnit,
   exportMenu,
+  projectMenu,
 }) => (
   <header className="app-bar">
     <div className="app-brand">
       <Box {...ICON} className="app-brand-icon" />
       <span className="app-wordmark">Kerfuffle</span>
+      <ProjectMenu {...projectMenu} />
     </div>
 
     <div className="app-bar-center">
