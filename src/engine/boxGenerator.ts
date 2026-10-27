@@ -10,6 +10,7 @@ import { fmt, generateWoodFingerBox } from './fingerJointEngine';
 import { generateCardboardBox } from './cardboardEngine';
 import { generate3DPrintBox } from './print3dEngine';
 import { buildSingleStrokeTextPath } from './vectorFont';
+import { applyFacePatterns, resolvePatternFaces } from './facePatterns';
 
 function resolveCustomPanelLabel(panelId: string, defaultLabel: string, customMap: Record<string, string>): string {
   if (panelId in customMap) {
@@ -190,10 +191,26 @@ export function generateBoxModel(params: BoxParameters): GeneratedBoxModel {
     };
     res = generateForInner(params, inner);
   }
-  const { panels3D, summary, outerDims } = res;
+  const { summary, outerDims } = res;
 
-  const panels2D = applyFaceLabelsAndVectorScores(res.panels2D, params);
+  const patternTargets = resolvePatternFaces(res.panels2D, res.panels3D, params);
+  const patterned = applyFacePatterns(res.panels2D, res.panels3D, params, patternTargets);
+  const panels3D = patterned.panels3D;
+  const panels2D = applyFaceLabelsAndVectorScores(patterned.panels2D, params);
 
+  return assembleModel(params, inner, outerDims, panels2D, panels3D, summary, patternTargets.map((t) => t.faceId));
+}
+
+/** Nests the pieces on the bed and totals the cut and score lengths. */
+export function assembleModel(
+  params: BoxParameters,
+  inner: BoxDims,
+  outerDims: BoxDims,
+  panels2D: BoxPanel2D[],
+  panels3D: Panel3DTransform[],
+  summary: string,
+  patternFaceIds: string[]
+): GeneratedBoxModel {
   const bedPreset =
     MACHINE_BED_PRESETS.find((b) => b.id === params.bedPresetId) || MACHINE_BED_PRESETS[0];
 
@@ -225,6 +242,7 @@ export function generateBoxModel(params: BoxParameters): GeneratedBoxModel {
     outerDims,
     panels2D: nested.panels,
     panels3D,
+    patternFaceIds,
     sheetWidthMm: nested.sheetWidthMm,
     sheetHeightMm: nested.sheetHeightMm,
     fitsOnBed,

@@ -32,7 +32,7 @@ export interface MailerSpans {
   earFrontH: number; // frontH - 2 * earInset = H - 2.5T
   /**
    * Inner-wall tabs. `centers` are fractions of floorD from the back crease: [0.25, 0.75], moved inward
-   * when a tab would come within 2 mm of the inner wall's end, or [0.5] when two cannot fit.
+   * when a tab would come within 2 mm of the inner wall's end, or [0.5] for one tab or when two cannot fit.
    * chamferEff = min(chamfer, depth, len / 2): the chamfer actually cut on the tab's free corners.
    */
   tab: { len: number; depth: number; centers: number[]; chamfer: 4; chamferEff: number };
@@ -116,11 +116,13 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
 
   const innerSideLen = D - T;
   const { innerInset } = insetsFor(T);
-  // Two tabs fit inside the inner wall with 2 mm end margins and 4 mm between them; below 8 mm, one centred tab.
-  let tabLen = Math.min(clamp(D / 4, 14, 26), (innerSideLen - 2 * 2 - 4) / 2);
+  // Two tabs fit inside the inner wall with 2 mm end margins and 4 mm between them. When asked for one,
+  // or when two would come out shorter than min(sideTabLenMm, 8), one centred tab.
+  const twoFit = (innerSideLen - 2 * 2 - 4) / 2;
+  let tabLen = Math.min(params.sideTabLenMm, twoFit);
   let centers: number[];
-  if (tabLen < 8) {
-    tabLen = Math.min(26, innerSideLen - 4);
+  if (params.sideTabCount === 1 || twoFit < Math.min(params.sideTabLenMm, 8)) {
+    tabLen = Math.min(params.sideTabLenMm, innerSideLen - 4);
     centers = [0.5];
   } else {
     // At 0.25 and 0.75 unless that leaves less than 2 mm to the inner wall's end; then move both inward.
@@ -548,7 +550,8 @@ function flatPosition(p: Panel3DTransform, byId: Map<string, Panel3DTransform>):
   let [x, y, z] = p.closedPos;
   let cur: Panel3DTransform | undefined = p;
   while (cur?.foldRig) {
-    const { pivotOffset, axis, flatAngleRad, parentId }: NonNullable<Panel3DTransform['foldRig']> = cur.foldRig;
+    const { pivotOffset, axis, flatAngleRad, parentId, flatSlide }: NonNullable<Panel3DTransform['foldRig']> = cur.foldRig;
+    if (flatSlide) [x, y, z] = [x + flatSlide[0], y + flatSlide[1], z + flatSlide[2]];
     const [px, py, pz] = pivotOffset;
     const [rx, ry, rz] = [x - px, y - py, z - pz];
     const c = Math.cos(flatAngleRad);
@@ -706,6 +709,8 @@ export function buildMailerRig(spans: MailerSpans, H: number): Panel3DTransform[
             flatAngleRad: dir * sx * hp,
             foldedAngleRad: 0,
             stage: [0.22, 0.4],
+            // Flat, the ear's root meets the wall's side edge, T out from where it seats.
+            flatSlide: [0, 0, dir * T],
           },
         });
       }
@@ -781,6 +786,8 @@ export function buildMailerRig(spans: MailerSpans, H: number): Panel3DTransform[
       flatAngleRad: -hp,
       foldedAngleRad: 0,
       stage: [0.6, 0.86],
+      // Flat, the lid starts at the back wall's top crease, not T/2 back over it.
+      flatSlide: [0, 0, T / 2],
     },
   });
 
@@ -807,6 +814,8 @@ export function buildMailerRig(spans: MailerSpans, H: number): Panel3DTransform[
           flatAngleRad: sx * hp,
           foldedAngleRad: 0,
           stage: [0.5, 0.64],
+          // Flat, the flap's root meets the lid's side edge, 3T out from where it hangs.
+          flatSlide: [0, -3 * T, 0],
         },
       });
     }
@@ -829,6 +838,8 @@ export function buildMailerRig(spans: MailerSpans, H: number): Panel3DTransform[
       flatAngleRad: -hp,
       foldedAngleRad: 0,
       stage: [0.5, 0.7],
+      // Flat, the tuck flap's root meets the lid's front edge, 1.5T out from where it hangs.
+      flatSlide: [0, -1.5 * T, 0],
     },
   });
 

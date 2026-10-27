@@ -11,13 +11,13 @@ const params = {
 const ids = (t: BoxTemplateId): PartId[] => partsForTemplate(t, params).map((p) => p.id);
 
 const EXPECTED: Record<BoxTemplateId, PartId[]> = {
-  'finger-basic': ['size', 'material', 'lid', 'joints', 'labels', 'artwork', 'sheet'],
-  'finger-clamshell': ['size', 'material', 'lid', 'hinge', 'joints', 'labels', 'artwork', 'sheet'],
-  'finger-living-hinge': ['size', 'material', 'living-hinge', 'joints', 'labels', 'artwork', 'sheet'],
+  'finger-basic': ['size', 'material', 'lid', 'joints', 'pattern', 'labels', 'artwork', 'sheet'],
+  'finger-clamshell': ['size', 'material', 'lid', 'hinge', 'joints', 'pattern', 'labels', 'artwork', 'sheet'],
+  'finger-living-hinge': ['size', 'material', 'living-hinge', 'joints', 'pattern', 'labels', 'artwork', 'sheet'],
   'finger-organizer': ['size', 'material', 'joints', 'dividers', 'labels', 'artwork', 'sheet'],
-  'cardboard-mailer': ['size', 'material', 'closure', 'flaps', 'score-lines', 'labels', 'artwork', 'sheet'],
-  'cardboard-tuck-carton': ['size', 'material', 'score-lines', 'labels', 'artwork', 'sheet'],
-  'cardboard-telescope': ['size', 'material', 'score-lines', 'labels', 'artwork', 'sheet'],
+  'cardboard-mailer': ['size', 'material', 'closure', 'side-locks', 'flaps', 'score-lines', 'pattern', 'labels', 'artwork', 'sheet'],
+  'cardboard-tuck-carton': ['size', 'material', 'score-lines', 'pattern', 'labels', 'artwork', 'sheet'],
+  'cardboard-telescope': ['size', 'material', 'score-lines', 'pattern', 'labels', 'artwork', 'sheet'],
   '3d-snap-box': ['size', 'shell', 'hinge', 'clasp', 'labels', 'artwork', 'print-export']
 };
 const TEMPLATES = Object.keys(EXPECTED) as BoxTemplateId[];
@@ -90,13 +90,13 @@ describe('partForMesh', () => {
     expect(partForMesh('shell', '3d-snap-box')).toBe('shell');
     expect(partForMesh('lip', '3d-snap-box')).toBe('shell');
     expect(partForMesh('flap', 'cardboard-mailer')).toBe('flaps');
-    expect(partForMesh('tabs', 'cardboard-mailer')).toBe('flaps');
+    expect(partForMesh('tabs', 'cardboard-mailer')).toBe('side-locks');
     expect(partForMesh('closure', 'cardboard-mailer')).toBe('closure');
   });
 
   it('maps the mesh ids the 3D view reports', () => {
     expect(partForMesh('dividers', 'finger-organizer')).toBe('dividers');
-    expect(partForMesh('tabs', 'cardboard-mailer')).toBe('flaps');
+    expect(partForMesh('tabs', 'cardboard-mailer')).toBe('side-locks');
     expect(partForMesh('living-hinge', 'finger-living-hinge')).toBe('living-hinge');
     expect(partForMesh('lid', 'finger-clamshell')).toBe('lid');
     expect(partForMesh('clasp', 'finger-clamshell')).toBe('lid');

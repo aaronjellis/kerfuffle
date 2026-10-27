@@ -15,6 +15,7 @@ import {
   MATERIAL_PRESETS,
 } from './engine/presets';
 import { generateBoxModel } from './engine/boxGenerator';
+import { generateKerfTestModel, kerfTestValues } from './engine/kerfTest';
 import { exportPrintedHingeStl } from './engine/printedHinge';
 import {
   export3DPrintBoxStl,
@@ -38,11 +39,60 @@ import type { SectionHandlers } from './ui/sections';
 import { ANALYTICS_PROJECT } from './ui/analytics';
 import { AppBar } from './ui/AppBar';
 import { Inspector } from './ui/Inspector';
+import { KerfTestPanel } from './ui/KerfTestPanel';
 import { Stage, type ViewMode } from './ui/Stage';
 import { withPrintedPinClamp } from './ui/paramRules';
 
+/** Set once the kerf test is finished or skipped, so it opens by itself only on a first visit. */
+const ONBOARDED_KEY = 'kerfuffle.kerf-test-done';
+
+const readOnboarded = () => {
+  try {
+    return window.localStorage.getItem(ONBOARDED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const markOnboarded = () => {
+  try {
+    window.localStorage.setItem(ONBOARDED_KEY, '1');
+  } catch {
+    // Private windows and blocked storage: the test just opens again next visit.
+  }
+};
+
+/** The material and kerf the kerf test settled on, so later visits start from them. */
+const FIT_KEY = 'kerfuffle.kerf-test-fit';
+type StoredFit = Pick<BoxParameters, 'materialThicknessMm' | 'kerfMm' | 'materialPresetId'>;
+
+const readFit = (): Partial<StoredFit> => {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(FIT_KEY) ?? 'null');
+    if (!raw || typeof raw.kerfMm !== 'number' || typeof raw.materialThicknessMm !== 'number') return {};
+    return { kerfMm: raw.kerfMm, materialThicknessMm: raw.materialThicknessMm, materialPresetId: raw.materialPresetId };
+  } catch {
+    return {};
+  }
+};
+
+const saveFit = (fit: StoredFit) => {
+  try {
+    window.localStorage.setItem(FIT_KEY, JSON.stringify(fit));
+  } catch {
+    // Storage blocked: the fit holds for this visit only.
+  }
+};
+
+/** The kerf test while it is open: how far the values are shifted, and the side picked as best. */
+interface KerfTestState {
+  shift: number;
+  picked: number | null;
+}
+
 export const App: React.FC = () => {
-  const [params, setParams] = useState<BoxParameters>(DEFAULT_BOX_PARAMETERS);
+  // The default box is a wood one, which is what the kerf test measures.
+  const [params, setParams] = useState<BoxParameters>(() => ({ ...DEFAULT_BOX_PARAMETERS, ...readFit() }));
   const [artworks, setArtworks] = useState<FaceArtwork[]>([]);
   const [selectedFaceId, setSelectedFaceId] = useState<string>('top');
   const [selectedArtworkId, setSelectedArtworkId] = useState<string | null>(null);
@@ -59,6 +109,42 @@ export const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const model = useMemo(() => generateBoxModel(params), [params]);
+
+  const [kerfTest, setKerfTest] = useState<KerfTestState | null>(() =>
+    readOnboarded() ? null : { shift: 0, picked: null }
+  );
+  // The values follow the material's kerf until a side is picked; the kerf itself changes only on Use.
+  const kerfValues = useMemo(
+    () => (kerfTest ? kerfTestValues(params.kerfMm, kerfTest.shift) : []),
+    [kerfTest, params.kerfMm]
+  );
+  // A material change moves the values; a pick that is no longer among them no longer counts.
+  const kerfPicked = kerfTest?.picked != null && kerfValues.includes(kerfTest.picked) ? kerfTest.picked : null;
+  const kerfTestModel = useMemo(() => {
+    if (!kerfTest) return null;
+    const dock = kerfPicked === null ? 2 : kerfValues.indexOf(kerfPicked);
+    return generateKerfTestModel(params, kerfValues, dock);
+  }, [kerfTest, kerfValues, kerfPicked, params]);
+  /** What the stage shows and the exports cut: the test pieces while the test is open. */
+  const activeModel = kerfTestModel ?? model;
+
+  const openKerfTest = () => {
+    setKerfTest({ shift: 0, picked: null });
+    window.posthog?.capture('kerf_test_opened', { project: ANALYTICS_PROJECT });
+  };
+  const closeKerfTest = (outcome: 'used' | 'skipped') => {
+    if (outcome === 'used' && kerfPicked !== null) {
+      updateParam('kerfMm', kerfPicked);
+      saveFit({
+        kerfMm: kerfPicked,
+        materialThicknessMm: params.materialThicknessMm,
+        materialPresetId: params.materialPresetId,
+      });
+    }
+    markOnboarded();
+    setKerfTest(null);
+    window.posthog?.capture('kerf_test_closed', { outcome, project: ANALYTICS_PROJECT });
+  };
 
   const updateParam = <K extends keyof BoxParameters>(
     key: K,
@@ -126,6 +212,7 @@ export const App: React.FC = () => {
 
   /** A click on a 3D mesh opens the part it belongs to; a face also becomes the artwork target. */
   const handleSelectMeshPart = (meshPartId: string) => {
+    if (kerfTest) return;
     const part = partForMesh(meshPartId, params.templateId);
     if (!part) return;
     if (part === 'artwork') setSelectedFaceId(meshPartId);
@@ -135,7 +222,7 @@ export const App: React.FC = () => {
   /** A face or an artwork picked in 2D becomes the artwork target app-wide: Artwork opens and 3D highlights it. */
   const handlePickFace2D = (faceId: string) => {
     // A drag on the artwork already selected is not a new pick: no second part_selected, search clear or scroll.
-    if (faceId === selectedFaceId && selectedPart === 'artwork') return;
+    if (kerfTest || (faceId === selectedFaceId && selectedPart === 'artwork')) return;
     setSelectedFaceId(faceId);
     pickPart('artwork', '2d');
   };
@@ -375,10 +462,14 @@ export const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const slugBase = `kerfuffle-${params.templateId}-${Math.round(model.innerDims.widthMm)}x${Math.round(model.innerDims.depthMm)}x${Math.round(model.innerDims.heightMm)}mm`;
+  const slugBase = kerfTestModel
+    ? `kerfuffle-kerf-test-${params.materialThicknessMm.toFixed(2)}mm`
+    : `kerfuffle-${params.templateId}-${Math.round(model.innerDims.widthMm)}x${Math.round(model.innerDims.depthMm)}x${Math.round(model.innerDims.heightMm)}mm`;
+  /** The test pieces carry no artwork. */
+  const activeArtworks = kerfTestModel ? [] : artworks;
 
   const handleDownloadSvg = (layerFilter: 'all' | 'score-only' | 'cut-only' = 'all') => {
-    const svg = exportBoxSvg(model, artworks, layerFilter);
+    const svg = exportBoxSvg(activeModel, activeArtworks, layerFilter);
     const suffix = layerFilter === 'score-only' ? '-score' : layerFilter === 'cut-only' ? '-cut' : '';
     triggerDownload(
       new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }),
@@ -394,7 +485,7 @@ export const App: React.FC = () => {
 
   const handleDownloadXcs = () => {
     triggerDownload(
-      new Blob([exportXcsProject(model)], { type: 'application/json' }),
+      new Blob([exportXcsProject(activeModel)], { type: 'application/json' }),
       `${slugBase}.xcs`
     );
   };
@@ -409,7 +500,7 @@ export const App: React.FC = () => {
   const handleDownloadPdf = async () => {
     setIsExportingPdf(true);
     try {
-      const pdfBytes = await exportBoxPdf(model, artworks);
+      const pdfBytes = await exportBoxPdf(activeModel, activeArtworks);
       triggerDownload(
         new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }),
         `${slugBase}-${params.exportProfile}.pdf`
@@ -420,7 +511,7 @@ export const App: React.FC = () => {
   };
 
   const handleDownloadDxf = () => {
-    const dxf = exportBoxDxf(model);
+    const dxf = exportBoxDxf(activeModel);
     triggerDownload(
       new Blob([dxf], { type: 'application/dxf' }),
       `${slugBase}.dxf`
@@ -473,7 +564,9 @@ export const App: React.FC = () => {
     exportHingeStl: handleDownloadHingeStl,
     downloadStl: handleDownloadStl,
     downloadStlParts: handleDownloadStlParts,
+    openKerfTest,
   };
+  const sectionProps = { params, updateParam, displayUnit, model, handlers: sectionHandlers };
 
   return (
     <div className="app">
@@ -501,9 +594,9 @@ export const App: React.FC = () => {
       />
       <div className="app-body">
         <Stage
-          model={model}
+          model={activeModel}
           params={params}
-          artworks={artworks}
+          artworks={activeArtworks}
           displayUnit={displayUnit}
           viewMode={viewMode}
           onViewMode={setViewMode}
@@ -519,6 +612,18 @@ export const App: React.FC = () => {
           onUpdateArtwork={updateArtwork}
           onToggleParam={(key) => updateParam(key, !params[key])}
         />
+        {kerfTest ? (
+          <KerfTestPanel
+            values={kerfValues}
+            picked={kerfPicked}
+            onPick={(v) => setKerfTest((prev) => (prev ? { ...prev, picked: v } : prev))}
+            onShift={(dir) => setKerfTest((prev) => (prev ? { shift: prev.shift + dir, picked: null } : prev))}
+            onDownloadSvg={() => handleDownloadSvg('all')}
+            onUse={() => closeKerfTest('used')}
+            onSkip={() => closeKerfTest('skipped')}
+            sectionProps={{ ...sectionProps, handlers: { ...sectionHandlers, openKerfTest: undefined } }}
+          />
+        ) : (
         <Inspector
           templateId={params.templateId}
           category={params.category}
@@ -531,8 +636,9 @@ export const App: React.FC = () => {
           onSelectPart={handleSelectPart}
           onTogglePart={handleTogglePart}
           scrollRequest={scrollRequest}
-          sectionProps={{ params, updateParam, displayUnit, model, handlers: sectionHandlers }}
+          sectionProps={sectionProps}
         />
+        )}
       </div>
     </div>
   );

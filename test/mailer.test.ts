@@ -76,8 +76,19 @@ describe('mailer ply model', () => {
     expect(s.earW).toBeCloseTo(37);
     expect(s.earBackH).toBeCloseTo(49);
     expect(s.lidFlapLen).toBeCloseTo(77); // D - T
-    expect(s.tab.len).toBeCloseTo(20);
+    expect(s.tab.len).toBeCloseTo(12);
     expect(s.tab.centers).toEqual([0.25, 0.75]);
+  });
+  it('cuts one centred side tab when asked', () => {
+    const s = computeMailerSpans({ ...base, sideTabCount: 1 }, 110, 80, 55);
+    expect(s.tab.centers).toEqual([0.5]);
+    expect(s.tab.len).toBeCloseTo(12);
+  });
+  it('treats the side tab length as a ceiling', () => {
+    const s = computeMailerSpans({ ...base, sideTabLenMm: 40 }, 110, 80, 55);
+    // Two tabs in a 77 mm inner wall: (77 - 2*2 - 4) / 2.
+    expect(s.tab.len).toBeCloseTo(34.5);
+    expect(s.tab.centers).toHaveLength(2);
   });
   it('turns the thumb notch off when asked', () => {
     const s = computeMailerSpans({ ...base, cardboardLockStyle: 'tuck', thumbNotch: false }, 110, 80, 55);
@@ -436,10 +447,10 @@ describe('mailer small boxes', () => {
       });
     });
   }
-  it('default box keeps two 20 mm tabs at 0.25 and 0.75 and a clean perimeter', () => {
+  it('default box keeps two 12 mm tabs at 0.25 and 0.75 and a clean perimeter', () => {
     const m = generateBoxModel({ ...base });
     const s = computeMailerSpans(m.params, 110, 80, 55);
-    expect(s.tab.len).toBeCloseTo(20);
+    expect(s.tab.len).toBeCloseTo(12);
     expect(s.tab.centers).toEqual([0.25, 0.75]);
     expect(selfIntersections(perimeter(m))).toEqual([]);
   });
@@ -565,6 +576,19 @@ describe('mailer 3D rig', () => {
       if (p.foldRig) expect(p.foldRig.stage[0]).toBeLessThan(p.foldRig.stage[1]);
     }
   });
+  it('lays flat like the sheet: ears, lid, lid flaps and tuck flap meet their creases', () => {
+    for (const T of [1.5, 3]) {
+      const m = generateBoxModel({ ...base, widthMm: 110, depthMm: 80, heightMm: 55, materialThicknessMm: T, includeLidFlaps: true });
+      const s = computeMailerSpans(m.params, 110, 80, 55);
+      const flat = (id: string) => closed(m, id).explodedPos;
+      const zBack = -s.floorD / 2;
+      expect(flat('back-dust-r')[0]).toBeCloseTo(s.floorW / 2 + s.earW / 2, 6);
+      expect(flat('front-dust-l')[0]).toBeCloseTo(-(s.floorW / 2 + s.earW / 2), 6);
+      expect(flat('top')[2]).toBeCloseTo(zBack - s.backH - s.lidD / 2, 6);
+      expect(flat('lid-flap-r')[0]).toBeCloseTo(s.floorW / 2 + s.lidFlapDepth / 2, 6);
+      expect(flat('tuck-flap')[2]).toBeCloseTo(zBack - s.backH - s.lidD - s.tuckH / 2, 6);
+    }
+  });
 });
 
 describe('other cardboard templates', () => {
@@ -573,6 +597,26 @@ describe('other cardboard templates', () => {
     'cardboard-tuck-carton': { left: 'left', right: 'right', front: 'front', back: 'back' },
     'cardboard-telescope': { left: 'base-left', right: 'base-right', front: 'base-front', back: 'base-back' },
   } as const;
+  it('telescope glue tabs are cut as on the sheet and sit inside the side walls', () => {
+    const T = 3;
+    const m = generateBoxModel({ ...base, ...inner, templateId: 'cardboard-telescope', materialThicknessMm: T });
+    const byId = (id: string) => m.panels3D.find((p) => p.id === id)!;
+    const span = inner.widthMm + T;
+    // The front wall runs T past each side crease, as on the sheet.
+    expect(byId('base-front').widthMm).toBeCloseTo(span + 2 * T, 6);
+    for (const corner of ['fl', 'fr', 'bl', 'br']) {
+      const tab = byId(`base-tab-${corner}`);
+      expect(tab.outlinePoints).toHaveLength(3);
+      // Point 2 mm short of the floor crease (the bottom edge, y = heightMm).
+      expect(Math.max(...tab.outlinePoints!.filter((q) => q.x !== tab.outlinePoints![0].x).map((q) => q.y))).toBeCloseTo(tab.heightMm - 2, 6);
+      expect(Math.abs(tab.closedPos[0])).toBeCloseTo(span / 2 - T, 6);
+      // Flat, the tab's hinge meets the front or back wall's end.
+      expect(Math.abs(tab.closedPos[0]) + Math.abs(tab.foldRig!.flatSlide![2])).toBeCloseTo(span / 2 + T, 6);
+    }
+    // Lid tabs point toward the roof crease, at the top.
+    const lidTab = byId('lid-tab-fl');
+    expect(lidTab.outlinePoints!.find((q) => q.x !== lidTab.outlinePoints![0].x)!.y).toBeCloseTo(2, 6);
+  });
   for (const templateId of ['cardboard-tuck-carton', 'cardboard-telescope'] as const) {
     for (const T of [1.5, 3]) {
       it(`${templateId} clears the typed inner size exactly at T=${T}`, () => {

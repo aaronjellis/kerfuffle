@@ -725,6 +725,63 @@ function generateTelescopingBox(
   const baseTabW = Math.min(22, H * 0.75);
   const lidTabW = Math.min(22, lidH * 0.75);
 
+  /**
+   * Four corner glue tabs, hinged off the front and back walls, cut as on the sheet: a triangle with
+   * the wall's full height on the hinge and its point `tabW` out, 2 mm short of the crease the wall
+   * folds from (the floor's, at the bottom, or the lid roof's, at the top).
+   * Closed, each sits inside its side wall (mid-plane T in from the wall's); flat, its hinge meets the
+   * front or back wall's end, which runs T past the side crease. W, D are crease-to-crease spans.
+   */
+  const cornerTabs = (
+    prefix: string,
+    label: string,
+    W: number,
+    D: number,
+    h: number,
+    midY: number,
+    tabW: number,
+    color: string,
+    stage: [number, number],
+    creaseAtTop: boolean
+  ): Panel3DTransform[] =>
+    ([
+      ['fl', 'Front-Left', -1, 1],
+      ['fr', 'Front-Right', 1, 1],
+      ['bl', 'Back-Left', -1, -1],
+      ['br', 'Back-Right', 1, -1],
+    ] as const).map(([corner, cornerName, sx, sz]) => {
+      const x = sx * (W / 2 - T);
+      // Local +x runs to world +z on the left (−π/2 about y) and to −z on the right, so the hinge
+      // edge is local x = tabW at the front-left and back-right corners, x = 0 at the other two.
+      const hx = sx * sz < 0 ? tabW : 0;
+      return {
+        id: `${prefix}-tab-${corner}`,
+        name: `${label} ${cornerName} Glue Tab`,
+        faceId: sx < 0 ? 'left' : 'right',
+        widthMm: tabW,
+        heightMm: h,
+        thicknessMm: T,
+        color,
+        closedPos: [x, midY, sz * (D / 2 - tabW / 2)],
+        explodedPos: [x, midY, sz * (D / 2 - tabW / 2)],
+        rotation: [0, (sx * Math.PI) / 2, 0],
+        outlinePoints: [
+          { x: hx, y: 0 },
+          { x: hx, y: h },
+          { x: tabW - hx, y: creaseAtTop ? 2 : h - 2 },
+        ],
+        foldRig: {
+          parentId: `${prefix}-${sz > 0 ? 'front' : 'back'}`,
+          pivotOffset: [x, midY, (sz * D) / 2],
+          axis: 'y',
+          flatAngleRad: (-sx * sz * Math.PI) / 2,
+          foldedAngleRad: 0,
+          stage,
+          flatSlide: [0, 0, -sz * 2 * T],
+        },
+      };
+    });
+
   // Same straddle rule as the carton: wall centres sit half a ply outside the inner face.
   const telescope3D = ((W: number, D: number, lidW: number, lidD: number): Panel3DTransform[] => [
     // Base Tray
@@ -744,7 +801,7 @@ function generateTelescopingBox(
       id: 'base-front',
       name: 'Base Tray Front Wall',
       faceId: 'front',
-      widthMm: W,
+      widthMm: W + 2 * T,
       heightMm: H,
       thicknessMm: T,
       color: '#cfa577',
@@ -763,7 +820,7 @@ function generateTelescopingBox(
       id: 'base-back',
       name: 'Base Tray Back Wall',
       faceId: 'back',
-      widthMm: W,
+      widthMm: W + 2 * T,
       heightMm: H,
       thicknessMm: T,
       color: '#cfa577',
@@ -778,87 +835,7 @@ function generateTelescopingBox(
         stage: [0.0, 0.35],
       },
     },
-    // 4 Base Tray Corner Glue Flaps (hinged off base-front and base-back)
-    {
-      id: 'base-tab-fl',
-      name: 'Base Front-Left Glue Tab',
-      faceId: 'left',
-      widthMm: baseTabW,
-      heightMm: Math.max(8, H - 4),
-      thicknessMm: T,
-      color: '#b08556',
-      closedPos: [-W / 2, 0, D / 2 - baseTabW / 2],
-      explodedPos: [-W / 2 - baseTabW / 2, -H / 2, D / 2 + H / 2],
-      rotation: [0, -Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'base-front',
-        pivotOffset: [-W / 2, 0, D / 2],
-        axis: 'y',
-        flatAngleRad: Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.35, 0.65],
-      },
-    },
-    {
-      id: 'base-tab-fr',
-      name: 'Base Front-Right Glue Tab',
-      faceId: 'right',
-      widthMm: baseTabW,
-      heightMm: Math.max(8, H - 4),
-      thicknessMm: T,
-      color: '#b08556',
-      closedPos: [W / 2, 0, D / 2 - baseTabW / 2],
-      explodedPos: [W / 2 + baseTabW / 2, -H / 2, D / 2 + H / 2],
-      rotation: [0, Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'base-front',
-        pivotOffset: [W / 2, 0, D / 2],
-        axis: 'y',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.35, 0.65],
-      },
-    },
-    {
-      id: 'base-tab-bl',
-      name: 'Base Back-Left Glue Tab',
-      faceId: 'left',
-      widthMm: baseTabW,
-      heightMm: Math.max(8, H - 4),
-      thicknessMm: T,
-      color: '#b08556',
-      closedPos: [-W / 2, 0, -D / 2 + baseTabW / 2],
-      explodedPos: [-W / 2 - baseTabW / 2, -H / 2, -D / 2 - H / 2],
-      rotation: [0, -Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'base-back',
-        pivotOffset: [-W / 2, 0, -D / 2],
-        axis: 'y',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.35, 0.65],
-      },
-    },
-    {
-      id: 'base-tab-br',
-      name: 'Base Back-Right Glue Tab',
-      faceId: 'right',
-      widthMm: baseTabW,
-      heightMm: Math.max(8, H - 4),
-      thicknessMm: T,
-      color: '#b08556',
-      closedPos: [W / 2, 0, -D / 2 + baseTabW / 2],
-      explodedPos: [W / 2 + baseTabW / 2, -H / 2, -D / 2 - H / 2],
-      rotation: [0, Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'base-back',
-        pivotOffset: [W / 2, 0, -D / 2],
-        axis: 'y',
-        flatAngleRad: Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.35, 0.65],
-      },
-    },
+    ...cornerTabs('base', 'Base', W, D, H, 0, baseTabW, '#b08556', [0.35, 0.65], false),
     {
       id: 'base-left',
       name: 'Base Tray Left Wall',
@@ -914,7 +891,7 @@ function generateTelescopingBox(
       id: 'lid-front',
       name: 'Slip Lid Front Skirt',
       faceId: 'front',
-      widthMm: lidW,
+      widthMm: lidW + 2 * T,
       heightMm: lidH,
       thicknessMm: T,
       color: '#dec1a0',
@@ -934,7 +911,7 @@ function generateTelescopingBox(
       id: 'lid-back',
       name: 'Slip Lid Back Skirt',
       faceId: 'back',
-      widthMm: lidW,
+      widthMm: lidW + 2 * T,
       heightMm: lidH,
       thicknessMm: T,
       color: '#dec1a0',
@@ -950,87 +927,7 @@ function generateTelescopingBox(
         stage: [0.10, 0.45],
       },
     },
-    // 4 Slip Lid Corner Glue Flaps (hinged off lid-front and lid-back)
-    {
-      id: 'lid-tab-fl',
-      name: 'Lid Front-Left Glue Tab',
-      faceId: 'left',
-      widthMm: lidTabW,
-      heightMm: Math.max(8, lidH - 4),
-      thicknessMm: T,
-      color: '#c8a987',
-      closedPos: [-lidW / 2, lidWallMidY, lidD / 2 - lidTabW / 2],
-      explodedPos: [-lidW / 2 - lidTabW / 2, lidExplodeY, lidD / 2 + lidH / 2],
-      rotation: [0, -Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'lid-front',
-        pivotOffset: [-lidW / 2, lidWallMidY, lidD / 2],
-        axis: 'y',
-        flatAngleRad: Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.45, 0.72],
-      },
-    },
-    {
-      id: 'lid-tab-fr',
-      name: 'Lid Front-Right Glue Tab',
-      faceId: 'right',
-      widthMm: lidTabW,
-      heightMm: Math.max(8, lidH - 4),
-      thicknessMm: T,
-      color: '#c8a987',
-      closedPos: [lidW / 2, lidWallMidY, lidD / 2 - lidTabW / 2],
-      explodedPos: [lidW / 2 + lidTabW / 2, lidExplodeY, lidD / 2 + lidH / 2],
-      rotation: [0, Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'lid-front',
-        pivotOffset: [lidW / 2, lidWallMidY, lidD / 2],
-        axis: 'y',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.45, 0.72],
-      },
-    },
-    {
-      id: 'lid-tab-bl',
-      name: 'Lid Back-Left Glue Tab',
-      faceId: 'left',
-      widthMm: lidTabW,
-      heightMm: Math.max(8, lidH - 4),
-      thicknessMm: T,
-      color: '#c8a987',
-      closedPos: [-lidW / 2, lidWallMidY, -lidD / 2 + lidTabW / 2],
-      explodedPos: [-lidW / 2 - lidTabW / 2, lidExplodeY, -lidD / 2 - lidH / 2],
-      rotation: [0, -Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'lid-back',
-        pivotOffset: [-lidW / 2, lidWallMidY, -lidD / 2],
-        axis: 'y',
-        flatAngleRad: -Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.45, 0.72],
-      },
-    },
-    {
-      id: 'lid-tab-br',
-      name: 'Lid Back-Right Glue Tab',
-      faceId: 'right',
-      widthMm: lidTabW,
-      heightMm: Math.max(8, lidH - 4),
-      thicknessMm: T,
-      color: '#c8a987',
-      closedPos: [lidW / 2, lidWallMidY, -lidD / 2 + lidTabW / 2],
-      explodedPos: [lidW / 2 + lidTabW / 2, lidExplodeY, -lidD / 2 - lidH / 2],
-      rotation: [0, Math.PI / 2, 0],
-      foldRig: {
-        parentId: 'lid-back',
-        pivotOffset: [lidW / 2, lidWallMidY, -lidD / 2],
-        axis: 'y',
-        flatAngleRad: Math.PI / 2,
-        foldedAngleRad: 0,
-        stage: [0.45, 0.72],
-      },
-    },
+    ...cornerTabs('lid', 'Lid', lidW, lidD, lidH, lidWallMidY, lidTabW, '#c8a987', [0.45, 0.72], true),
     {
       id: 'lid-left',
       name: 'Slip Lid Left Skirt',

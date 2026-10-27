@@ -89,6 +89,12 @@ export const MaterialSection: React.FC<SectionProps> = ({ params, updateParam, d
           />
         </Field>
       </div>
+
+      {params.category === 'wood-finger' && handlers.openKerfTest && (
+        <button type="button" className="btn btn-sm kerf-test-open" onClick={handlers.openKerfTest}>
+          Find your kerf with a test cut
+        </button>
+      )}
     </>
   );
 };

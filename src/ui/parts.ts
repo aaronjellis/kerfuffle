@@ -11,6 +11,7 @@ import {
   Printer,
   Ruler,
   Scissors,
+  Shapes,
   Sheet,
   Square,
   Tag,
@@ -29,9 +30,11 @@ export type PartId =
   | 'dividers'
   | 'living-hinge'
   | 'closure'
+  | 'side-locks'
   | 'flaps'
   | 'score-lines'
   | 'shell'
+  | 'pattern'
   | 'labels'
   | 'artwork'
   | 'sheet'
@@ -87,10 +90,16 @@ const DEFS: Record<PartId, PartDef> = {
     keywords: 'closure lock tab tuck glue thumb notch',
     icon: ArrowDownToLine
   },
+  'side-locks': {
+    id: 'side-locks',
+    label: 'Side locks',
+    keywords: 'side lock tabs floor tabs slots inner wall count length',
+    icon: Lock
+  },
   flaps: {
     id: 'flaps',
     label: 'Flaps',
-    keywords: 'flap tuck flap glue flap clearance lid flaps',
+    keywords: 'flap tuck flap glue flap clearance lid flaps dust ears',
     icon: PanelTop
   },
   'score-lines': {
@@ -105,6 +114,13 @@ const DEFS: Record<PartId, PartDef> = {
     label: 'Shell',
     keywords: 'wall floor thickness inner outer fillet chamfer lid split height snap',
     icon: Box
+  },
+  pattern: {
+    id: 'pattern',
+    label: 'Pattern',
+    keywords:
+      'pattern lattice mesh cutout cut out window see inside fretwork grid checker diamond honeycomb hex scallop sunflower spiral swirl padding bar cell',
+    icon: Shapes
   },
   labels: {
     id: 'labels',
@@ -135,15 +151,16 @@ const DEFS: Record<PartId, PartDef> = {
 };
 
 const COMMON_TAIL: PartId[] = ['labels', 'artwork', 'sheet'];
+const PATTERN_TAIL: PartId[] = ['pattern', ...COMMON_TAIL];
 
 const PART_IDS: Record<BoxTemplateId, PartId[]> = {
-  'finger-basic': ['size', 'material', 'lid', 'joints', ...COMMON_TAIL],
-  'finger-clamshell': ['size', 'material', 'lid', 'hinge', 'joints', ...COMMON_TAIL],
-  'finger-living-hinge': ['size', 'material', 'living-hinge', 'joints', ...COMMON_TAIL],
+  'finger-basic': ['size', 'material', 'lid', 'joints', ...PATTERN_TAIL],
+  'finger-clamshell': ['size', 'material', 'lid', 'hinge', 'joints', ...PATTERN_TAIL],
+  'finger-living-hinge': ['size', 'material', 'living-hinge', 'joints', ...PATTERN_TAIL],
   'finger-organizer': ['size', 'material', 'joints', 'dividers', ...COMMON_TAIL],
-  'cardboard-mailer': ['size', 'material', 'closure', 'flaps', 'score-lines', ...COMMON_TAIL],
-  'cardboard-tuck-carton': ['size', 'material', 'score-lines', ...COMMON_TAIL],
-  'cardboard-telescope': ['size', 'material', 'score-lines', ...COMMON_TAIL],
+  'cardboard-mailer': ['size', 'material', 'closure', 'side-locks', 'flaps', 'score-lines', ...PATTERN_TAIL],
+  'cardboard-tuck-carton': ['size', 'material', 'score-lines', ...PATTERN_TAIL],
+  'cardboard-telescope': ['size', 'material', 'score-lines', ...PATTERN_TAIL],
   '3d-snap-box': ['size', 'shell', 'hinge', 'clasp', 'labels', 'artwork', 'print-export']
 };
 
@@ -177,7 +194,7 @@ const MESH_TO_PART: Record<string, PartId> = {
   clasp: 'clasp',
   lid: 'lid',
   flap: 'flaps',
-  tabs: 'flaps',
+  tabs: 'side-locks',
   closure: 'closure',
   shell: 'shell',
   lip: 'shell',

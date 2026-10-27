@@ -12,10 +12,12 @@ import { LabelsSection } from './LabelsSection';
 import { LidSection } from './LidSection';
 import { LivingHingeSection } from './LivingHingeSection';
 import { MaterialSection } from './MaterialSection';
+import { PatternSection } from './PatternSection';
 import { PrintExportSection } from './PrintExportSection';
 import { ScoreLinesSection } from './ScoreLinesSection';
 import { SheetSection } from './SheetSection';
 import { ShellSection } from './ShellSection';
+import { SideLocksSection } from './SideLocksSection';
 import { SizeSection } from './SizeSection';
 
 export type { SectionHandlers, SectionProps } from './types';
@@ -31,9 +33,11 @@ export const SECTION_COMPONENTS: Record<PartId, React.FC<SectionProps>> = {
   dividers: DividersSection,
   'living-hinge': LivingHingeSection,
   closure: ClosureSection,
+  'side-locks': SideLocksSection,
   flaps: FlapsSection,
   'score-lines': ScoreLinesSection,
   shell: ShellSection,
+  pattern: PatternSection,
   labels: LabelsSection,
   artwork: ArtworkSection,
   sheet: SheetSection,

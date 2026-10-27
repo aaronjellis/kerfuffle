@@ -24,6 +24,15 @@ export type CardboardLockStyle = 'tuck' | 'front-lock';
 export type ExportProfileId = 'xtool-studio' | 'lightburn' | 'illustrator' | 'glowforge';
 export type DimensionReference = 'inner' | 'outer';
 export type FaceLabelPosition = 'center' | 'bottom' | 'top-left';
+export type FacePatternStyle =
+  | 'none'
+  | 'grid'
+  | 'checker'
+  | 'diamond'
+  | 'honeycomb'
+  | 'scallops'
+  | 'sunflower'
+  | 'spiral';
 
 export interface TextArtworkConfig {
   text: string;
@@ -102,6 +111,10 @@ export interface BoxParameters {
   cardboardLockStyle: CardboardLockStyle;
   lockTabWidthMm: number;
   lockTabDepthMm: number;
+  /** Mailer: tabs per inner side wall that lock into the floor slots */
+  sideTabCount: 1 | 2;
+  /** Mailer: each side tab's length along the wall; a ceiling, shortened to fit */
+  sideTabLenMm: number;
   tuckCartonStyle: 'reverse-tuck' | 'straight-tuck';
   telescopeClearanceMm: number;
   /** 3D Print specific */
@@ -112,6 +125,14 @@ export interface BoxParameters {
   outerFilletMm: number;
   includeSnapClasp: boolean;
   include3dHinge: boolean;
+  /** See-through pattern cut into the chosen faces */
+  facePatternStyle: FacePatternStyle;
+  facePatternFaces: string[];
+  facePatternCellMm: number;
+  /** Solid web left between neighbouring holes */
+  facePatternBarMm: number;
+  /** Solid border between the face's edge and the pattern */
+  facePatternPaddingMm: number;
   /** Inner Side Vector Score Face Labels */
   scoreInnerFaceLabels: boolean;
   faceLabelPosition: FaceLabelPosition;
@@ -204,6 +225,11 @@ export interface Panel3DTransform {
     foldedAngleRad: number;
     /** Normalized timing window [start, end] within 0..1 fold progress */
     stage: [number, number];
+    /**
+     * Shift in the closed frame, applied in full while the panel lies flat and easing to zero as it
+     * folds. Lets the flat rig tile like the sheet where the closed box seats a panel off its crease.
+     */
+    flatSlide?: [number, number, number];
   };
 }
 
@@ -221,6 +247,8 @@ export interface GeneratedBoxModel {
   outerDims: BoxDims;
   panels2D: BoxPanel2D[];
   panels3D: Panel3DTransform[];
+  /** Faces this model can take a see-through pattern on, before any is cut */
+  patternFaceIds: string[];
   sheetWidthMm: number;
   sheetHeightMm: number;
   fitsOnBed: boolean;

@@ -424,7 +424,11 @@ function applyAssemblyTransform(
       spec.foldRig.pivotOffset[1],
       spec.foldRig.pivotOffset[2]
     );
-    return { angle, axisVec, pivot, parentId: spec.foldRig.parentId };
+    const slide = spec.foldRig.flatSlide;
+    const slideVec = slide
+      ? new THREE.Vector3(slide[0], slide[1], slide[2]).multiplyScalar(1 - localEase)
+      : null;
+    return { angle, axisVec, pivot, slideVec, parentId: spec.foldRig.parentId };
   };
 
   map.forEach(({ wrapper, spec }) => {
@@ -482,6 +486,8 @@ function applyAssemblyTransform(
 
       // Apply child-first, then parent fold rotations around their respective pivots
       for (const step of chain) {
+        // The slide moves the panel and everything folded onto it, so it goes in before the fold.
+        if (step.slideVec) pos.add(step.slideVec);
         const rel = pos.clone().sub(step.pivot);
         rel.applyAxisAngle(step.axisVec, step.angle);
         pos.copy(step.pivot.clone().add(rel));

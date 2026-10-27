@@ -47,6 +47,9 @@ export interface SectionHandlers {
   exportHingeStl: () => void;
   downloadStl: () => void;
   downloadStlParts: () => void;
+
+  /** Opens the kerf test in place of the inspector; absent inside the test itself. */
+  openKerfTest?: () => void;
 }
 
 export interface SectionProps {
