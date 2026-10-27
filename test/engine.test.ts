@@ -174,12 +174,15 @@ describe('Kerfuffle Parametric Geometry & Export Engine', () => {
 
       const floorY = -model.innerDims.heightMm / 2;
       const panelMap = new Map(model.panels3D.map((p) => [p.id, p]));
+      const flatYs: number[] = [];
 
       for (const panel of model.panels3D) {
         let [x, y, z] = panel.closedPos;
         let curr: Panel3DTransform | undefined = panel;
         while (curr?.foldRig) {
           const rig: NonNullable<Panel3DTransform['foldRig']> = curr.foldRig;
+          // A flat slide moves the panel (and its children) before this fold, as the viewport does.
+          if (rig.flatSlide) [x, y, z] = [x + rig.flatSlide[0], y + rig.flatSlide[1], z + rig.flatSlide[2]];
           const [px, py, pz] = rig.pivotOffset;
           const rx = x - px;
           const ry = y - py;
@@ -198,9 +201,12 @@ describe('Kerfuffle Parametric Geometry & Export Engine', () => {
           }
           curr = rig.parentId ? panelMap.get(rig.parentId) : undefined;
         }
-        // Every panel must lie flat on the floor plane (y === floorY) when unfolded (progress = 0)
-        expect(y).toBeCloseTo(floorY, 3);
+        // Every panel lies flat in one plane when unfolded (progress = 0): the root's crease plane,
+        // which is within a ply of the floor's mid-plane.
+        flatYs.push(y);
       }
+      for (const y of flatYs) expect(y).toBeCloseTo(flatYs[0], 3);
+      expect(Math.abs(flatYs[0] - floorY)).toBeLessThanOrEqual(model.params.materialThicknessMm / 2 + 1e-6);
     }
   });
 

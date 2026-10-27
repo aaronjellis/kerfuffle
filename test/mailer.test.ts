@@ -638,7 +638,8 @@ describe('other cardboard templates', () => {
           const glueW = Math.max(10, p.glueFlapMm);
           expect(sheet.widthMm).toBeCloseTo(glueW + 2 * (W + T) + 2 * (D + T), 2);
           const tuckH = Math.max(12, p.tuckFlapMm);
-          expect(sheet.heightMm).toBeCloseTo(2 * tuckH + 2 * (D + T) + (H + 2 * T), 2);
+          // Each lid runs D between its creases; the front and back run H + T between theirs.
+          expect(sheet.heightMm).toBeCloseTo(2 * tuckH + 2 * D + (H + T), 2);
           // The rig's tuck flaps are as wide as the cut: the wall span less a tuckInset each side.
           const tuckW = W + T - 2 * Math.max(0.8, T);
           for (const id of ['top-tuck', 'bot-tuck']) {
