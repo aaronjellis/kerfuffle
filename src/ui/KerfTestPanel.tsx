@@ -54,6 +54,9 @@ export const KerfTestPanel: React.FC<KerfTestPanelProps> = ({
             <div className="inspect-fold-body kerf-test-material">
               <MaterialSection {...sectionProps} />
             </div>
+            <p className="helper-note">
+              The test starts from this material's usual kerf. Picking the material again resets it.
+            </p>
           </li>
           <li>
             <h3>Cut the test pieces</h3>
@@ -72,6 +75,10 @@ export const KerfTestPanel: React.FC<KerfTestPanelProps> = ({
               Keep both pieces face up. Slide B against each side of A, where the matching numbers meet, and press.
               Pick the tightest side that still goes together by hand; it becomes your kerf for every box after this.
             </p>
+            <p className="helper-note">
+              Each number is a kerf: the width of material your laser's beam burns away. Kerfuffle adds that width
+              back to every tab, so <strong>a bigger number fits tighter</strong>.
+            </p>
             <div className="chip-row kerf-test-values" role="radiogroup" aria-label="Which side fit best?">
               {values.map((v) => (
                 <button
@@ -85,6 +92,10 @@ export const KerfTestPanel: React.FC<KerfTestPanelProps> = ({
                   {v.toFixed(2)}
                 </button>
               ))}
+            </div>
+            <div className="kerf-test-scale" aria-hidden="true">
+              <span>← Looser</span>
+              <span>Tighter →</span>
             </div>
             <div className="two-col-inputs">
               <button type="button" className="btn btn-sm" onClick={() => onShift(1)}>

@@ -72,8 +72,28 @@ describe('pattern faces', () => {
     expect(a.panels3D.find((p) => p.id === 'top')!.holeContours).toBeUndefined();
   });
 
+  it('gives each side its own pattern and leaves sides without one solid', () => {
+    const m = model({
+      category: 'wood-finger',
+      templateId: 'finger-basic',
+      woodLidStyle: 'closed',
+      facePatterns: {
+        top: { style: 'grid', cellMm: 14, barMm: 3, paddingMm: 8 },
+        front: { style: 'sunflower', cellMm: 10, barMm: 2, paddingMm: 6 },
+        back: { style: 'none', cellMm: 14, barMm: 3, paddingMm: 8 },
+      },
+    });
+    const cuts = (id: string) => m.panels2D.find((p) => p.id === id)!.paths.filter((p) => p.id.includes('-pattern-')).length;
+    const grid = generatePatternHoles({ style: 'grid', cellMm: 14, barMm: 3, paddingMm: 8 }, 110, 80).length;
+    expect(cuts('top')).toBe(grid);
+    expect(cuts('front')).toBeGreaterThan(0);
+    expect(cuts('back')).toBe(0);
+    expect(cuts('left')).toBe(0);
+    expect(m.panels3D.find((p) => p.id === 'back')!.holeContours ?? []).toHaveLength(0);
+  });
+
   it('finger lid: the sheet and the 3D panel get the same holes in the shared outline frame', () => {
-    const m = model({ category: 'wood-finger', templateId: 'finger-basic', woodLidStyle: 'closed', facePatternStyle: 'honeycomb', facePatternFaces: ['top'] });
+    const m = model({ category: 'wood-finger', templateId: 'finger-basic', woodLidStyle: 'closed', facePatterns: { top: { style: 'honeycomb', cellMm: 14, barMm: 3, paddingMm: 8 } } });
     const sheet = m.panels2D.find((p) => p.id === 'top')!;
     const cuts = sheet.paths.filter((p) => p.id.startsWith('top-pattern-top-'));
     const top3 = m.panels3D.find((p) => p.id === 'top')!;
@@ -91,7 +111,7 @@ describe('pattern faces', () => {
   });
 
   it('mailer lid: laid flat, the 3D holes land where the sheet cuts them', () => {
-    const m = model({ category: 'cardboard-fold', templateId: 'cardboard-mailer', facePatternStyle: 'spiral', facePatternFaces: ['top', 'front'] });
+    const m = model({ category: 'cardboard-fold', templateId: 'cardboard-mailer', facePatterns: { top: { style: 'spiral', cellMm: 14, barMm: 3, paddingMm: 8 }, front: { style: 'scallops', cellMm: 10, barMm: 2.5, paddingMm: 6 } } });
     const sheet = m.panels2D[0];
     const byId = new Map(m.panels3D.map((p) => [p.id, p]));
     // Flat world position of a point in a panel's outline frame, following the fold chain like the viewport.

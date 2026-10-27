@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { BoxPanel2D, BoxParameters, FacePatternStyle, Panel3DTransform, Point2D } from './types';
+import type { BoxPanel2D, BoxParameters, FacePatternSettings, FacePatternStyle, Panel3DTransform, Point2D } from './types';
 import { pointsToSvgPath } from './fingerJointEngine';
 
 /** Faces a see-through pattern can go on. The floor is left solid. */
@@ -230,56 +230,53 @@ function scallop(r: number, r1: number, r2: number): Poly {
 }
 
 /**
- * Cells between log spirals and rings: in log-polar space (u = ln ρ, θ) the arms are straight lines
- * θ − u = const and the rings u = const, so every cell has the same shape, growing outward. Each
- * cell is inset by bar / 2 in real space, which is (bar / 2) / ρ in log-polar space.
+ * Square holes on a log-spiral grid. In log-polar space (u = ln ρ, θ) two families of lines,
+ * θ − u = a·k and θ + u = a·m with a = 2π / n, cut the plane into squares; mapped back, they are
+ * spiral arms turning both ways, and every cell is a near-square that grows with its radius. Each
+ * cell becomes a straight-edged square hole, shrunk about its centre to leave a gap of at least
+ * `bar` (a third of the cell further out). Cells too small to cut leave the centre solid.
  */
 function spiralLattice(cx: number, cy: number, reach: number, cell: number, bar: number): Poly[] {
-  const n = Math.max(8, Math.min(48, Math.round((TAU * reach * 0.45) / cell)));
-  const ds = TAU / n;
-  const du = ds; // with arms at 45° this keeps the cells close to square
-  // Cells start small near the centre; those narrower than a bar are left solid, which makes the hub.
-  const hub = cell * 0.4;
-  const k = Math.SQRT2; // a 45° arm's perpendicular offset is √2 times its offset across s
-  const holes: Poly[] = [];
-  const toXY = (u: number, s: number) => {
+  // A cell's side is about ρ·a/√2; size the grid so the outermost cells are `cell` across.
+  const n = Math.max(16, Math.min(96, Math.round((TAU * reach) / (cell * Math.SQRT2))));
+  const a = TAU / n;
+  const minHole = Math.max(1.5, bar * 0.6);
+  const toXY = (k: number, m: number) => {
+    const u = (a * (m - k)) / 2;
+    const th = (a * (m + k)) / 2;
     const rho = Math.exp(u);
-    const th = s + u;
     return { x: cx + rho * Math.cos(th), y: cy + rho * Math.sin(th) };
   };
-  for (let u0 = Math.log(hub); u0 < Math.log(reach) + du; u0 += du) {
-    const uA = u0 + bar / 2 / Math.exp(u0);
-    const uB = u0 + du - bar / 2 / Math.exp(u0 + du);
-    if (uB <= uA) continue;
-    for (let i = 0; i < n; i++) {
-      const s0 = i * ds;
-      const left = (u: number) => s0 + (k * bar) / 2 / Math.exp(u);
-      const right = (u: number) => s0 + ds - (k * bar) / 2 / Math.exp(u);
-      if (((right(uA) - left(uA)) * Math.exp(uA)) / k < bar * 0.8) continue;
-      const pts: Poly = [];
-      const m = 6;
-      for (let j = 0; j <= m; j++) pts.push(toXY(uA + ((uB - uA) * j) / m, left(uA + ((uB - uA) * j) / m)));
-      for (let j = 1; j < m; j++) pts.push(toXY(uB, left(uB) + ((right(uB) - left(uB)) * j) / m));
-      for (let j = m; j >= 0; j--) pts.push(toXY(uA + ((uB - uA) * j) / m, right(uA + ((uB - uA) * j) / m)));
-      for (let j = m - 1; j > 0; j--) pts.push(toXY(uA, left(uA) + ((right(uA) - left(uA)) * j) / m));
-      holes.push(pts);
+  const holes: Poly[] = [];
+  // q = m − k picks the ring (u = a·q / 2); the n cells of a ring are p = k + m of q's parity.
+  const qMax = Math.ceil((2 * (Math.log(reach) + a)) / a);
+  for (let q = qMax; q > -4 * n; q--) {
+    let anyCut = false;
+    for (let t = 0; t < n; t++) {
+      const p = (((q % 2) + 2) % 2) + 2 * t;
+      const k = (p - q) / 2;
+      const m = (p + q) / 2;
+      const corners = [toXY(k, m), toXY(k + 1, m), toXY(k + 1, m + 1), toXY(k, m + 1)];
+      const c = { x: corners.reduce((s, v) => s + v.x, 0) / 4, y: corners.reduce((s, v) => s + v.y, 0) / 4 };
+      const side = (Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) +
+        Math.hypot(corners[2].x - corners[1].x, corners[2].y - corners[1].y)) / 2;
+      const gap = Math.max(bar, side * 0.35);
+      if (side - gap < minHole) continue;
+      const f = (side - gap) / side;
+      holes.push(corners.map((v) => ({ x: c.x + (v.x - c.x) * f, y: c.y + (v.y - c.y) * f })));
+      anyCut = true;
     }
+    // Rings only get smaller inward; once a whole ring is too small, every ring inside it is too.
+    if (!anyCut && q < 0) break;
   }
   return holes;
-}
-
-export interface PatternSpec {
-  style: FacePatternStyle;
-  cellMm: number;
-  barMm: number;
-  paddingMm: number;
 }
 
 /**
  * Holes for a `width × height` region (origin top-left, y down), centred on it and clipped to the
  * region inset by `paddingMm` with rounded corners. Slivers thinner than 1 mm are dropped.
  */
-export function generatePatternHoles(spec: PatternSpec, width: number, height: number): Poly[] {
+export function generatePatternHoles(spec: FacePatternSettings, width: number, height: number): Poly[] {
   if (spec.style === 'none') return [];
   const cell = Math.max(4, spec.cellMm);
   const bar = Math.max(0.8, Math.min(spec.barMm, cell * 0.6));
@@ -403,26 +400,22 @@ export function resolvePatternFaces(
   return targets;
 }
 
-/** Cuts the chosen pattern into the chosen faces, on the sheet and in 3D. */
+/** Cuts each face's own pattern into it, on the sheet and in 3D. */
 export function applyFacePatterns(
   panels2D: BoxPanel2D[],
   panels3D: Panel3DTransform[],
   params: BoxParameters,
   targets: PatternFaceTarget[],
 ): { panels2D: BoxPanel2D[]; panels3D: Panel3DTransform[] } {
-  if (params.facePatternStyle === 'none') return { panels2D, panels3D };
-  const chosen = targets.filter((t) => params.facePatternFaces.includes(t.faceId));
+  const chosen = targets.filter((t) => {
+    const spec = params.facePatterns[t.faceId];
+    return spec !== undefined && spec.style !== 'none';
+  });
   if (chosen.length === 0) return { panels2D, panels3D };
-  const spec: PatternSpec = {
-    style: params.facePatternStyle,
-    cellMm: params.facePatternCellMm,
-    barMm: params.facePatternBarMm,
-    paddingMm: params.facePatternPaddingMm,
-  };
   const out2D = panels2D.map((p) => ({ ...p, paths: [...p.paths] }));
   const out3D = panels3D.map((p) => ({ ...p }));
   for (const t of chosen) {
-    const holes = generatePatternHoles(spec, t.region.width, t.region.height);
+    const holes = generatePatternHoles(params.facePatterns[t.faceId], t.region.width, t.region.height);
     if (holes.length === 0) continue;
     const p2 = out2D.find((p) => p.id === t.panel2DId)!;
     holes.forEach((h, i) =>

@@ -1,4 +1,4 @@
-import { BoxCategory, BoxParameters, BoxTemplateId, ExportProfileId, MachineBedPreset } from './types';
+import { BoxCategory, BoxParameters, BoxTemplateId, ExportProfileId, FacePatternSettings, MachineBedPreset } from './types';
 
 export const MACHINE_BED_PRESETS: MachineBedPreset[] = [
   {
@@ -337,6 +337,9 @@ export const DEFAULT_FACE_LABELS: Record<string, string> = {
   right: 'RIGHT',
 };
 
+/** The settings a face starts from when it first gets a pattern and no other face has one. */
+export const DEFAULT_FACE_PATTERN: Omit<FacePatternSettings, 'style'> = { cellMm: 14, barMm: 3, paddingMm: 8 };
+
 export const DEFAULT_BOX_PARAMETERS: BoxParameters = {
   category: 'wood-finger',
   templateId: 'finger-basic',
@@ -369,11 +372,7 @@ export const DEFAULT_BOX_PARAMETERS: BoxParameters = {
   lockTabDepthMm: 30,
   sideTabCount: 2,
   sideTabLenMm: 12,
-  facePatternStyle: 'none',
-  facePatternFaces: ['top'],
-  facePatternCellMm: 14,
-  facePatternBarMm: 3,
-  facePatternPaddingMm: 8,
+  facePatterns: {},
   tuckCartonStyle: 'reverse-tuck',
   telescopeClearanceMm: 1.2,
   wallThickness3dMm: 2.4,

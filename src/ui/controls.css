@@ -450,6 +450,17 @@
   fill: var(--accent);
 }
 
+/* A side's chip shows a small copy of its pattern once it has one. */
+.chip.pattern-side .pattern-side-icon {
+  width: 18px;
+  height: auto;
+  fill: currentColor;
+}
+
+.pattern-apply-all {
+  justify-self: start;
+}
+
 /* ---------- kerf test ---------- */
 
 .kerf-test-head {
@@ -520,10 +531,25 @@
   justify-self: start;
 }
 
+/* One row, loosest on the left, so the Looser / Tighter scale under it reads true. */
 .kerf-test-values {
-  flex-wrap: wrap;
   margin-inline: 0;
   padding-inline: 0;
+}
+
+.kerf-test-values .chip {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+  padding-inline: 0.25rem;
+}
+
+.kerf-test-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -0.35rem;
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
 .kerf-test-actions {

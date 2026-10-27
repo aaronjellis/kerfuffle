@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NumberField } from '../../components/NumberField';
 import { generatePatternHoles } from '../../engine/facePatterns';
-import type { FacePatternStyle } from '../../engine/types';
+import { DEFAULT_FACE_PATTERN } from '../../engine/presets';
+import type { FacePatternSettings, FacePatternStyle } from '../../engine/types';
 import { Field } from '../Field';
 import { unitHelpers } from './shared';
 import type { SectionProps } from './types';
@@ -39,73 +40,98 @@ const PREVIEWS: Record<string, string> = Object.fromEntries(
   }),
 );
 
-/** A see-through pattern cut into the chosen faces, framed by a solid border. */
+const Preview: React.FC<{ style: FacePatternStyle; className?: string }> = ({ style, className }) => (
+  <svg viewBox={`0 0 ${PREVIEW_W} ${PREVIEW_H}`} className={className} aria-hidden="true">
+    <path d={PREVIEWS[style]} fillRule="evenodd" />
+  </svg>
+);
+
+/** A see-through pattern per side: pick a side, then its pattern, cell, bar and border. */
 export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, displayUnit, model }) => {
   const { isInch, uLabel } = unitHelpers(displayUnit);
   const available = model.patternFaceIds;
-  const chosen = params.facePatternFaces.filter((f) => available.includes(f));
-  const toggleFace = (id: string) =>
-    updateParam(
-      'facePatternFaces',
-      params.facePatternFaces.includes(id)
-        ? params.facePatternFaces.filter((f) => f !== id)
-        : [...params.facePatternFaces, id],
-    );
+  const patterns = params.facePatterns;
+  const [picked, setPicked] = useState<string | null>(null);
+  // Start on a side that already has a pattern; a side the template lacks falls back to the first.
+  const face =
+    picked && available.includes(picked) ? picked : (available.find((f) => patterns[f]) ?? available[0]);
+  const current = face ? patterns[face] : undefined;
+  const style = current?.style ?? 'none';
 
-  if (available.length === 0) {
+  if (!face) {
     return (
       <p className="helper-note">
-        This box has no face that can take a pattern: its walls carry slots or hinge holes, and it has no
+        This box has no side that can take a pattern: its walls carry slots or hinge holes, and it has no
         lid panel.
       </p>
     );
   }
 
+  /** A side that gets its first pattern starts from another patterned side's sizes, so sides match. */
+  const setFace = (patch: Partial<FacePatternSettings>) => {
+    const base = current ?? Object.values(patterns)[0] ?? { style: 'none' as const, ...DEFAULT_FACE_PATTERN };
+    updateParam('facePatterns', { ...patterns, [face]: { ...base, ...patch } });
+  };
+  const setStyle = (next: FacePatternStyle) => {
+    if (next === 'none') {
+      const { [face]: _removed, ...rest } = patterns;
+      updateParam('facePatterns', rest);
+    } else {
+      setFace({ style: next });
+    }
+  };
+  const applyToAll = () => {
+    if (!current) return;
+    updateParam('facePatterns', { ...patterns, ...Object.fromEntries(available.map((f) => [f, { ...current }])) });
+  };
+
   return (
     <>
-      <div className="pattern-picker" role="radiogroup" aria-label="Pattern">
+      <Field label="Side" group>
+        <div className="chip-row" role="radiogroup" aria-label="Side">
+          {available.map((id) => {
+            const p = patterns[id];
+            return (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={id === face}
+                className="chip pattern-side"
+                onClick={() => setPicked(id)}
+              >
+                {p && p.style !== 'none' && <Preview style={p.style} className="pattern-side-icon" />}
+                {FACE_LABELS[id] ?? id}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+
+      <div className="pattern-picker" role="radiogroup" aria-label={`Pattern on the ${FACE_LABELS[face]?.toLowerCase() ?? face}`}>
         {STYLES.map(({ value, label }) => (
           <button
             key={value}
             type="button"
             role="radio"
-            aria-checked={params.facePatternStyle === value}
+            aria-checked={style === value}
             aria-label={label}
             className="pattern-tile"
             data-ph-capture-attribute-pattern={value}
-            onClick={() => updateParam('facePatternStyle', value)}
+            onClick={() => setStyle(value)}
           >
-            <svg viewBox={`0 0 ${PREVIEW_W} ${PREVIEW_H}`} aria-hidden="true">
-              <path d={PREVIEWS[value]} fillRule="evenodd" />
-            </svg>
+            <Preview style={value} />
             <span>{label}</span>
           </button>
         ))}
       </div>
 
-      {params.facePatternStyle !== 'none' && (
+      {current && current.style !== 'none' && (
         <>
-          <Field label="Faces" group>
-            <div className="chip-row" role="group" aria-label="Faces">
-              {available.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  className="chip"
-                  aria-pressed={params.facePatternFaces.includes(id)}
-                  onClick={() => toggleFace(id)}
-                >
-                  {FACE_LABELS[id] ?? id}
-                </button>
-              ))}
-            </div>
-          </Field>
-          {chosen.length === 0 && <p className="helper-note">Pick at least one face to cut the pattern into.</p>}
-
           <div className="two-col-inputs">
             <Field label={`Cell size (${uLabel})`}>
               <NumberField
-                valueMm={params.facePatternCellMm}
+                valueMm={current.cellMm}
                 minMm={6}
                 maxMm={40}
                 step={isInch ? 0.05 : 1}
@@ -113,12 +139,12 @@ export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, di
                 inDecimals={2}
                 mmDecimals={1}
                 ariaLabel="Pattern cell size"
-                onChangeMm={(mm) => updateParam('facePatternCellMm', mm)}
+                onChangeMm={(mm) => setFace({ cellMm: mm })}
               />
             </Field>
             <Field label={`Bar width (${uLabel})`}>
               <NumberField
-                valueMm={params.facePatternBarMm}
+                valueMm={current.barMm}
                 minMm={1}
                 maxMm={10}
                 step={isInch ? 0.01 : 0.5}
@@ -126,13 +152,13 @@ export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, di
                 inDecimals={3}
                 mmDecimals={1}
                 ariaLabel="Pattern bar width"
-                onChangeMm={(mm) => updateParam('facePatternBarMm', mm)}
+                onChangeMm={(mm) => setFace({ barMm: mm })}
               />
             </Field>
           </div>
           <Field label={`Padding (${uLabel})`}>
             <NumberField
-              valueMm={params.facePatternPaddingMm}
+              valueMm={current.paddingMm}
               minMm={2}
               maxMm={30}
               step={isInch ? 0.05 : 1}
@@ -140,9 +166,14 @@ export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, di
               inDecimals={2}
               mmDecimals={1}
               ariaLabel="Pattern padding"
-              onChangeMm={(mm) => updateParam('facePatternPaddingMm', mm)}
+              onChangeMm={(mm) => setFace({ paddingMm: mm })}
             />
           </Field>
+          {available.length > 1 && (
+            <button type="button" className="btn btn-sm pattern-apply-all" onClick={applyToAll}>
+              Use this pattern on every side
+            </button>
+          )}
           <p className="helper-note">
             Bars thinner than about twice the material thickness can snap; padding is the solid border kept
             around the pattern.

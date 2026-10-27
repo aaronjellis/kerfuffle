@@ -34,6 +34,17 @@ export type FacePatternStyle =
   | 'sunflower'
   | 'spiral';
 
+/** One face's see-through pattern. */
+export interface FacePatternSettings {
+  style: FacePatternStyle;
+  /** The pattern's repeat */
+  cellMm: number;
+  /** Solid web left between neighbouring holes */
+  barMm: number;
+  /** Solid border between the face's edge and the pattern */
+  paddingMm: number;
+}
+
 export interface TextArtworkConfig {
   text: string;
   fontFamily: string;
@@ -125,14 +136,8 @@ export interface BoxParameters {
   outerFilletMm: number;
   includeSnapClasp: boolean;
   include3dHinge: boolean;
-  /** See-through pattern cut into the chosen faces */
-  facePatternStyle: FacePatternStyle;
-  facePatternFaces: string[];
-  facePatternCellMm: number;
-  /** Solid web left between neighbouring holes */
-  facePatternBarMm: number;
-  /** Solid border between the face's edge and the pattern */
-  facePatternPaddingMm: number;
+  /** See-through pattern per face ('top', 'front', …); a face with no entry stays solid */
+  facePatterns: Record<string, FacePatternSettings>;
   /** Inner Side Vector Score Face Labels */
   scoreInnerFaceLabels: boolean;
   faceLabelPosition: FaceLabelPosition;
