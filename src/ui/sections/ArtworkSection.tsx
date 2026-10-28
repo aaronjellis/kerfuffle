@@ -13,9 +13,9 @@ import {
   Type,
 } from 'lucide-react';
 import { NumberField } from '../../components/NumberField';
-import { GOOGLE_FONT_CATALOG } from '../../engine/googleFonts';
+import { GOOGLE_FONT_CATALOG, resolvePieceDimensions } from '../../engine/googleFonts';
 import { SAMPLE_ARTWORK_PRESETS } from '../../engine/sampleArtworks';
-import type { TextArtworkConfig } from '../../engine/types';
+import type { FaceArtwork, TextArtworkConfig } from '../../engine/types';
 import { Field, Segmented } from '../Field';
 import { FACE_OPTIONS, unitHelpers } from './shared';
 import type { SectionProps } from './types';
@@ -27,9 +27,19 @@ const anchorName = (ax: -1 | 0 | 1, ay: -1 | 0 | 1): string => {
   return `Snap to the ${[v, h].filter(Boolean).join(' ')}${v && h ? ' corner' : ' edge'}`;
 };
 
+/**
+ * The artwork resized so `side` becomes `mm`, the other side following: text and images keep their
+ * proportions (an image is drawn fitted to its box, so changing one side alone would only pad it).
+ */
+const scaleTo = (art: FaceArtwork, side: 'widthMm' | 'heightMm', mm: number): Pick<FaceArtwork, 'widthMm' | 'heightMm'> => {
+  const k = mm / Math.max(0.1, art[side]);
+  const round = (v: number) => Math.round(v * 10) / 10;
+  return { widthMm: Math.max(1, round(art.widthMm * k)), heightMm: Math.max(1, round(art.heightMm * k)) };
+};
+
 /** Text and graphics per face: face picker, upload, Google Font text, and the per-item inspector. */
-export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }) => {
-  const { isInch, uLabel } = unitHelpers(displayUnit);
+export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, model }) => {
+  const { isInch, uLabel, fmtDim } = unitHelpers(displayUnit);
   const {
     artworks,
     selectedFaceId,
@@ -52,6 +62,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
     setCustomFontInput,
   } = handlers;
   const rotationId = useId();
+  const sizeId = useId();
   const selectedArtwork =
     artworks.find((a) => a.id === selectedArtworkId) ||
     artworks.find((a) => a.faceId === selectedFaceId) ||
@@ -514,6 +525,38 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
             </div>
           </div>
 
+          {(() => {
+            // The longer side, from 5 mm up to the piece's own longer side.
+            const piece = resolvePieceDimensions(model, selectedArtwork.faceId);
+            const longSide = Math.max(selectedArtwork.widthMm, selectedArtwork.heightMm);
+            const maxSide = Math.max(10, Math.round(Math.max(piece.widthMm, piece.heightMm)));
+            return (
+              <div className="param-row">
+                <div className="param-label-row">
+                  <label htmlFor={sizeId}>
+                    Size {fmtDim(longSide)} {uLabel}
+                  </label>
+                </div>
+                <input
+                  type="range"
+                  min={5}
+                  max={Math.max(maxSide, Math.ceil(longSide))}
+                  step={0.5}
+                  id={sizeId}
+                  value={longSide}
+                  aria-label="Artwork size"
+                  onChange={(e) => {
+                    const side = Number(e.target.value);
+                    updateArtwork(
+                      selectedArtwork.id,
+                      scaleTo(selectedArtwork, selectedArtwork.widthMm >= selectedArtwork.heightMm ? 'widthMm' : 'heightMm', side)
+                    );
+                  }}
+                />
+              </div>
+            );
+          })()}
+
           <div className="two-col-inputs">
             <Field label={`Width (${uLabel})`}>
               <NumberField
@@ -525,20 +568,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 inDecimals={2}
                 mmDecimals={1}
                 ariaLabel="Artwork width"
-                onChangeMm={(mm) => {
-                  if (selectedArtwork.textConfig) {
-                    const aspect = Math.max(
-                      0.1,
-                      selectedArtwork.widthMm / Math.max(1, selectedArtwork.heightMm)
-                    );
-                    updateArtwork(selectedArtwork.id, {
-                      widthMm: mm,
-                      heightMm: Math.max(4, Number((mm / aspect).toFixed(1))),
-                    });
-                  } else {
-                    updateArtwork(selectedArtwork.id, { widthMm: mm });
-                  }
-                }}
+                onChangeMm={(mm) => updateArtwork(selectedArtwork.id, scaleTo(selectedArtwork, 'widthMm', mm))}
               />
             </Field>
             <Field label={`Height (${uLabel})`}>
@@ -551,20 +581,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers }
                 inDecimals={2}
                 mmDecimals={1}
                 ariaLabel="Artwork height"
-                onChangeMm={(mm) => {
-                  if (selectedArtwork.textConfig) {
-                    const aspect = Math.max(
-                      0.1,
-                      selectedArtwork.widthMm / Math.max(1, selectedArtwork.heightMm)
-                    );
-                    updateArtwork(selectedArtwork.id, {
-                      heightMm: mm,
-                      widthMm: Math.max(5, Number((mm * aspect).toFixed(1))),
-                    });
-                  } else {
-                    updateArtwork(selectedArtwork.id, { heightMm: mm });
-                  }
-                }}
+                onChangeMm={(mm) => updateArtwork(selectedArtwork.id, scaleTo(selectedArtwork, 'heightMm', mm))}
               />
             </Field>
           </div>
