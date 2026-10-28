@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NumberField } from '../../components/NumberField';
 import { generatePatternHoles } from '../../engine/facePatterns';
 import { DEFAULT_FACE_PATTERN } from '../../engine/presets';
@@ -47,14 +47,16 @@ const Preview: React.FC<{ style: FacePatternStyle; className?: string }> = ({ st
 );
 
 /** A see-through pattern per side: pick a side, then its pattern, cell, bar and border. */
-export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, displayUnit, model }) => {
+export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, displayUnit, model, handlers }) => {
   const { isInch, uLabel } = unitHelpers(displayUnit);
   const available = model.patternFaceIds;
   const patterns = params.facePatterns;
-  const [picked, setPicked] = useState<string | null>(null);
-  // Start on a side that already has a pattern; a side the template lacks falls back to the first.
-  const face =
-    picked && available.includes(picked) ? picked : (available.find((f) => patterns[f]) ?? available[0]);
+  // The side being edited is the app's selected face, so a click on a wall in 3D or on the sheet picks
+  // it too. A face that can't take a pattern falls back to one that has a pattern, then the first.
+  const { selectedFaceId, setSelectedFaceId } = handlers;
+  const face = available.includes(selectedFaceId)
+    ? selectedFaceId
+    : (available.find((f) => patterns[f]) ?? available[0]);
   const current = face ? patterns[face] : undefined;
   const style = current?.style ?? 'none';
 
@@ -98,7 +100,7 @@ export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, di
                 role="radio"
                 aria-checked={id === face}
                 className="chip pattern-side"
-                onClick={() => setPicked(id)}
+                onClick={() => setSelectedFaceId(id)}
               >
                 {p && p.style !== 'none' && <Preview style={p.style} className="pattern-side-icon" />}
                 {FACE_LABELS[id] ?? id}
@@ -107,6 +109,7 @@ export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, di
           })}
         </div>
       </Field>
+      <p className="helper-note">Or click a side on the box.</p>
 
       <div className="pattern-picker" role="radiogroup" aria-label={`Pattern on the ${FACE_LABELS[face]?.toLowerCase() ?? face}`}>
         {STYLES.map(({ value, label }) => (

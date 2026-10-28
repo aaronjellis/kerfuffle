@@ -231,6 +231,11 @@ export const App: React.FC = () => {
   /** A click on a 3D mesh opens the part it belongs to; a face also becomes the artwork target. */
   const handleSelectMeshPart = (meshPartId: string) => {
     if (kerfTest) return;
+    // With Pattern open, a click on a side that can take a pattern picks it for editing there.
+    if (selectedPart === 'pattern' && model.patternFaceIds.includes(meshPartId)) {
+      setSelectedFaceId(meshPartId);
+      return;
+    }
     const part = partForMesh(meshPartId, params.templateId);
     if (!part) return;
     if (part === 'artwork') setSelectedFaceId(meshPartId);
@@ -241,6 +246,11 @@ export const App: React.FC = () => {
   const handlePickFace2D = (faceId: string) => {
     // A drag on the artwork already selected is not a new pick: no second part_selected, search clear or scroll.
     if (kerfTest || (faceId === selectedFaceId && selectedPart === 'artwork')) return;
+    // With Pattern open, a click on a side that can take a pattern picks it for editing there.
+    if (selectedPart === 'pattern' && model.patternFaceIds.includes(faceId)) {
+      setSelectedFaceId(faceId);
+      return;
+    }
     setSelectedFaceId(faceId);
     pickPart('artwork', '2d');
   };
