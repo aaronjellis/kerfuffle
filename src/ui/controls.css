@@ -461,6 +461,47 @@
   justify-self: start;
 }
 
+/* ---------- artwork position ---------- */
+
+/* An up–down slider standing beside a left–right one, each labelled at its ends. */
+.art-position {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+
+.art-position-v,
+.art-position-h {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.art-position-v {
+  justify-items: center;
+}
+
+/* Vertical, with its minimum at the bottom, so dragging up moves the artwork up. */
+.inspect-fold-body input[type='range'].range-vertical {
+  width: 24px;
+  height: 96px;
+  writing-mode: vertical-lr;
+  direction: rtl;
+}
+
+.art-position-label {
+  color: var(--ink);
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+}
+
+.art-position-ends {
+  display: flex;
+  justify-content: space-between;
+}
+
 /* ---------- kerf test ---------- */
 
 .kerf-test-head {

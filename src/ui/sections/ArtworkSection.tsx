@@ -586,6 +586,53 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
             </Field>
           </div>
 
+          {(() => {
+            // Each slider spans the offsets that keep the artwork on its piece (at least the piece's
+            // own half-size, when the artwork is larger). Up is positive on the vertical slider;
+            // the stored offset runs down the piece, as on the sheet.
+            const piece = resolvePieceDimensions(model, selectedArtwork.faceId);
+            const reach = (pieceSide: number, artSide: number) =>
+              Math.max(1, Math.round(Math.max(pieceSide - artSide, pieceSide / 2)) / 2);
+            const rx = Math.max(reach(piece.widthMm, selectedArtwork.widthMm), Math.ceil(Math.abs(selectedArtwork.xMm)));
+            const ry = Math.max(reach(piece.heightMm, selectedArtwork.heightMm), Math.ceil(Math.abs(selectedArtwork.yMm)));
+            return (
+              <div className="art-position">
+                <div className="art-position-v">
+                  <span>Up</span>
+                  <input
+                    type="range"
+                    className="range-vertical"
+                    min={-ry}
+                    max={ry}
+                    step={0.5}
+                    value={-selectedArtwork.yMm}
+                    aria-label="Move artwork up or down"
+                    aria-valuetext={`${fmtDim(Math.abs(selectedArtwork.yMm))} ${uLabel} ${selectedArtwork.yMm <= 0 ? 'up' : 'down'}`}
+                    onChange={(e) => updateArtwork(selectedArtwork.id, { yMm: -Number(e.target.value) })}
+                  />
+                  <span>Down</span>
+                </div>
+                <div className="art-position-h">
+                  <span className="art-position-label">Position</span>
+                  <input
+                    type="range"
+                    min={-rx}
+                    max={rx}
+                    step={0.5}
+                    value={selectedArtwork.xMm}
+                    aria-label="Move artwork left or right"
+                    aria-valuetext={`${fmtDim(Math.abs(selectedArtwork.xMm))} ${uLabel} ${selectedArtwork.xMm < 0 ? 'left' : 'right'}`}
+                    onChange={(e) => updateArtwork(selectedArtwork.id, { xMm: Number(e.target.value) })}
+                  />
+                  <div className="art-position-ends">
+                    <span>Left</span>
+                    <span>Right</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="two-col-inputs">
             <Field label={`Offset X (${uLabel})`}>
               <NumberField

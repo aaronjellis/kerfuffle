@@ -11,6 +11,7 @@ import { buildPrintPartWorldGeometry } from '../engine/printWorld';
 import type { PrintPartId } from '../engine/printParts';
 import { partForMesh, type PartId } from '../ui/parts';
 import { meshPartIdFor } from '../ui/meshParts';
+import { CubeFace, ViewCube, cubeTransform, faceViewOffset } from './ViewCube';
 
 interface Viewport3DProps {
   model: GeneratedBoxModel;
@@ -32,6 +33,11 @@ interface Viewport3DProps {
 const DEFAULT_BACKGROUND = '#0f141c';
 const EDGE_COLOR = '#452c16';
 const EDGES_NAME = 'panel-edges';
+/** How long a view cube pick takes to swing the camera round. */
+const VIEW_TURN_MS = 450;
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 type PanelEntry = {
   wrapper: THREE.Group;
@@ -62,6 +68,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const controlsRef = useRef<OrbitControls | null>(null);
   const boxGroupRef = useRef<THREE.Group | null>(null);
   const panelMeshesRef = useRef<Map<string, PanelEntry>>(new Map());
+  const cubeBodyRef = useRef<HTMLDivElement>(null);
+  // The view cube's handlers need the camera and controls, which the init effect creates.
+  const cubeActionsRef = useRef<{ orbit: (dx: number, dy: number) => void; pickFace: (face: CubeFace) => void }>();
 
   // 1. Initialize Three.js Scene once
   useEffect(() => {
@@ -160,11 +169,77 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
 
+    // A view cube pick swings the camera's direction round the target, keeping its distance.
+    let turn: { from: THREE.Vector3; spin: THREE.Quaternion; distance: number; start: number } | null =
+      null;
+    const cancelTurn = () => {
+      turn = null;
+    };
+    controls.addEventListener('start', cancelTurn);
+
+    const placeCamera = (offset: THREE.Vector3) => {
+      camera.position.copy(controls.target).add(offset);
+      camera.lookAt(controls.target);
+    };
+
+    cubeActionsRef.current = {
+      // The same turn per pixel as OrbitControls, so the cube drags like the scene.
+      orbit: (dx, dy) => {
+        turn = null;
+        const spherical = new THREE.Spherical().setFromVector3(
+          camera.position.clone().sub(controls.target)
+        );
+        const height = Math.max(1, renderer.domElement.clientHeight);
+        spherical.theta -= ((2 * Math.PI * dx) / height) * controls.rotateSpeed;
+        spherical.phi -= ((2 * Math.PI * dy) / height) * controls.rotateSpeed;
+        spherical.makeSafe();
+        placeCamera(new THREE.Vector3().setFromSpherical(spherical));
+      },
+      pickFace: (face) => {
+        // Spend any coasting from the last drag now, so it doesn't pull the camera off the view.
+        controls.enableDamping = false;
+        controls.update();
+        controls.enableDamping = true;
+        const offset = camera.position.clone().sub(controls.target);
+        const distance = offset.length();
+        const goal = faceViewOffset(face, distance);
+        if (prefersReducedMotion()) {
+          turn = null;
+          placeCamera(goal);
+          return;
+        }
+        const from = offset.normalize();
+        turn = {
+          from,
+          spin: new THREE.Quaternion().setFromUnitVectors(from, goal.clone().normalize()),
+          distance,
+          start: performance.now(),
+        };
+      },
+    };
+
+    const noSpin = new THREE.Quaternion();
+    let cubeTransformShown = '';
     let animFrameId = 0;
     const animate = () => {
       animFrameId = requestAnimationFrame(animate);
+      if (turn) {
+        const t = Math.min(1, (performance.now() - turn.start) / VIEW_TURN_MS);
+        const ease = t * t * (3 - 2 * t);
+        const step = noSpin.clone().slerp(turn.spin, ease);
+        placeCamera(turn.from.clone().applyQuaternion(step).multiplyScalar(turn.distance));
+        if (t === 1) turn = null;
+      }
       controls.update();
       renderer.render(scene, camera);
+      const cubeBody = cubeBodyRef.current;
+      if (cubeBody) {
+        const transform = cubeTransform(camera.quaternion);
+        if (transform !== cubeTransformShown) {
+          cubeBody.style.transform = transform;
+          cubeTransformShown = transform;
+        }
+      }
     };
     animate();
 
@@ -183,6 +258,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      controls.removeEventListener('start', cancelTurn);
+      cubeActionsRef.current = undefined;
       boxGroup.children.forEach(disposeObject);
       disposeObject(grid);
       controls.dispose();
@@ -377,7 +454,17 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     applyAssemblyTransform(panelMeshesRef.current, assemblyProgress, model.params.templateId);
   }, [assemblyProgress, model.params.templateId]);
 
-  return <div ref={containerRef} className="viewport-3d-canvas" />;
+  // The cube sits beside the canvas, not over it, so its taps never reach the panel picking.
+  return (
+    <>
+      <div ref={containerRef} className="viewport-3d-canvas" />
+      <ViewCube
+        bodyRef={cubeBodyRef}
+        onOrbit={(dx, dy) => cubeActionsRef.current?.orbit(dx, dy)}
+        onPickFace={(face) => cubeActionsRef.current?.pickFace(face)}
+      />
+    </>
+  );
 };
 
 /** Frees the GPU resources under an object: geometries, materials and their texture maps. */
