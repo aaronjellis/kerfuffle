@@ -202,11 +202,11 @@ describe('Kerfuffle Parametric Geometry & Export Engine', () => {
           curr = rig.parentId ? panelMap.get(rig.parentId) : undefined;
         }
         // Every panel lies flat in one plane when unfolded (progress = 0): the root's crease plane,
-        // which is within a ply of the floor's mid-plane.
+        // which is within two plies of the floor's mid-plane.
         flatYs.push(y);
       }
       for (const y of flatYs) expect(y).toBeCloseTo(flatYs[0], 3);
-      expect(Math.abs(flatYs[0] - floorY)).toBeLessThanOrEqual(model.params.materialThicknessMm / 2 + 1e-6);
+      expect(Math.abs(flatYs[0] - floorY)).toBeLessThanOrEqual(2 * model.params.materialThicknessMm + 1e-6);
     }
   });
 

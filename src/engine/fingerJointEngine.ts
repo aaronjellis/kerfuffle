@@ -451,9 +451,17 @@ export function generateWoodFingerBox(
   const countH = computeOddFingerCount(innerH, params.fingerWidthMm);
   // One ply each side; an open box and the organizer (which has no top) have no lid ply on top.
   const hasTopPly = params.templateId !== 'finger-organizer' && params.woodLidStyle !== 'open';
+  // A telescoping lid is a second, shallower tray that slides down over the base: its inside is the
+  // base's outside plus a slip-fit gap each side, so its skirt is the outermost wall.
+  const isTelescope = params.templateId === 'finger-basic' && params.woodLidStyle === 'telescope-lid';
+  const lidGap = Math.max(0, params.woodLidClearanceMm);
+  const lidInnerW = innerW + 2 * T + 2 * lidGap;
+  const lidInnerD = innerD + 2 * T + 2 * lidGap;
+  // Lid depth inside the plate: at least 8 mm, at most the base's full outside height.
+  const lidInnerH = Math.min(Math.max(8, params.lidHeightMm), innerH + T);
   const outerDims: BoxDims = {
-    widthMm: innerW + 2 * T,
-    depthMm: innerD + 2 * T,
+    widthMm: isTelescope ? lidInnerW + 2 * T : innerW + 2 * T,
+    depthMm: isTelescope ? lidInnerD + 2 * T : innerD + 2 * T,
     heightMm: innerH + (hasTopPly ? 2 * T : T),
   };
 
@@ -760,6 +768,117 @@ export function generateWoodFingerBox(
     }
   }
 
+  // 4b. TELESCOPING LID: a plate fingered all round, and four skirts whose top edges mate it and
+  // whose bottom edges are left plain. The plate's inner face rests on the base walls' top edges.
+  if (isTelescope) {
+    const lidCountW = computeOddFingerCount(lidInnerW, params.fingerWidthMm);
+    const lidCountD = computeOddFingerCount(lidInnerD, params.fingerWidthMm);
+    const lidCountH = computeOddFingerCount(lidInnerH, params.fingerWidthMm);
+    const lidLift = explodeDist * 1.3;
+    const plate = specToPanel2D({
+      id: 'top',
+      name: 'Telescoping Lid Top',
+      faceLabel: 'LID TOP',
+      innerW: lidInnerW,
+      innerH: lidInnerD,
+      thickness: T,
+      kerf,
+      countX: lidCountW,
+      countY: lidCountD,
+      topEdge: 'odd-tabs',
+      rightEdge: 'odd-tabs',
+      bottomEdge: 'odd-tabs',
+      leftEdge: 'odd-tabs',
+      ownCorners: false,
+    });
+    panels2D.push(plate.panel2D);
+    panels3D.push({
+      id: 'top',
+      name: 'Telescoping Lid Top',
+      faceId: 'top',
+      widthMm: lidInnerW + 2 * T,
+      heightMm: lidInnerD + 2 * T,
+      thicknessMm: T,
+      color: '#e5c89e',
+      closedPos: [0, innerH / 2 + T / 2, 0],
+      explodedPos: [0, innerH / 2 + T / 2 + lidLift, 0],
+      rotation: [-Math.PI / 2, 0, 0],
+      outlinePoints: plate.outlinePoints,
+    });
+
+    // A skirt's nominal frame runs from the plate's top (y = 0) to a ply past its open edge, so its
+    // centre sits (lidInnerH + 2T) / 2 below the plate's top face.
+    const skirtY = innerH / 2 + T - (lidInnerH + 2 * T) / 2;
+    for (const side of ['front', 'back'] as const) {
+      const isFront = side === 'front';
+      const res = specToPanel2D({
+        id: `lid-${side}`,
+        name: isFront ? 'Lid Front Skirt' : 'Lid Back Skirt',
+        faceLabel: isFront ? 'LID FRONT' : 'LID BACK',
+        innerW: lidInnerW,
+        innerH: lidInnerH,
+        thickness: T,
+        kerf,
+        countX: lidCountW,
+        countY: lidCountH,
+        topEdge: 'even-tabs',
+        rightEdge: 'even-tabs',
+        bottomEdge: 'flat-inner',
+        leftEdge: 'even-tabs',
+        ownCorners: true,
+      });
+      panels2D.push(res.panel2D);
+      const z = (isFront ? 1 : -1) * (lidInnerD / 2 + T / 2);
+      panels3D.push({
+        id: `lid-${side}`,
+        name: isFront ? 'Lid Front Skirt' : 'Lid Back Skirt',
+        faceId: `lid-${side}`,
+        widthMm: lidInnerW + 2 * T,
+        heightMm: lidInnerH + 2 * T,
+        thicknessMm: T,
+        color: '#dfc195',
+        closedPos: [0, skirtY, z],
+        explodedPos: [0, skirtY + lidLift, z * 1.35],
+        rotation: [0, isFront ? 0 : Math.PI, 0],
+        outlinePoints: res.outlinePoints,
+      });
+    }
+    for (const side of ['left', 'right'] as const) {
+      const isRight = side === 'right';
+      const res = specToPanel2D({
+        id: `lid-${side}`,
+        name: isRight ? 'Lid Right Skirt' : 'Lid Left Skirt',
+        faceLabel: isRight ? 'LID RIGHT' : 'LID LEFT',
+        innerW: lidInnerD,
+        innerH: lidInnerH,
+        thickness: T,
+        kerf,
+        countX: lidCountD,
+        countY: lidCountH,
+        topEdge: 'even-tabs',
+        rightEdge: 'odd-tabs',
+        bottomEdge: 'flat-inner',
+        leftEdge: 'odd-tabs',
+        ownCorners: false,
+      });
+      panels2D.push(res.panel2D);
+      const x = (isRight ? 1 : -1) * (lidInnerW / 2 + T / 2);
+      panels3D.push({
+        id: `lid-${side}`,
+        name: isRight ? 'Lid Right Skirt' : 'Lid Left Skirt',
+        faceId: `lid-${side}`,
+        widthMm: lidInnerD + 2 * T,
+        heightMm: lidInnerH + 2 * T,
+        thicknessMm: T,
+        color: '#cda676',
+        closedPos: [x, skirtY, 0],
+        explodedPos: [x * 1.35, skirtY + lidLift, 0],
+        rotation: [0, isRight ? Math.PI / 2 : -Math.PI / 2, 0],
+        outlinePoints: res.outlinePoints,
+      });
+    }
+  }
+
   // 5. ORGANIZER DIVIDERS (with interlocking half-lap notches in both 2D and 3D!)
   if (params.templateId === 'finger-organizer') {
     const divH = innerH * 0.85;
@@ -877,7 +996,9 @@ export function generateWoodFingerBox(
   return {
     panels2D,
     panels3D,
-    fingerCountSummary: `${countW} (W) × ${countD} (D) × ${countH} (H) symmetric odd fingers`,
+    fingerCountSummary: isTelescope
+      ? `${countW} (W) × ${countD} (D) × ${countH} (H) base fingers; telescoping lid ${fmt(lidInnerH)} mm deep, ${fmt(lidGap)} mm slip each side`
+      : `${countW} (W) × ${countD} (D) × ${countH} (H) symmetric odd fingers`,
     outerDims,
   };
 }

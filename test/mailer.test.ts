@@ -20,11 +20,11 @@ describe('mailer ply model', () => {
       expect(s.lidFlapDepth).toBeCloseTo(55 - T);
       expect(s.earBackH).toBeCloseTo(55 - 2 * T);
       expect(s.earFrontH).toBeCloseTo(55 + T / 2 - 3 * T);
-      expect(s.tab.chamferEff).toBeCloseTo(4);
+      expect(s.tab.chamferEff).toBeCloseTo(T / 2);
       expect(s.slot.centerFromCrease).toBeCloseTo(2 * T);
       expect(s.slot.inset).toBeCloseTo(2 * T - (T + 0.5) / 2);
       expect(s.slot.width).toBeCloseTo(T + 0.5);
-      expect(s.tab.depth).toBeCloseTo(T + 5);
+      expect(s.tab.depth).toBeCloseTo(1.5 * T);
     });
   }
   it('roll stays 2T with lid flaps off and the floor narrows by 2T', () => {
@@ -44,26 +44,27 @@ describe('mailer ply model', () => {
   it('keeps a shallow box printable: tab shallower than the inner wall', () => {
     const s = computeMailerSpans({ ...base, materialThicknessMm: 3 }, 60, 60, 15);
     expect(s.innerSideH).toBeCloseTo(13.5);
-    expect(s.tab.depth).toBeCloseTo(8); // T + 5, under innerSideH - 2 = 11.5
+    expect(s.tab.depth).toBeCloseTo(4.5); // 1.5T, under innerSideH - 2 = 11.5
   });
   it('floors the inner wall at 8 and clamps the tab to fit it', () => {
-    const s = computeMailerSpans({ ...base, materialThicknessMm: 3 }, 60, 60, 8);
-    expect(s.innerSideH).toBeCloseTo(8); // H - T/2 would be 6.5
-    expect(s.tab.depth).toBeCloseTo(6); // innerSideH - 2
+    const s = computeMailerSpans({ ...base, materialThicknessMm: 6 }, 60, 60, 8);
+    expect(s.innerSideH).toBeCloseTo(8); // H - T/2 would be 5
+    expect(s.tab.depth).toBeCloseTo(6); // innerSideH - 2, under 1.5T = 9
   });
   it('lays out the default box', () => {
     const s = computeMailerSpans({ ...base, materialThicknessMm: 3, includeLidFlaps: true }, 110, 80, 55);
     expect(s.x.tabL).toBe(0);
-    expect(s.x.innerL).toBeCloseTo(8);
-    expect(s.x.rollL).toBeCloseTo(61.5);
-    expect(s.x.outerL).toBeCloseTo(67.5);
-    expect(s.x.floorL).toBeCloseTo(122.5);
-    expect(s.x.floorR).toBeCloseTo(253.5);
-    expect(s.x.outerR).toBeCloseTo(308.5);
-    expect(s.x.rollR).toBeCloseTo(314.5);
-    expect(s.x.innerR).toBeCloseTo(368);
-    expect(s.x.tabR).toBeCloseTo(376);
-    expect(s.blankW).toBeCloseTo(376);
+    // Tabs 1.5T = 4.5 deep: inner wall 53.5, roll 6, outer wall 55, floor 131.
+    expect(s.x.innerL).toBeCloseTo(4.5);
+    expect(s.x.rollL).toBeCloseTo(58);
+    expect(s.x.outerL).toBeCloseTo(64);
+    expect(s.x.floorL).toBeCloseTo(119);
+    expect(s.x.floorR).toBeCloseTo(250);
+    expect(s.x.outerR).toBeCloseTo(305);
+    expect(s.x.rollR).toBeCloseTo(311);
+    expect(s.x.innerR).toBeCloseTo(364.5);
+    expect(s.x.tabR).toBeCloseTo(369);
+    expect(s.blankW).toBeCloseTo(369);
     expect(s.tuckH).toBeCloseTo(30);
     expect(s.y.tuckTop).toBe(0);
     expect(s.y.lidTop).toBeCloseTo(30);
@@ -636,10 +637,11 @@ describe('other cardboard templates', () => {
         if (templateId === 'cardboard-tuck-carton') {
           // The carton exposes only inner-size sub-faces, so assert on the blank: glue flap + 2 W spans + 2 D spans.
           const glueW = Math.max(10, p.glueFlapMm);
-          expect(sheet.widthMm).toBeCloseTo(glueW + 2 * (W + T) + 2 * (D + T), 2);
+          // The glue-side wall runs D: the glue flap lies one ply inside the back.
+          expect(sheet.widthMm).toBeCloseTo(glueW + 2 * (W + T) + (D + T) + D, 2);
           const tuckH = Math.max(12, p.tuckFlapMm);
-          // Each lid runs D between its creases; the front and back run H + T between theirs.
-          expect(sheet.heightMm).toBeCloseTo(2 * tuckH + 2 * D + (H + T), 2);
+          // Each lid runs D between its creases; the front and back run H + 3T between theirs.
+          expect(sheet.heightMm).toBeCloseTo(2 * tuckH + 2 * D + (H + 3 * T), 2);
           // The rig's tuck flaps are as wide as the cut: the wall span less a tuckInset each side.
           const tuckW = W + T - 2 * Math.max(0.8, T);
           for (const id of ['top-tuck', 'bot-tuck']) {
@@ -714,6 +716,69 @@ describe('outside size', () => {
       expect(m.outerDims.widthMm).toBeCloseTo(160, 6);
       expect(m.outerDims.depthMm).toBeCloseTo(120, 6);
       expect(m.outerDims.heightMm).toBeCloseTo(90, 6);
+    });
+  }
+});
+
+describe('mailer fold-over closure', () => {
+  const W = 110;
+  const D = 80;
+  const H = 55;
+  for (const T of [1.5, 3]) {
+    describe(`T=${T}`, () => {
+      const p = { ...base, widthMm: W, depthMm: D, heightMm: H, materialThicknessMm: T, cardboardLockStyle: 'fold-over' as const, includeLidFlaps: true };
+      const m = generateBoxModel(p);
+      const s = computeMailerSpans(m.params, W, D, H);
+      const at = (id: string) => m.panels3D.find((q) => q.id === id)!;
+      const xOuter = s.floorW / 2;
+
+      it('sizes the lid half a ply longer and the dust ears to a quarter of the depth', () => {
+        expect(s.lidD).toBeCloseTo(D + 3.5 * T, 6);
+        expect(s.earW).toBeCloseTo(Math.min(H, D / 4), 6);
+        // Lid flaps give way to the ears, so the floor loses their room.
+        expect(s.lidFlapDepth).toBe(0);
+        expect(s.floorW).toBeCloseTo(W + T + 4 * T, 6);
+        expect(s.lock).toBeNull();
+        expect(s.notchR).toBe(0);
+      });
+
+      it('hangs the front flap just outside the front wall', () => {
+        const flap = at('tuck-flap');
+        expect(flap.closedPos[2] - T / 2).toBeCloseTo(at('front').closedPos[2] + T / 2, 6);
+        expect(flap.widthMm).toBeCloseTo(s.floorW - 2 * T, 6);
+        expect(m.outerDims.depthMm).toBeCloseTo(s.lidD + T / 2, 6);
+      });
+
+      it('drops each lid ear into its roll, between the outer and inner walls, clear of the dust ears', () => {
+        for (const [side, sx] of [['l', -1], ['r', 1]] as const) {
+          const ear = at(`lid-ear-${side}`);
+          const ex = Math.abs(ear.closedPos[0]);
+          expect(ex + T / 2).toBeCloseTo(xOuter - T / 2, 6); // touches the outer wall's inner face
+          expect(ex - T / 2).toBeCloseTo(xOuter - s.roll + T / 2, 6); // and the inner wall's outer face
+          expect(Math.sign(ear.closedPos[0])).toBe(sx);
+          const dust = at(`back-dust-${side}`);
+          const dustInnerEnd = dust.closedPos[2] + dust.widthMm / 2;
+          expect(ear.closedPos[2] - ear.widthMm / 2 - dustInnerEnd).toBeCloseTo(2, 6);
+        }
+      });
+
+      it('slots each roll fold to let the ear through, on the sheet and in 3D', () => {
+        const sheet = m.panels2D[0];
+        for (const side of ['l', 'r']) {
+          const slot = sheet.paths.find((q) => q.id === `mailer-ear-slot-${side}`)!;
+          const vs = parsePathVertices(slot.d);
+          const ys = vs.map((v) => v.y);
+          const xs = vs.map((v) => v.x);
+          expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(s.lidEar!.len + 2, 6);
+          expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(T + 0.5, 6);
+          expect(at(`${side === 'l' ? 'left' : 'right'}-roll-bridge`).holeContours).toHaveLength(1);
+        }
+      });
+
+      it('cuts a perimeter that does not cross itself', () => {
+        const d = m.panels2D[0].paths.find((q) => q.id === 'mailer-perimeter-cut')!.d;
+        expect(selfIntersections(d)).toEqual([]);
+      });
     });
   }
 });

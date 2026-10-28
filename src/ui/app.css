@@ -160,6 +160,34 @@ h4 {
   flex: none;
 }
 
+/* Step numbers: the parts in order, one to the last. */
+.step-badge {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+  background: var(--sunken);
+  border-radius: var(--r-pill);
+}
+
+.inspect-fold[open] > summary .step-badge {
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+
+.step-next {
+  justify-self: end;
+}
+
+.step-next svg {
+  color: inherit;
+}
+
 /* ---------- fields ---------- */
 
 .field-hint {
@@ -555,41 +583,151 @@ h4 {
   padding: 0.75rem 1rem 0.5rem;
 }
 
-.template-switch {
-  display: inline-flex;
+/* The first step: the box being made, as a card with its sheet in miniature. */
+.box-type-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-self: start;
-  gap: 0.4rem;
-  min-width: 0;
-  max-width: 100%;
-  height: 44px;
-  margin-left: -0.6rem;
-  padding: 0 0.5rem 0 0.6rem;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.5rem 0.75rem;
   color: var(--ink);
   font: inherit;
-  font-size: var(--fs-h3);
-  font-weight: var(--w-bold);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--r-control);
+  text-align: left;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
   cursor: pointer;
 }
 
-.template-switch:hover,
-.template-switch[aria-expanded='true'] {
-  background: var(--sunken);
+.box-type-card:hover,
+.box-type-card[aria-expanded='true'] {
+  border-color: var(--accent);
 }
 
-.template-switch .icon {
+.box-type-card-thumb {
+  width: 56px;
+  height: 40px;
+}
+
+.box-type-card-text {
+  display: grid;
+  min-width: 0;
+}
+
+.box-type-card-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: var(--w-medium);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.box-type-card-name {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: var(--w-bold);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.box-type-card-change {
+  padding: 0.3rem 0.65rem;
+  color: var(--accent-text);
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+  background: var(--accent-soft);
+  border-radius: var(--r-pill);
+}
+
+/* Sheet thumbnails: cut lines only, one hairline whatever the box's size. */
+.box-type-card-thumb path,
+.box-type-tile-thumb path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.box-type-card-thumb,
+.box-type-tile-thumb {
   flex: none;
   color: var(--muted);
 }
 
-.template-switch-name {
+.box-thumb-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.box-type-menu {
+  width: min(34rem, calc(100vw - 2rem));
+  padding: 0.75rem;
+}
+
+.box-type-group + .box-type-group {
+  margin-top: 0.75rem;
+}
+
+.box-type-group-title {
+  margin: 0 0 0.4rem 0.25rem;
+  color: var(--muted);
+  font-size: var(--fs-label);
+  font-weight: var(--w-bold);
+}
+
+.box-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.4rem;
+}
+
+.box-type-tile {
+  display: grid;
+  gap: 0.2rem;
+  align-content: start;
   min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  padding: 0.5rem;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+
+.box-type-tile:hover {
+  background: var(--sunken);
+}
+
+.box-type-tile[aria-current='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.box-type-tile-thumb {
+  width: 100%;
+  height: 56px;
+  margin-bottom: 0.25rem;
+}
+
+.box-type-tile[aria-current='true'] .box-type-tile-thumb {
+  color: var(--accent);
+}
+
+.box-type-tile-name {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: var(--w-medium);
+}
+
+.box-type-tile-blurb {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
 }
 
 .inspect-search {
@@ -702,6 +840,17 @@ h4 {
   background: var(--sunken);
 }
 
+.part-chip-step {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.part-chip[aria-pressed='true'] .part-chip-step {
+  color: inherit;
+}
+
 .part-chip[aria-pressed='true'] {
   color: var(--accent-text);
   background: var(--accent-soft);
@@ -783,34 +932,6 @@ h4 {
   font-size: var(--fs-label);
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.pop-item-wrap {
-  white-space: normal;
-}
-
-.template-menu {
-  width: min(22rem, calc(100vw - 2rem));
-}
-
-.template-list {
-  display: grid;
-  gap: 2px;
-}
-
-.template-list .pop-item {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  padding-block: 0.6rem;
-}
-
-.template-list .pop-item[aria-current='true'] {
-  background: var(--accent-soft);
-}
-
-.template-list .pop-item[aria-current='true'] .pop-item-name,
-.pop-item-check {
-  color: var(--accent-text);
 }
 
 /* ---------- export menu ---------- */

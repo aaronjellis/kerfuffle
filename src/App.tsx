@@ -40,6 +40,7 @@ import type { SectionHandlers } from './ui/sections';
 import { ANALYTICS_PROJECT } from './ui/analytics';
 import { AppBar } from './ui/AppBar';
 import { Inspector } from './ui/Inspector';
+import { currentBoxType, type BoxType } from './ui/boxTypes';
 import { KerfTestPanel } from './ui/KerfTestPanel';
 import { Stage, type ViewMode } from './ui/Stage';
 import { withPrintedPinClamp } from './ui/paramRules';
@@ -293,6 +294,14 @@ export const App: React.FC = () => {
     if (templateId !== params.templateId) {
       window.posthog?.capture('template_changed', { template: templateId, project: ANALYTICS_PROJECT });
     }
+  };
+
+  /** A box type is a template plus the settings that make the variant; step 1 opens after the pick. */
+  const handleSelectBoxType = (t: BoxType) => {
+    handleSelectTemplate(t.templateId);
+    setParams((prev) => withPrintedPinClamp({ ...prev, ...t.params }));
+    handleSelectPart('size');
+    window.posthog?.capture('box_type_selected', { box_type: t.id, project: ANALYTICS_PROJECT });
   };
 
   const [alignMarginMm, setAlignMarginMm] = useState<number>(4);
@@ -721,9 +730,8 @@ export const App: React.FC = () => {
           />
         ) : (
         <Inspector
-          templateId={params.templateId}
-          category={params.category}
-          onSelectTemplate={handleSelectTemplate}
+          boxType={currentBoxType(params)}
+          onSelectBoxType={handleSelectBoxType}
           settingQuery={settingQuery}
           onSettingQuery={setSettingQuery}
           parts={parts}

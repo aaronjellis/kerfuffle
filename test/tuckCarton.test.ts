@@ -73,9 +73,17 @@ for (const style of ['reverse-tuck', 'straight-tuck'] as const) {
 }
 
 describe('straight tuck depth', () => {
-  it('stops each tuck 1 mm short of the middle of the front wall', () => {
+  it('stops each tuck 1 mm short of the middle of the front wall when asked for a deeper one', () => {
     for (const T of [1.5, 3]) {
-      const m = carton('straight-tuck', T);
+      const m = generateBoxModel({
+        ...DEFAULT_BOX_PARAMETERS,
+        ...inner,
+        category: 'cardboard-fold',
+        templateId: 'cardboard-tuck-carton',
+        tuckCartonStyle: 'straight-tuck',
+        tuckFlapMm: 45,
+        materialThicknessMm: T,
+      });
       const at = (id: string) => m.panels3D.find((p) => p.id === id)!;
       const topTip = at('top-tuck').closedPos[1] - at('top-tuck').heightMm / 2;
       const botTip = at('bot-tuck').closedPos[1] + at('bot-tuck').heightMm / 2;
@@ -86,4 +94,53 @@ describe('straight tuck depth', () => {
     const m = carton('reverse-tuck', 3);
     expect(m.panels3D.find((p) => p.id === 'top-tuck')!.heightMm).toBe(DEFAULT_BOX_PARAMETERS.tuckFlapMm);
   });
+});
+
+describe('glue joint and dust clearance', () => {
+  for (const style of ['reverse-tuck', 'straight-tuck'] as const) {
+    for (const T of [0.6, 1.5, 3]) {
+      const m = carton(style, T);
+      const { depthMm: D } = inner;
+      const at = (id: string) => m.panels3D.find((p) => p.id === id)!;
+
+      it(`${style} T=${T}: the glue-side wall runs D between creases, so the glue flap lies inside the back`, () => {
+        expect(line(m, 'score-l-f')!.x1 - line(m, 'score-glue')!.x1).toBeCloseTo(D, 6);
+        // In 3D the glue crease sits on the glue flap's plane, one ply inside the back's mid-plane.
+        const glue = at('glue-flap');
+        expect(glue.foldRig!.pivotOffset[2]).toBeCloseTo(at('back').closedPos[2] + T, 6);
+        expect(glue.closedPos[2]).toBeCloseTo(at('back').closedPos[2] + T, 6);
+      });
+
+      it(`${style} T=${T}: dust creases stop short of the wall creases by the tuck's room`, () => {
+        const room = 1.5 * T + 0.5;
+        const walls = [line(m, 'score-glue')!.x1, line(m, 'score-l-f')!.x1, line(m, 'score-f-r')!.x1, line(m, 'score-r-b')!.x1];
+        for (const [id, a, b] of [
+          ['score-top-dust-l', walls[0], walls[1]],
+          ['score-top-dust-r', walls[2], walls[3]],
+          ['score-bot-dust-l', walls[0], walls[1]],
+          ['score-bot-dust-r', walls[2], walls[3]],
+        ] as const) {
+          const s = line(m, id)!;
+          expect(Math.min(s.x1, s.x2) - a).toBeCloseTo(room, 6);
+          expect(b - Math.max(s.x1, s.x2)).toBeCloseTo(room, 6);
+        }
+      });
+
+      it(`${style} T=${T}: closed, every dust flap clears the tucks by half a millimetre`, () => {
+        for (const d of ['top-dust-l', 'top-dust-r', 'bot-dust-l', 'bot-dust-r']) {
+          const dust = at(d);
+          const zMin = dust.closedPos[2] - dust.heightMm / 2;
+          const zMax = dust.closedPos[2] + dust.heightMm / 2;
+          const tuck = at(d.startsWith('top') ? 'top-tuck' : 'bot-tuck');
+          const tz = tuck.closedPos[2];
+          // The tuck's near face, toward the box's middle.
+          const near = tz > 0 ? tz - T / 2 : tz + T / 2;
+          const gap = tz > 0 ? near - zMax : zMin - near;
+          // On the glue side the dust flap also clears the glue flap's ply, so it stands T further off.
+          const glueSide = d.endsWith('-l') && tz < 0;
+          expect(gap).toBeCloseTo(glueSide ? T + 0.5 : 0.5, 6);
+        }
+      });
+    }
+  }
 });

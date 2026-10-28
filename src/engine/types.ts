@@ -10,7 +10,7 @@ export type BoxTemplateId =
   | 'cardboard-telescope'
   | '3d-snap-box';
 
-export type WoodLidStyle = 'closed' | 'open' | 'flat-lid' | 'inset-lid' | 'sliding-lid';
+export type WoodLidStyle = 'closed' | 'open' | 'flat-lid' | 'inset-lid' | 'sliding-lid' | 'telescope-lid';
 export type ClamshellHingeType = 'butt-hardware' | 'side-pivot' | 'knuckle-pin' | 'printed-hinge';
 export type LivingHingeAttachMode =
   | 'one-piece-back'
@@ -20,7 +20,7 @@ export type DisplayUnit = 'mm' | 'in';
 export type SvgUnitMode = 'mm' | 'in' | '96dpi' | '72dpi';
 export type SvgGroupingMode = 'by-layer' | 'by-piece' | 'flat-2-objects';
 export type ScoreLineMode = 'solid-score' | 'dashed-perf';
-export type CardboardLockStyle = 'tuck' | 'front-lock';
+export type CardboardLockStyle = 'tuck' | 'front-lock' | 'fold-over';
 export type ExportProfileId = 'xtool-studio' | 'lightburn' | 'illustrator' | 'glowforge';
 export type DimensionReference = 'inner' | 'outer';
 export type FaceLabelPosition = 'center' | 'bottom' | 'top-left';
@@ -103,6 +103,8 @@ export interface BoxParameters {
   fingerWidthMm: number;
   woodLidStyle: WoodLidStyle;
   lidHeightMm: number;
+  /** Telescoping wood lid: the slip-fit gap between the lid's skirt and the base, per side */
+  woodLidClearanceMm: number;
   clamshellHingeType: ClamshellHingeType;
   hingeFingerWidthMm: number;
   includeHingeScrewHoles: boolean;

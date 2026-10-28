@@ -1,17 +1,17 @@
 import React, { useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
-import type { BoxCategory, BoxTemplateId } from '../engine/types';
 import type { PartDef, PartId } from './parts';
 import { PartsRow } from './PartsRow';
 import { Section } from './Section';
 import { SECTION_COMPONENTS } from './sections';
 import type { SectionProps } from './sections/types';
-import { TemplatePopover } from './TemplatePopover';
+import { BoxTypePicker } from './BoxTypePicker';
+import type { BoxType } from './boxTypes';
 
 interface InspectorProps {
-  templateId: BoxTemplateId;
-  category: BoxCategory;
-  onSelectTemplate: (id: BoxTemplateId) => void;
+  /** The box type the settings match, shown as the first thing to choose. */
+  boxType: BoxType | undefined;
+  onSelectBoxType: (t: BoxType) => void;
   settingQuery: string;
   onSettingQuery: (query: string) => void;
   /** Every part of the current template, for the chips. */
@@ -31,11 +31,13 @@ interface InspectorProps {
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-/** The right panel: the template, the settings search, the parts chips, and one section per part. */
+/**
+ * The right panel: the box type, the settings search, the parts chips, and one section per part,
+ * numbered as steps in the parts' order.
+ */
 export const Inspector: React.FC<InspectorProps> = ({
-  templateId,
-  category,
-  onSelectTemplate,
+  boxType,
+  onSelectBoxType,
   settingQuery,
   onSettingQuery,
   parts,
@@ -72,7 +74,7 @@ export const Inspector: React.FC<InspectorProps> = ({
   return (
     <aside className="inspector" aria-label="Settings" ref={asideRef}>
       <div className="inspect-head">
-        <TemplatePopover category={category} templateId={templateId} onSelectTemplate={onSelectTemplate} />
+        <BoxTypePicker current={boxType} onSelect={onSelectBoxType} />
         <div className="inspect-search">
           <Search size={18} strokeWidth={1.75} className="inspect-search-icon" aria-hidden="true" />
           <input
@@ -99,14 +101,19 @@ export const Inspector: React.FC<InspectorProps> = ({
       <div className="inspect-scroll" ref={scrollRef}>
         {visibleParts.map((part) => {
           const Body = SECTION_COMPONENTS[part.id];
+          const i = parts.findIndex((p) => p.id === part.id);
+          const next = parts[i + 1];
           return (
             <Section
               key={part.id}
               id={part.id}
               title={part.label}
               icon={part.icon}
+              step={i + 1}
               open={query ? true : selectedPart === part.id}
               onToggle={onTogglePart}
+              next={!query && next ? { title: next.label, onGo: () => onSelectPart(next.id) } : undefined}
+              last={!query && !next}
             >
               <Body {...sectionProps} />
             </Section>

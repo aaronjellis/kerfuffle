@@ -107,26 +107,29 @@ function generateTuckCarton(
 } {
   const T = params.materialThicknessMm;
   const glueW = Math.max(10, params.glueFlapMm);
-  // A straight tuck puts both tucks inside the front wall; each stops 1 mm short of the middle.
-  const tuckCap = params.tuckCartonStyle === 'straight-tuck' ? (H + T) / 2 - 1 : Infinity;
-  const tuckH = Math.min(Math.max(12, params.tuckFlapMm), Math.max(8, tuckCap));
-  const dustH = Math.min(D * 0.75, W * 0.45);
-  const dustLean = Math.max(3, 1.5 * T);
-  const tuckInset = Math.max(0.8, T);
-
-  // Ply model. Walls straddle their creases, so a wall's crease-to-crease span is inner + T. At each
-  // end the dust flaps fold in first and the lid closes over them: the lid's inner face sits at the
-  // typed height, the dust flaps one ply under it. So the front and back run H + T between their lid
-  // creases, the side walls H − T between their dust creases, and each dust crease sits one ply
-  // inside the lid crease. The lid runs D between its creases, which puts its tuck crease one ply
-  // inside the far wall: the tuck slides in behind that wall instead of into its plane.
+  // Ply model: the typed size is the clear inside, and the board builds outward around it.
+  // - Walls straddle their creases, so a wall's crease-to-crease span is inner + T.
+  // - At each end the dust flaps fold in first and the lid closes over them. The dust flaps' inner
+  //   faces sit at the typed height, the lid one ply above them. So the side walls run H + T between
+  //   their dust creases, the front and back H + 3T between their lid creases, and each dust crease
+  //   sits one ply inside the lid crease.
+  // - Each lid runs D between its creases, which puts its tuck one ply inside the far wall.
+  // - The glue flap lies one ply inside the back, so the glue-side wall runs D, not D + T.
+  // - Dust flaps stand clear of the wall creases by half a ply to the wall's inner face, the tuck's
+  //   ply, and 0.5 mm of play, so a tuck slides down past them.
   const dSpan = D + T;
   const wSpan = W + T;
-  const hSpan = H + T;
+  const hSpan = H + 3 * T;
+  // A straight tuck puts both tucks inside the front wall; each stops 1 mm short of the middle.
+  const tuckCap = params.tuckCartonStyle === 'straight-tuck' ? hSpan / 2 - 1 : Infinity;
+  const tuckH = Math.min(Math.max(12, params.tuckFlapMm), Math.max(8, tuckCap));
+  const dustH = Math.min(D * 0.75, W * 0.45);
+  const dustRoom = 1.5 * T + 0.5;
+  const tuckInset = Math.max(0.8, T);
 
   const x0 = 0;
   const x1 = x0 + glueW;
-  const x2 = x1 + dSpan;
+  const x2 = x1 + D;
   const x3 = x2 + wSpan;
   const x4 = x3 + dSpan;
   const x5 = x4 + wSpan;
@@ -149,18 +152,25 @@ function generateTuckCarton(
   // The glue flap's tapered ends start below the dust creases.
   const taper = Math.min(12, Math.max(H * 0.18, T + 1));
 
-  // A dust flap's sides rise straight from its crease to the lid crease's level, then lean in by
-  // dustLean: at least 1.5 plies, which leaves room for the tuck to slide down past the flap's edge.
+  // A dust flap stands dustRoom in from its wall's creases and leans in 2 mm more at its tip. The cut
+  // runs along the dust crease line out to the wall creases, then up the shared edge to the lid
+  // crease's level, freeing the flap from the taller front and back.
   const topDust = (xa: number, xb: number) => [
-    `L ${fmt(xa)} ${fmt(y2)}`,
-    `L ${fmt(xa + dustLean)} ${fmt(yTd - dustH)}`,
-    `L ${fmt(xb - dustLean)} ${fmt(yTd - dustH)}`,
+    `L ${fmt(xa)} ${fmt(yTd)}`,
+    `L ${fmt(xa + dustRoom)} ${fmt(yTd)}`,
+    `L ${fmt(xa + dustRoom + 2)} ${fmt(yTd - dustH)}`,
+    `L ${fmt(xb - dustRoom - 2)} ${fmt(yTd - dustH)}`,
+    `L ${fmt(xb - dustRoom)} ${fmt(yTd)}`,
+    `L ${fmt(xb)} ${fmt(yTd)}`,
     `L ${fmt(xb)} ${fmt(y2)}`,
   ];
   const botDust = (xa: number, xb: number) => [
-    `L ${fmt(xb)} ${fmt(y3)}`,
-    `L ${fmt(xb - dustLean)} ${fmt(yBd + dustH)}`,
-    `L ${fmt(xa + dustLean)} ${fmt(yBd + dustH)}`,
+    `L ${fmt(xb)} ${fmt(yBd)}`,
+    `L ${fmt(xb - dustRoom)} ${fmt(yBd)}`,
+    `L ${fmt(xb - dustRoom - 2)} ${fmt(yBd + dustH)}`,
+    `L ${fmt(xa + dustRoom + 2)} ${fmt(yBd + dustH)}`,
+    `L ${fmt(xa + dustRoom)} ${fmt(yBd)}`,
+    `L ${fmt(xa)} ${fmt(yBd)}`,
     `L ${fmt(xa)} ${fmt(y3)}`,
   ];
   // The bottom lid and its tuck, traced right to left.
@@ -188,8 +198,8 @@ function generateTuckCarton(
     ...(isReverse
       ? [`L ${fmt(x5)} ${fmt(y3)}`, `L ${fmt(x4)} ${fmt(y3)}`, ...botDust(x3, x4), ...botLid(x2, x3)]
       : [`L ${fmt(x5)} ${fmt(y3)}`, ...botLid(x4, x5), ...botDust(x3, x4), `L ${fmt(x2)} ${fmt(y3)}`]),
-    ...botDust(x1, x2),
-    `L ${fmt(x1)} ${fmt(yBd)}`,
+    // The glue side has no tall wall to free the flap from: it ends on the dust crease.
+    ...botDust(x1, x2).slice(0, -1),
     `L ${fmt(x0)} ${fmt(y3 - taper)}`,
     `L ${fmt(x0)} ${fmt(y2 + taper)}`,
     'Z',
@@ -201,15 +211,6 @@ function generateTuckCarton(
     d: bodyPerimeter,
     closed: true,
   });
-
-  // Where a dust flap meets the front or back, the dust crease sits one ply inside the wall's lid
-  // crease; a short slit down each shared edge frees the flap from the taller wall.
-  for (const x of [x2, x3, x4]) {
-    paths.push(
-      { id: `carton-dust-slit-top-${fmt(x)}`, layer: 'cut', d: `M ${fmt(x)} ${fmt(y2)} L ${fmt(x)} ${fmt(yTd)}`, closed: false },
-      { id: `carton-dust-slit-bot-${fmt(x)}`, layer: 'cut', d: `M ${fmt(x)} ${fmt(yBd)} L ${fmt(x)} ${fmt(y3)}`, closed: false }
-    );
-  }
 
   const slitLen = Math.min(14, W * 0.18);
   paths.push(
@@ -246,11 +247,11 @@ function generateTuckCarton(
     ['score-l-f', x2, yTd, x2, yBd],
     ['score-f-r', x3, yTd, x3, yBd],
     ['score-r-b', x4, yTd, x4, yBd],
-    ['score-top-dust-l', x1, yTd, x2, yTd],
-    ['score-top-dust-r', x3, yTd, x4, yTd],
+    ['score-top-dust-l', x1 + dustRoom, yTd, x2 - dustRoom, yTd],
+    ['score-top-dust-r', x3 + dustRoom, yTd, x4 - dustRoom, yTd],
     ['score-top-lid', x4, y2, x5, y2],
-    ['score-bot-dust-l', x1, yBd, x2, yBd],
-    ['score-bot-dust-r', x3, yBd, x4, yBd],
+    ['score-bot-dust-l', x1 + dustRoom, yBd, x2 - dustRoom, yBd],
+    ['score-bot-dust-r', x3 + dustRoom, yBd, x4 - dustRoom, yBd],
     ['score-bot-lid', botStartX, y3, botEndX, y3],
     ['score-top-tuck', x4 + tuckInset + slitLen, y1, x5 - tuckInset - slitLen, y1],
     ['score-bot-tuck', botStartX + tuckInset + slitLen, y4, botEndX - tuckInset - slitLen, y4],
@@ -266,15 +267,15 @@ function generateTuckCarton(
     faceLabel: 'Carton dieline',
     widthMm: x5,
     heightMm: y5,
-    safeRect: { x: x2 + T / 2, y: y2 + T / 2, width: W, height: H },
+    safeRect: { x: x2 + T / 2, y: y2 + T / 2, width: W, height: H + 2 * T },
     sheetX: 0,
     sheetY: 0,
     paths,
     subFaces: [
-      { id: 'front', name: 'Front Face', x: x2 + T / 2, y: y2 + T / 2, width: W, height: H },
-      { id: 'back', name: 'Back Face', x: x4 + T / 2, y: y2 + T / 2, width: W, height: H },
-      { id: 'left', name: 'Left Side', x: x1 + T / 2, y: yTd, width: D, height: H - T },
-      { id: 'right', name: 'Right Side', x: x3 + T / 2, y: yTd, width: D, height: H - T },
+      { id: 'front', name: 'Front Face', x: x2 + T / 2, y: y2 + T / 2, width: W, height: H + 2 * T },
+      { id: 'back', name: 'Back Face', x: x4 + T / 2, y: y2 + T / 2, width: W, height: H + 2 * T },
+      { id: 'left', name: 'Left Side', x: x1 + T / 2, y: yTd + T / 2, width: D - T, height: H },
+      { id: 'right', name: 'Right Side', x: x3 + T / 2, y: yTd + T / 2, width: D, height: H },
       { id: 'top', name: 'Top Lid', x: x4 + T / 2, y: y1, width: W, height: D },
       { id: 'bottom', name: 'Bottom Closure', x: botStartX + T / 2, y: y3, width: W, height: D },
     ],
@@ -306,17 +307,19 @@ function generateTuckCarton(
 
   // Walls straddle their creases: a single-ply wall centres half a ply outside the inner face,
   // so the rig runs on W + T and D + T and the clear distance between opposite walls is W and D.
-  // W and D are the wall spans here. The lid's mid-plane sits half a ply above the typed height, the
-  // dust flaps' a ply under that; each lid is D − T (the inner depth) long between its creases.
-  const yLid = (H + T) / 2;
-  const yDust = (H - T) / 2;
+  // W and D are the wall spans here. The dust flaps' inner faces sit at the typed height, so their
+  // mid-plane is half a ply above it and the lid's a ply above that; each lid is D − T (the inner
+  // depth) long between its creases. The left wall runs from the front's crease to the glue crease,
+  // which sits on the glue flap's plane one ply inside the back: D − T long, centred T/2 forward.
+  const yLid = (H + 3 * T) / 2;
+  const yDust = (H + T) / 2;
   const carton3D = ((W: number, D: number): Panel3DTransform[] => [
     {
       id: 'back',
       name: 'Back Face',
       faceId: 'back',
       widthMm: W,
-      heightMm: H + T,
+      heightMm: H + 3 * T,
       thicknessMm: T,
       color: cBody,
       closedPos: [0, 0, -D / 2],
@@ -335,7 +338,7 @@ function generateTuckCarton(
       name: 'Right Side Wall',
       faceId: 'right',
       widthMm: D,
-      heightMm: H - T,
+      heightMm: H + T,
       thicknessMm: T,
       color: cSide,
       closedPos: [W / 2, 0, 0],
@@ -355,7 +358,7 @@ function generateTuckCarton(
       name: 'Front Face',
       faceId: 'front',
       widthMm: W,
-      heightMm: H + T,
+      heightMm: H + 3 * T,
       thicknessMm: T,
       color: cBody,
       closedPos: [0, 0, D / 2],
@@ -374,11 +377,11 @@ function generateTuckCarton(
       id: 'left',
       name: 'Left Side Wall',
       faceId: 'left',
-      widthMm: D,
-      heightMm: H - T,
+      widthMm: D - T,
+      heightMm: H + T,
       thicknessMm: T,
       color: cSide,
-      closedPos: [-W / 2, 0, 0],
+      closedPos: [-W / 2, 0, T / 2],
       explodedPos: [-W / 2 - D / 2, 0, -D / 2],
       rotation: [0, -Math.PI / 2, 0],
       // Hinged on the front, as on the sheet (glue | left | front | right | back).
@@ -405,13 +408,11 @@ function generateTuckCarton(
       rotation: [0, 0, 0],
       foldRig: {
         parentId: 'left',
-        pivotOffset: [-W / 2, 0, -D / 2],
+        pivotOffset: [-W / 2, 0, -D / 2 + T],
         axis: 'y',
         flatAngleRad: Math.PI / 2,
         foldedAngleRad: 0,
         stage: [0.22, 0.42],
-        // Flat, it lies in line with the left wall, as on the sheet.
-        flatSlide: [0, 0, -T],
       },
     },
     // Top Left & Right Dust Flaps
@@ -420,10 +421,10 @@ function generateTuckCarton(
       name: 'Top Left Dust Flap',
       faceId: 'left',
       widthMm: dustH,
-      heightMm: D - 2 * dustLean,
+      heightMm: D - T - 2 * dustRoom,
       thicknessMm: T,
       color: cTuck,
-      closedPos: [-W / 2 + dustH / 2, yDust, 0],
+      closedPos: [-W / 2 + dustH / 2, yDust, T / 2],
       explodedPos: [-W / 2 - D / 2, H / 2 + dustH / 2, -D / 2],
       rotation: [Math.PI / 2, 0, 0],
       foldRig: {
@@ -440,7 +441,7 @@ function generateTuckCarton(
       name: 'Top Right Dust Flap',
       faceId: 'right',
       widthMm: dustH,
-      heightMm: D - 2 * dustLean,
+      heightMm: D - 2 * dustRoom,
       thicknessMm: T,
       color: cTuck,
       closedPos: [W / 2 - dustH / 2, yDust, 0],
@@ -503,10 +504,10 @@ function generateTuckCarton(
       name: 'Bottom Left Dust Flap',
       faceId: 'left',
       widthMm: dustH,
-      heightMm: D - 2 * dustLean,
+      heightMm: D - T - 2 * dustRoom,
       thicknessMm: T,
       color: cTuck,
-      closedPos: [-W / 2 + dustH / 2, -yDust, 0],
+      closedPos: [-W / 2 + dustH / 2, -yDust, T / 2],
       explodedPos: [-W / 2 - D / 2, -H / 2 - dustH / 2, -D / 2],
       rotation: [Math.PI / 2, 0, 0],
       foldRig: {
@@ -523,7 +524,7 @@ function generateTuckCarton(
       name: 'Bottom Right Dust Flap',
       faceId: 'right',
       widthMm: dustH,
-      heightMm: D - 2 * dustLean,
+      heightMm: D - 2 * dustRoom,
       thicknessMm: T,
       color: cTuck,
       closedPos: [W / 2 - dustH / 2, -yDust, 0],

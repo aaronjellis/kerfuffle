@@ -33,9 +33,10 @@ export interface MailerSpans {
   /**
    * Inner-wall tabs. `centers` are fractions of floorD from the back crease: [0.25, 0.75], moved inward
    * when a tab would come within 2 mm of the inner wall's end, or [0.5] for one tab or when two cannot fit.
+   * depth = 1.5T: through the floor's ply and half a ply out below it. chamfer = T / 2 leads it in;
    * chamferEff = min(chamfer, depth, len / 2): the chamfer actually cut on the tab's free corners.
    */
-  tab: { len: number; depth: number; centers: number[]; chamfer: 4; chamferEff: number };
+  tab: { len: number; depth: number; centers: number[]; chamfer: number; chamferEff: number };
   /**
    * centerFromCrease = roll: the inner wall's mid-plane, measured from the floor's side crease.
    * inset = centerFromCrease - width/2: the slot's edge nearest the side crease.
@@ -45,6 +46,17 @@ export interface MailerSpans {
   lock: { tabW: number; tabLen: number; slitLen: number } | null;
   /** Why a requested front lock fell back to a tuck top; null otherwise */
   lockNote: string | null;
+  /**
+   * Fold-over closure: the lid's front flap folds down over the outside of the front wall, and two
+   * ears on the lid's sides drop through slots along the side rolls' top folds into the roll.
+   */
+  foldOver: boolean;
+  /**
+   * The lid's side ears, for the fold-over closure; null otherwise, or when the dust ears leave no
+   * room. `len` runs front to back, centred; `depth` hangs down into the roll. Each roll's top fold
+   * has a slot `slotLen` long and `slotWidth` wide, centred, to let the ear through.
+   */
+  lidEar: { len: number; depth: number; slotLen: number; slotWidth: number } | null;
   /** 0 when off or when a lock is set */
   notchR: number;
   /** 2D layout, blank origin top-left, x left to right, y top to bottom */
@@ -101,18 +113,32 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   const roll = 2 * T;
   const { earInset } = insetsFor(T);
 
-  const floorW = W + T + 2 * roll + (params.includeLidFlaps ? 2 * T : 0);
+  const foldOver = params.cardboardLockStyle === 'fold-over';
+  // The fold-over closure's ears go into the rolls, so the inner lid flaps (and their room) go.
+  const lidFlapsOn = params.includeLidFlaps && !foldOver;
+  const floorW = W + T + 2 * roll + (lidFlapsOn ? 2 * T : 0);
   const floorD = D + 2 * T;
   const backH = H + T;
   const frontH = H + T / 2;
   const outerSideH = H;
   const innerSideH = Math.max(8, H - T / 2);
-  const lidD = D + 3 * T;
-  const tuckH = Math.min(params.tuckFlapMm, H - T);
-  const tuckW = W - 2 * T;
+  // A fold-over lid runs half a ply further, to a crease just outside the front wall's outer face.
+  const lidD = D + 3 * T + (foldOver ? T / 2 : 0);
+  // The front flap (tuck, or fold-over flap) hangs down the front wall: inside it, or over it.
+  const tuckH = foldOver ? Math.min(params.tuckFlapMm, frontH - 2) : Math.min(params.tuckFlapMm, H - T);
+  // A fold-over flap is as wide as the lid, which stops at the ear creases one ply in from each side.
+  const tuckW = foldOver ? floorW - 2 * T : W - 2 * T;
   const tuckR = Math.min(8, 0.4 * tuckH, tuckW / 2);
-  const lidFlapDepth = params.includeLidFlaps ? H - T : 0;
-  const earW = Math.min(H, D / 2 - T);
+  const lidFlapDepth = lidFlapsOn ? H - T : 0;
+  // With the fold-over closure the dust ears take a quarter of the depth each, leaving the middle of
+  // each roll for a lid ear.
+  const earW = foldOver ? Math.min(H, D / 4) : Math.min(H, D / 2 - T);
+  // The ear clears the dust ears by 2 mm at each end; the slot gives it 1 mm of play each end.
+  const lidEarLen = D + 2 * T - 2 * earW - 4;
+  const lidEar: MailerSpans['lidEar'] =
+    foldOver && lidEarLen >= 10
+      ? { len: lidEarLen, depth: Math.max(0, Math.min(H - 2 * T, H * 0.8)), slotLen: lidEarLen + 2, slotWidth: T + 0.5 }
+      : null;
 
   const innerSideLen = D - T;
   const { innerInset } = insetsFor(T);
@@ -131,8 +157,9 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   }
   // The slot (tab + 1) stays inside the floor, clear of the walls' plies.
   tabLen = Math.min(tabLen, floorD - 2 * innerInset - 2 - 1);
-  const tabDepth = Math.min(T + 5, innerSideH - 2);
-  const tabChamfer = 4;
+  // The tab passes through the floor's ply and pokes half a ply out below the base.
+  const tabDepth = Math.min(1.5 * T, innerSideH - 2);
+  const tabChamfer = T / 2;
   const tab: MailerSpans['tab'] = {
     len: tabLen,
     depth: tabDepth,
@@ -166,7 +193,7 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     else if (tabLen < 4) lockNote = 'box too low for lock ears';
     else lock = { tabW, tabLen, slitLen };
   }
-  const notchR = params.thumbNotch && lock === null ? Math.min(12, W / 8) : 0;
+  const notchR = params.thumbNotch && lock === null && !foldOver ? Math.min(12, W / 8) : 0;
 
   // 2D layout, before any overflow shift.
   const innerL = tab.depth;
@@ -191,7 +218,8 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
   };
 
   // Lid flaps (lid row) and dust ears (wall rows) extend sideways past the floor edges.
-  const { x, blankW } = applySideOverflow(xUnshifted, Math.max(lidFlapDepth, earW));
+  // A fold-over lid's ears start a ply inside the floor edge.
+  const { x, blankW } = applySideOverflow(xUnshifted, Math.max(lidFlapDepth, earW, lidEar ? lidEar.depth - T : 0));
 
   const y: MailerSpans['y'] = {
     tuckTop: 0,
@@ -226,6 +254,8 @@ export function computeMailerSpans(params: BoxParameters, W: number, D: number, 
     slot,
     lock,
     lockNote,
+    foldOver,
+    lidEar,
     notchR,
     x,
     y,
@@ -338,8 +368,10 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
   // Tuck flap, with a lock tab on its side edge for the front lock (omitted when too small to cut).
   nodes.push(...tuckFlapRightHalf(s, tx1, y.tuckTop, y.lidTop));
 
-  // Lid right edge with the lid flap.
-  nodes.push({ x: fr, y: y.lidTop });
+  // Lid right edge with the lid flap. A fold-over lid stops a ply short of the floor edge, at its
+  // ear crease, so the ear drops into the roll.
+  const lidEdge = s.foldOver ? fr - T : fr;
+  nodes.push({ x: lidEdge, y: y.lidTop });
   if (s.lidFlapDepth > 0) {
     const fy0 = y.lidTop + insetsFor(T).lidFlapSetback;
     const fy1 = fy0 + s.lidFlapLen;
@@ -348,7 +380,22 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
     // Lead-in chamfer on the flap's front end (nearest lidTop), which swings into the box first.
     nodes.push({ x: fr, y: fy0 }, { x: fx - ch, y: fy0 }, { x: fx, y: fy0 + ch }, { x: fx, y: fy1 }, { x: fr, y: fy1 });
   }
-  nodes.push({ x: fr, y: y.backTop });
+  if (s.lidEar) {
+    const [e0, e1] = lidEarSpan(s);
+    const ex = lidEdge + s.lidEar.depth;
+    const ch = Math.min(4, s.lidEar.depth, s.lidEar.len / 2);
+    // Lead-in chamfers on both free corners: the ear drops straight down into its slot.
+    nodes.push(
+      { x: lidEdge, y: e0 },
+      { x: ex - ch, y: e0 },
+      { x: ex, y: e0 + ch },
+      { x: ex, y: e1 - ch },
+      { x: ex - ch, y: e1 },
+      { x: lidEdge, y: e1 },
+    );
+  }
+  nodes.push({ x: lidEdge, y: y.backTop });
+  if (lidEdge !== fr) nodes.push({ x: fr, y: y.backTop });
 
   // Dust ear on a wall row, inset earInset from the row's top crease, 3 mm chamfers on the free corners.
   const ear = (rowTop: number, earH: number) => {
@@ -403,6 +450,24 @@ function rightHalfPerimeter(s: MailerSpans): PerimNode[] {
   ear(y.frontTop, s.earFrontH);
   nodes.push({ x: fr, y: y.frontBottom });
   return nodes;
+}
+
+/**
+ * Where a lid ear sits on the lid row, `[top, bottom]`: centred on the box's depth, which on the
+ * sheet is half the floor plus half a ply (the lid starts at the back wall's outer face) above the
+ * lid's back crease.
+ */
+function lidEarSpan(s: MailerSpans): [number, number] {
+  const yc = s.y.backTop - (s.floorD / 2 + s.T / 2);
+  return [yc - s.lidEar!.len / 2, yc + s.lidEar!.len / 2];
+}
+
+/** A roll's ear slot, centred on the roll strip between `outer` and `roll` creases. */
+function rollSlotRect(s: MailerSpans, outer: number, roll: number): Point2D[] {
+  const { slotLen, slotWidth } = s.lidEar!;
+  const cx = (outer + roll) / 2;
+  const cy = s.y.floorTop + s.floorD / 2;
+  return rectPoints(cx - slotWidth / 2, cy - slotLen / 2, slotWidth, slotLen);
 }
 
 function perimeterPath(s: MailerSpans): string {
@@ -463,6 +528,14 @@ export function buildMailerSheet(spans: MailerSpans, params: BoxParameters): Box
     paths.push({ id: 'mailer-slit-r', layer: 'cut', d: slit(fr), closed: false });
   }
 
+  // Fold-over closure: a slot along each roll's top fold lets the lid's ear down into the roll.
+  if (s.lidEar) {
+    paths.push(
+      { id: 'mailer-ear-slot-l', layer: 'cut', d: pointsToSvgPath(rollSlotRect(s, x.outerL, x.rollL)), closed: true },
+      { id: 'mailer-ear-slot-r', layer: 'cut', d: pointsToSvgPath(rollSlotRect(s, x.outerR, x.rollR)), closed: true },
+    );
+  }
+
   const tuckInset = (s.floorW - s.tuckW) / 2;
   const scores: [string, number, number, number, number][] = [
     ['score-tuck', fl + tuckInset, y.lidTop, fr - tuckInset, y.lidTop],
@@ -481,6 +554,10 @@ export function buildMailerSheet(spans: MailerSpans, params: BoxParameters): Box
   ] as const) {
     const fy0 = y.lidTop + insetsFor(T).lidFlapSetback;
     if (s.lidFlapDepth > 0) vertical(`score-lid-flap-${side}`, edge, fy0, fy0 + s.lidFlapLen);
+    if (s.lidEar) {
+      const [e0, e1] = lidEarSpan(s);
+      vertical(`score-lid-ear-${side}`, side === 'l' ? edge + T : edge - T, e0, e1);
+    }
     vertical(`score-ear-back-${side}`, edge, y.backTop + earInset, y.backTop + earInset + s.earBackH);
     scores.push([`score-ear-front-${side}`, edge, frontEarTop, edge, frontEarEnd]);
     vertical(`score-floor-side-${side}`, edge, y.floorTop, y.frontTop);
@@ -520,7 +597,8 @@ export function buildMailerSheet(spans: MailerSpans, params: BoxParameters): Box
  */
 const mailerOuterDims = (s: MailerSpans): BoxDims => ({
   widthMm: s.floorW + s.T,
-  depthMm: s.lidD,
+  // A fold-over flap's outer face is half a ply past the lid's front crease.
+  depthMm: s.foldOver ? s.lidD + s.T / 2 : s.lidD,
   heightMm: s.backH + s.T,
 });
 
@@ -590,9 +668,11 @@ export function buildMailerRig(spans: MailerSpans, H: number): Panel3DTransform[
   const xInner = xOuter - s.roll; // inner wall: W/2 + T/2, or W/2 + 3T/2 with lid flaps
   const zBack = -s.floorD / 2;
   const zFront = s.floorD / 2;
-  const zTuck = zFront - T; // tuck flap, just inside the front wall
   const zLidBack = zBack - T / 2; // lid runs lidD forward from the back wall's outer face
   const zLidFront = zLidBack + s.lidD;
+  // The tuck flap hangs just inside the front wall; a fold-over flap hangs just outside it, from
+  // the lid's front crease.
+  const zTuck = s.foldOver ? zLidFront : zFront - T;
 
   // Floor: slots match the 2D sheet. Rotation +π/2 about x puts local y=0 at the front edge.
   const floorHoles = floorSlotRects(s).map((r) =>
@@ -740,6 +820,20 @@ export function buildMailerRig(spans: MailerSpans, H: number): Panel3DTransform[
       color: '#b38758',
       closedPos: [sx * (xOuter - s.roll / 2), yRoll, 0],
       rotation: [hp, 0, 0],
+      // Fold-over closure: the ear slot, centred, as on the sheet.
+      ...(s.lidEar
+        ? {
+            outlinePoints: rectPoints(0, 0, s.roll, s.rollLen),
+            holeContours: [
+              rectPoints(
+                (s.roll - s.lidEar.slotWidth) / 2,
+                (s.rollLen - s.lidEar.slotLen) / 2,
+                s.lidEar.slotWidth,
+                s.lidEar.slotLen,
+              ),
+            ],
+          }
+        : {}),
       foldRig: {
         parentId: wall,
         pivotOffset: [sx * xOuter, yRoll, 0],
@@ -774,7 +868,8 @@ export function buildMailerRig(spans: MailerSpans, H: number): Panel3DTransform[
     id: 'top',
     name: 'Mailer Lid Top',
     faceId: 'top',
-    widthMm: s.floorW,
+    // A fold-over lid stops at its ear creases, a ply in from each side.
+    widthMm: s.foldOver ? s.floorW - 2 * T : s.floorW,
     heightMm: s.lidD,
     color: '#dbb386',
     closedPos: [0, yLid, (zLidBack + zLidFront) / 2],
@@ -821,9 +916,35 @@ export function buildMailerRig(spans: MailerSpans, H: number): Panel3DTransform[
     }
   }
 
+  // Fold-over closure: the lid's ears drop through the roll slots into the rolls, between the
+  // outer and inner walls, centred front to back where the dust ears leave room.
+  if (s.lidEar) {
+    const ear = s.lidEar;
+    for (const [side, sideName, sx] of sides) {
+      add({
+        id: `lid-ear-${side}`,
+        name: `${sideName} Lid Ear`,
+        faceId: `lid-ear-${side}`,
+        widthMm: ear.len,
+        heightMm: ear.depth,
+        color: '#c9a073',
+        closedPos: [sx * xEar, yLid - ear.depth / 2, 0],
+        rotation: [0, sx * hp, 0],
+        foldRig: {
+          parentId: 'top',
+          pivotOffset: [sx * xEar, yLid, 0],
+          axis: 'z',
+          flatAngleRad: sx * hp,
+          foldedAngleRad: 0,
+          stage: [0.5, 0.64],
+        },
+      });
+    }
+  }
+
   add({
     id: 'tuck-flap',
-    name: 'Inner Tuck Flap (Inside Front Wall)',
+    name: s.foldOver ? 'Front Flap (Over the Front Wall)' : 'Inner Tuck Flap (Inside Front Wall)',
     faceId: 'tuck-flap',
     widthMm: s.tuckW,
     heightMm: s.tuckH,
@@ -837,9 +958,11 @@ export function buildMailerRig(spans: MailerSpans, H: number): Panel3DTransform[
       axis: 'x',
       flatAngleRad: -hp,
       foldedAngleRad: 0,
-      stage: [0.5, 0.7],
-      // Flat, the tuck flap's root meets the lid's front edge, 1.5T out from where it hangs.
-      flatSlide: [0, -1.5 * T, 0],
+      // A fold-over flap comes down once the lid has closed.
+      stage: s.foldOver ? [0.86, 1] : [0.5, 0.7],
+      // Flat, the tuck flap's root meets the lid's front edge, 1.5T out from where it hangs. A
+      // fold-over flap already hangs from that edge.
+      ...(s.foldOver ? {} : { flatSlide: [0, -1.5 * T, 0] as [number, number, number] }),
     },
   });
 
