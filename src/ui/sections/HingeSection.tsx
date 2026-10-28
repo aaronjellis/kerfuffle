@@ -10,6 +10,22 @@ import { DROPPED_NOTES, unitHelpers } from './shared';
 import type { SectionProps } from './types';
 
 /** Clamshell: the rear seam's hinge. 3D box: the knuckle hinge and its filament pin. */
+const PIN_LABEL: Record<BoxParameters['clamshellHingeType'], string> = {
+  'butt-hardware': 'Pilot hole Ø',
+  'printed-hinge': 'Filament pin Ø',
+  'knuckle-pin': 'Pin Ø',
+  'side-pivot': 'Pin Ø',
+};
+
+const HINGE_NOTE: Record<BoxParameters['clamshellHingeType'], string> = {
+  'butt-hardware': 'Two small brass butt hinges screw onto the back, their barrels on the seam.',
+  'printed-hinge': 'Two printed hinges press onto the back with printed pins; a filament pin runs through each knuckle.',
+  'knuckle-pin':
+    'Ten small round plates cut from the same sheet glue into slots on the back, five per hinge; a rod or filament pin runs through each set. The holes are 0.3 mm over the pin so it turns.',
+  'side-pivot':
+    'A plate glued outside each lid side hangs over the base, with one pin through both near the back. The base walls stop just short of the lid so it swings clear.',
+};
+
 export const HingeSection: React.FC<SectionProps> = ({ params, updateParam, displayUnit, model, handlers }) => {
   const { isInch, uLabel } = unitHelpers(displayUnit);
 
@@ -59,42 +75,27 @@ export const HingeSection: React.FC<SectionProps> = ({ params, updateParam, disp
             handlers.setParams((prev) => withPrintedPinClamp({ ...prev, clamshellHingeType }));
           }}
         >
-          <option value="butt-hardware">Butt seam for a hardware hinge</option>
-          <option value="side-pivot">Pivot pin holes in the side walls</option>
-          <option value="knuckle-pin">Interlocking hinge fingers</option>
-          <option value="printed-hinge">Printed hinge (STL)</option>
+          <option value="butt-hardware">Brass butt hinges on the back</option>
+          <option value="printed-hinge">Printed hinges (STL)</option>
+          <option value="knuckle-pin">Laser-cut knuckle plates and a pin</option>
+          <option value="side-pivot">Side pivot plates and pins</option>
         </select>
       </Field>
 
-      {params.clamshellHingeType === 'knuckle-pin' ? (
-        <Field label={`Hinge finger (${uLabel})`}>
-          <NumberField
-            valueMm={params.hingeFingerWidthMm}
-            minMm={4}
-            maxMm={40}
-            step={isInch ? 0.05 : 1}
-            displayUnit={displayUnit}
-            inDecimals={2}
-            mmDecimals={1}
-            ariaLabel="Hinge finger width"
-            onChangeMm={(mm) => updateParam('hingeFingerWidthMm', mm)}
-          />
-        </Field>
-      ) : (
-        <Field label={`${printed ? 'Filament pin Ø' : 'Hole Ø'} (${uLabel})`}>
-          <NumberField
-            valueMm={params.hingePinDiameterMm}
-            minMm={1.0}
-            maxMm={printed ? 3.0 : 6.0}
-            step={isInch ? 0.01 : 0.2}
-            displayUnit={displayUnit}
-            inDecimals={3}
-            mmDecimals={2}
-            ariaLabel={printed ? 'Filament pin diameter' : 'Hinge hole diameter'}
-            onChangeMm={(mm) => updateParam('hingePinDiameterMm', mm)}
-          />
-        </Field>
-      )}
+      <Field label={`${PIN_LABEL[params.clamshellHingeType]} (${uLabel})`}>
+        <NumberField
+          valueMm={params.hingePinDiameterMm}
+          minMm={1.0}
+          maxMm={printed ? 3.0 : 6.0}
+          step={isInch ? 0.01 : 0.2}
+          displayUnit={displayUnit}
+          inDecimals={3}
+          mmDecimals={2}
+          ariaLabel={PIN_LABEL[params.clamshellHingeType]}
+          onChangeMm={(mm) => updateParam('hingePinDiameterMm', mm)}
+        />
+      </Field>
+      <p className="helper-note">{HINGE_NOTE[params.clamshellHingeType]}</p>
 
       {params.clamshellHingeType === 'butt-hardware' && (
         <Switch

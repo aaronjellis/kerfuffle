@@ -49,10 +49,12 @@ describe('meshPartIdFor', () => {
     expect(meshPartIdFor(panel('bottom'), p)).toBe('bottom');
   });
 
-  it('clamshell knuckle-pin: the back walls carry the hinge', () => {
+  it('clamshell knuckle plates carry the hinge; the back walls are plain faces', () => {
     const p = clam('knuckle-pin');
-    expect(meshPartIdFor(panel('base-back', 'back'), p)).toBe('hinge');
-    expect(meshPartIdFor(panel('lid-back'), p)).toBe('hinge');
+    expect(meshPartIdFor(panel('hinge-knuckle-1-2'), p)).toBe('hinge');
+    expect(meshPartIdFor(panel('base-back', 'back'), p)).toBe('back');
+    expect(meshPartIdFor(panel('lid-pivot-left'), clam('side-pivot'))).toBe('hinge');
+    expect(meshPartIdFor(panel('butt-hinge-1-barrel-2'), clam('butt-hardware'))).toBe('hinge');
     expect(meshPartIdFor(panel('lid-front'), p)).toBe('lid');
     expect(meshPartIdFor(panel('base-front', 'front'), p)).toBe('front');
   });

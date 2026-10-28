@@ -692,17 +692,19 @@ describe('printed hinge', () => {
     }
     const ids = model.panels3D.map((x) => x.id);
     for (const i of [1, 2]) {
-      for (const part of ['base', 'lid', 'knuckle']) expect(ids).toContain(`printed-hinge-${i}-${part}`);
+      for (const part of ['base', 'lid', 'knuckle-1', 'knuckle-2', 'knuckle-3']) expect(ids).toContain(`printed-hinge-${i}-${part}`);
     }
     const lidLeaf = model.panels3D.find((x) => x.id === 'printed-hinge-1-lid')!;
     const baseLeaf = model.panels3D.find((x) => x.id === 'printed-hinge-1-base')!;
-    const knuckle3D = model.panels3D.find((x) => x.id === 'printed-hinge-1-knuckle')!;
+    const knuckle3D = model.panels3D.find((x) => x.id === 'printed-hinge-1-knuckle-1')!;
+    // The base leaf owns the outer two knuckle segments, the lid leaf the middle one.
+    expect(knuckle3D.foldRig).toBeUndefined();
+    expect(model.panels3D.find((x) => x.id === 'printed-hinge-1-knuckle-2')!.foldRig).toBeDefined();
     expect(lidLeaf.foldRig).toBeDefined();
     expect(lidLeaf.heightMm).toBeCloseTo(9.7);
     expect(baseLeaf.heightMm).toBeCloseTo(9.7);
     expect(lidLeaf.closedPos[1] - knuckle3D.closedPos[1]).toBeCloseTo(7.65);
     expect(knuckle3D.closedPos[1] - baseLeaf.closedPos[1]).toBeCloseTo(7.65);
-    expect(model.panels3D.find((x) => x.id === 'printed-hinge-1-knuckle')!.foldRig).toBeUndefined();
   });
 
   const spec = { spacing: 8.8, pinMm: 1.75, boardT: 3 };

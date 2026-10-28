@@ -15,6 +15,7 @@ import {
   MATERIAL_PRESETS,
 } from './engine/presets';
 import { generateBoxModel } from './engine/boxGenerator';
+import { imageAspect, sizeForAspect } from './engine/artworkImage';
 import { generateKerfTestModel, kerfTestValues } from './engine/kerfTest';
 import { parseProject, PROJECT_EXTENSION, ProjectFileError, serializeProject } from './engine/projectFile';
 import { exportPrintedHingeStl } from './engine/printedHinge';
@@ -425,20 +426,28 @@ export const App: React.FC = () => {
         model.innerDims.depthMm * 0.5,
         60
       );
-      const newArt: FaceArtwork = {
-        id: `art-${Date.now()}`,
-        faceId: selectedFaceId,
-        name: file.name.replace(/\.[^.]+$/, ''),
-        dataUrl,
-        xMm: 0,
-        yMm: 0,
-        widthMm: Math.round(defaultSize),
-        heightMm: Math.round(defaultSize),
-        rotationDeg: 0,
-        mode: 'print',
+      // Placed at the image's own proportions, its longer side the default size.
+      const place = (aspect: number) => {
+        const size = sizeForAspect(aspect, Math.round(defaultSize));
+        const newArt: FaceArtwork = {
+          id: `art-${Date.now()}`,
+          faceId: selectedFaceId,
+          name: file.name.replace(/\.[^.]+$/, ''),
+          dataUrl,
+          xMm: 0,
+          yMm: 0,
+          widthMm: Math.round(size.widthMm * 10) / 10,
+          heightMm: Math.round(size.heightMm * 10) / 10,
+          rotationDeg: 0,
+          mode: 'print',
+        };
+        setArtworks((prev) => [...prev, newArt]);
+        setSelectedArtworkId(newArt.id);
       };
-      setArtworks((prev) => [...prev, newArt]);
-      setSelectedArtworkId(newArt.id);
+      const img = new Image();
+      img.onload = () => place(imageAspect(img, dataUrl) ?? 1);
+      img.onerror = () => place(1);
+      img.src = dataUrl;
     };
     reader.readAsDataURL(file);
     e.target.value = '';

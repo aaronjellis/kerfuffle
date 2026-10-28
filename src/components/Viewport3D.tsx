@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { containRect, imageAspect } from '../engine/artworkImage';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {
   FaceArtwork,
@@ -548,7 +549,10 @@ function createFaceArtworkDecalMesh(
         if (art.mode === 'engrave') {
           ctx.filter = 'grayscale(100%) contrast(180%) brightness(45%)';
         }
-        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+        // Fitted inside its box at its own shape, as the 2D sheet and the SVG export draw it.
+        const aspect = imageAspect(img, art.dataUrl);
+        const fit = aspect ? containRect(w, h, aspect) : { x: 0, y: 0, w, h };
+        ctx.drawImage(img, -w / 2 + fit.x, -h / 2 + fit.y, fit.w, fit.h);
         ctx.restore();
         texture.needsUpdate = true;
       };

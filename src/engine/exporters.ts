@@ -7,6 +7,7 @@ import {
   GeneratedBoxModel,
 } from './types';
 import { EXPORT_PROFILES } from './presets';
+import { containRect, imageAspect } from './artworkImage';
 import { fmt, translateSvgPath } from './fingerJointEngine';
 import { export3DPrintBoxStl, export3DPrintBoxStlParts } from './printStl';
 
@@ -699,7 +700,10 @@ async function dataUrlToPngBytes(
         resolve(null);
         return;
       }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // Fitted inside the box at its own shape, as the SVG export's preserveAspectRatio="xMidYMid meet".
+      const aspect = imageAspect(img, dataUrl);
+      const fit = aspect ? containRect(canvas.width, canvas.height, aspect) : { x: 0, y: 0, w: canvas.width, h: canvas.height };
+      ctx.drawImage(img, fit.x, fit.y, fit.w, fit.h);
       const pngUrl = canvas.toDataURL('image/png');
       const base64 = pngUrl.split(',')[1];
       if (!base64) {

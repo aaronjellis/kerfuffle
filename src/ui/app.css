@@ -642,23 +642,28 @@ h4 {
   border-radius: var(--r-pill);
 }
 
-/* Sheet thumbnails: cut lines only, one hairline whatever the box's size. */
+/* Box drawings: each panel filled with the tile's own colour, so nearer panels hide the lines
+   behind them; one hairline whatever the box's size. */
 .box-type-card-thumb path,
 .box-type-tile-thumb path {
-  fill: none;
+  fill: var(--surface);
   stroke: currentColor;
   stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.box-type-card .box-type-card-thumb path {
+  fill: var(--sunken);
+}
+
+.box-type-tile[aria-current='true'] .box-type-tile-thumb path {
+  fill: var(--accent-soft);
 }
 
 .box-type-card-thumb,
 .box-type-tile-thumb {
   flex: none;
   color: var(--muted);
-}
-
-.box-thumb-icon {
-  display: inline-grid;
-  place-items: center;
 }
 
 .box-type-menu {

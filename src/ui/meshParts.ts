@@ -22,12 +22,9 @@ export function meshPartIdFor(panel: Panel3DTransform, params: MeshParams): stri
 
   switch (params.templateId) {
     case 'finger-clamshell':
-      if (id.startsWith('printed-hinge-')) return 'hinge';
+      // The hinge's own parts: printed and butt hinge leaves and barrels, knuckle plates, pivot cheeks.
+      if (/^(printed-hinge|butt-hinge|hinge-knuckle|lid-pivot)-/.test(id)) return 'hinge';
       if (id === 'clamshell-front-clasp') return 'clasp';
-      // The knuckle fingers are cut into the back walls.
-      if (params.clamshellHingeType === 'knuckle-pin' && (id === 'base-back' || id === 'lid-back')) {
-        return 'hinge';
-      }
       if (id === 'top' || id.startsWith('lid-')) return 'lid';
       return panel.faceId;
     case 'finger-living-hinge':

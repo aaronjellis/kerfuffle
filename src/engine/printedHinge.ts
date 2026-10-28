@@ -101,13 +101,13 @@ function rect(x0: number, y0: number, x1: number, y1: number): THREE.Shape {
 
 /**
  * One knuckle segment from x0 to x1: the annulus around the axis plus a web that ties it to the
- * plate. The web spans y from 0.3 outside the bore to 0.01 past the plate's edge, z 0..2.5, so it
- * overlaps both the knuckle solid and the plate and leaves the bore clear.
+ * plate. The web spans y from 0.3 outside the bore to 0.5 into the plate, z 0..2.5, so it overlaps
+ * both the knuckle solid and the plate by enough for a slicer to join them, and leaves the bore clear.
  */
 function knuckle(x0: number, x1: number, boreR: number): THREE.BufferGeometry[] {
   const ring = new THREE.Shape(circlePoints(AXIS_Y, AXIS_Z, KNUCKLE_R, SEGMENTS));
   ring.holes.push(new THREE.Path(circlePoints(AXIS_Y, AXIS_Z, boreR, SEGMENTS).reverse()));
-  const web = rect(AXIS_Y + boreR + 0.3, 0, RELIEF + 0.01, AXIS_Z);
+  const web = rect(AXIS_Y + boreR + 0.3, 0, RELIEF + 0.5, AXIS_Z);
   return [extrudeAlongX(ring, x0, x1), extrudeAlongX(web, x0, x1)];
 }
 

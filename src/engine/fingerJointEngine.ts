@@ -1022,6 +1022,25 @@ export function hingeHoleLayout(
 }
 
 /**
+ * How far below the seam the lid's bottom edge dips as it opens about a pivot `m` in front of the
+ * back face and `k` below the seam, while it is still over the walls: every point of that edge
+ * between the back face and the pivot, at every angle up to `maxAngle`, until it has swung back past
+ * the back face.
+ */
+export function lidEdgeDip(m: number, k: number, maxAngle: number): number {
+  let worst = 0;
+  for (let i = 0; i <= 24; i++) {
+    const dz = (-m * i) / 24;
+    for (let j = 1; j <= 180; j++) {
+      const a = (maxAngle * j) / 180;
+      if (-k * Math.sin(a) + dz * Math.cos(a) < -m) break;
+      worst = Math.max(worst, k - (k * Math.cos(a) + dz * Math.sin(a)));
+    }
+  }
+  return worst;
+}
+
+/**
  * Generates a Clamshell / Treasure Chest Box with Base + Hinged Lid
  */
 function generateClamshellBox(
@@ -1040,9 +1059,47 @@ function generateClamshellBox(
   const kerf = params.kerfMm;
   const lidH = Math.min(Math.max(12, params.lidHeightMm), innerH - 12);
   const baseH = innerH - lidH;
-  const countBaseH = computeOddFingerCount(baseH, params.fingerWidthMm);
+  const hingeType = params.clamshellHingeType;
+  const seamY = -innerH / 2 + baseH;
+  /** The back wall's outer face, which every hinge mounts on or turns behind. */
+  const zBackFace = -(innerD / 2 + T);
+  // Pivot pins turn in their holes: the hole is the pin plus 0.15 mm a side.
+  const pinHoleR = params.hingePinDiameterMm / 2 + 0.15;
+
+  // Side pivot: a plate glued outside each lid side hangs over the base side wall; one pin passes
+  // through both at P, `pivotM` in from the back face (clear of the back wall's finger band) and
+  // `pivotK` below the seam. Turning about a point in front of the back face, the lid's edge behind
+  // P dips as it opens, until it has swung back past the back face; setting P three times as far
+  // below the seam as in from the back keeps that dip near a millimetre. The base walls stop the
+  // dip (plus 0.3 mm) short of the seam.
+  const pivotM = T + pinHoleR + 1.5;
+  const pivotK = Math.min(Math.max(2 * pinHoleR + 4, 3 * pivotM), baseH - pinHoleR - 2);
+  const pivotGap = hingeType === 'side-pivot' ? lidEdgeDip(pivotM, pivotK, 0.55 * Math.PI) + 0.3 : 0;
+  const baseWallH = baseH - pivotGap;
+
+  // Knuckle plates: round-ended plates standing off the back face, the pin hole `knE` out from it,
+  // the round end `knR` across. The body runs `knHk` along the wall from the seam, with a glue tab
+  // into a slot in the wall.
+  const knR = pinHoleR + 2;
+  const knE = knR + 0.5;
+  const knHk = Math.max(2 * knR + 2, Math.min(2 * knR + 4, lidH - 1, baseWallH - 1));
+
+  // Every hinge turns the lid about one line along x at the seam, behind the back face, so each
+  // point of the lid rises or swings back as it opens and nothing presses into the base: a butt
+  // hinge's barrel 2 mm out, the printed hinge's knuckle 2.5 mm out, the knuckle plates' pin. The
+  // side pivot's pin is the exception, set inside the side walls; the seam gap above covers it.
+  const hingeAxis: [number, number] =
+    hingeType === 'side-pivot'
+      ? [seamY - pivotK, zBackFace + pivotM]
+      : hingeType === 'printed-hinge'
+        ? [seamY, zBackFace - 2.5]
+        : hingeType === 'knuckle-pin'
+          ? [seamY, zBackFace - knE]
+          : [seamY, zBackFace - 2];
+  const hingePivot: [number, number, number] = [0, hingeAxis[0], hingeAxis[1]];
+
+  const countBaseH = computeOddFingerCount(baseWallH, params.fingerWidthMm);
   const countLidH = computeOddFingerCount(lidH, params.fingerWidthMm);
-  const countHingeW = computeOddFingerCount(innerW, params.hingeFingerWidthMm || params.fingerWidthMm);
 
   const panels2D: BoxPanel2D[] = [];
   const panels3D: Panel3DTransform[] = [];
@@ -1094,6 +1151,39 @@ function generateClamshellBox(
     return { paths, holes3D };
   };
 
+  // World x of each hinge's centre. The back wall is turned by pi about Y, so its 2D x runs toward -x.
+  const hingeWorldX = hingeLayout.centersX.map((cx2D) => innerW / 2 + T - cx2D);
+  // Knuckle plates: five per hinge, alternating base, lid, base, lid, base, one ply apart plus 0.4 mm.
+  const knPitch = T + 0.4;
+  const knuckles = hingeType === 'knuckle-pin'
+    ? hingeWorldX.flatMap((xc, g) =>
+        [0, 1, 2, 3, 4].map((j) => ({ id: `hinge-knuckle-${g + 1}-${j + 1}`, x: xc + (j - 2) * knPitch, onLid: j % 2 === 1 }))
+      )
+    : [];
+  // The slot each knuckle's glue tab goes into, in a back wall's 2D frame: `seam2D` is the seam's y,
+  // `dir` +1 when the wall runs down from it (base), -1 up (lid).
+  const knuckleSlots = (panelId: string, seam2D: number, dir: 1 | -1, onLid: boolean): { paths: DielinePath[]; holes3D: Point2D[][] } => {
+    const paths: DielinePath[] = [];
+    const holes3D: Point2D[][] = [];
+    const slotW = Math.max(0.5, T - kerf * 0.5);
+    const a = seam2D + dir * (knR + 1);
+    const b = seam2D + dir * (knHk - 1);
+    knuckles
+      .filter((k) => k.onLid === onLid)
+      .forEach((k, i) => {
+        const cx2D = innerW / 2 + T - k.x;
+        const pts = [
+          { x: cx2D - slotW / 2, y: Math.min(a, b) },
+          { x: cx2D + slotW / 2, y: Math.min(a, b) },
+          { x: cx2D + slotW / 2, y: Math.max(a, b) },
+          { x: cx2D - slotW / 2, y: Math.max(a, b) },
+        ];
+        paths.push({ id: `${panelId}-knuckle-slot-${i + 1}`, layer: 'cut', d: pointsToSvgPath(pts, true), closed: true });
+        holes3D.push(pts);
+      });
+    return { paths, holes3D };
+  };
+
   // Base Bottom
   const botRes = specToPanel2D({
     id: 'bottom',
@@ -1127,31 +1217,31 @@ function generateClamshellBox(
   });
 
   // Base Walls (Front, Back, Left, Right)
-  const baseYCenter = -innerH / 2 + baseH / 2;
+  const baseYCenter = -innerH / 2 + baseWallH / 2;
   for (const side of ['front', 'back'] as const) {
     const isFront = side === 'front';
-    const topMode: EdgeJointMode =
-      !isFront && params.clamshellHingeType === 'knuckle-pin' ? 'even-tabs' : 'flat-inner';
-    const baseHingeHoles = !isFront
+    const hardware = !isFront
       ? buildHardwareHingeHoles('base-back', T + hingeLayout.fromSeam)
       : { paths: [], holes3D: [] };
+    const slots = !isFront ? knuckleSlots('base-back', T, 1, false) : { paths: [], holes3D: [] };
+    const baseHingeHoles = { paths: [...hardware.paths, ...slots.paths], holes3D: [...hardware.holes3D, ...slots.holes3D] };
     const res = specToPanel2D({
       id: `base-${side}`,
       name: isFront ? 'Base Front Wall' : 'Base Back Wall (Hinged)',
       faceLabel: isFront ? 'BASE FRONT' : 'BASE BACK',
       innerW,
-      innerH: baseH,
+      innerH: baseWallH,
       thickness: T,
       kerf,
       countX: countW,
-      topCountX: !isFront && params.clamshellHingeType === 'knuckle-pin' ? countHingeW : countW,
       countY: countBaseH,
-      topEdge: topMode,
+      topEdge: 'flat-inner',
       rightEdge: 'even-tabs',
       bottomEdge: 'even-tabs',
       leftEdge: 'even-tabs',
       ownCorners: true,
       extraPaths: baseHingeHoles.paths,
+      holeContours: baseHingeHoles.holes3D,
     });
     panels2D.push(res.panel2D);
     const zSign = isFront ? 1 : -1;
@@ -1160,7 +1250,7 @@ function generateClamshellBox(
       name: res.panel2D.name,
       faceId: side,
       widthMm: innerW + 2 * T,
-      heightMm: baseH + 2 * T,
+      heightMm: baseWallH + 2 * T,
       thicknessMm: T,
       color: '#d6b384',
       closedPos: [0, baseYCenter, zSign * (innerD / 2 + T / 2)],
@@ -1175,10 +1265,12 @@ function generateClamshellBox(
     const isRight = side === 'right';
     const extraPaths: DielinePath[] = [];
     const holes3D: Point2D[][] = [];
-    if (params.clamshellHingeType === 'side-pivot') {
-      const r = params.hingePinDiameterMm / 2;
-      const cx = isRight ? T + innerD - T * 1.5 : T + T * 1.5;
-      const cy = T + T * 1.5;
+    if (hingeType === 'side-pivot') {
+      // P: pivotM in from the back face (2D x 0 on the left wall, the far end on the right) and
+      // pivotK below the seam, which is pivotGap above this wall's top edge.
+      const r = pinHoleR;
+      const cx = isRight ? innerD + 2 * T - pivotM : pivotM;
+      const cy = T + pivotK - pivotGap;
       extraPaths.push({
         id: `base-${side}-pivot-hole`,
         layer: 'cut',
@@ -1192,7 +1284,7 @@ function generateClamshellBox(
       name: isRight ? 'Base Right Wall' : 'Base Left Wall',
       faceLabel: isRight ? 'BASE RIGHT' : 'BASE LEFT',
       innerW: innerD,
-      innerH: baseH,
+      innerH: baseWallH,
       thickness: T,
       kerf,
       countX: countD,
@@ -1211,7 +1303,7 @@ function generateClamshellBox(
       name: res.panel2D.name,
       faceId: side,
       widthMm: innerD + 2 * T,
-      heightMm: baseH + 2 * T,
+      heightMm: baseWallH + 2 * T,
       thicknessMm: T,
       color: '#cda676',
       closedPos: [xSign * (innerW / 2 + T / 2), baseYCenter, 0],
@@ -1223,9 +1315,7 @@ function generateClamshellBox(
   }
 
   // HINGED LID (Top Plate + 4 Lid Skirt Walls)
-  const seamY = -innerH / 2 + baseH;
   const lidYCenter = seamY + lidH / 2;
-  const hingePivot: [number, number, number] = [0, seamY, -innerD / 2 - T / 2];
 
   const topRes = specToPanel2D({
     id: 'top',
@@ -1267,12 +1357,12 @@ function generateClamshellBox(
 
   for (const side of ['front', 'back'] as const) {
     const isFront = side === 'front';
-    const botMode: EdgeJointMode =
-      !isFront && params.clamshellHingeType === 'knuckle-pin' ? 'odd-tabs' : 'flat-inner';
     // In 2D shifted coordinates for Lid Back, topEdge has tabs (height T) + lidH, so bottom flat seam is at y = T + lidH
-    const lidHingeHoles = !isFront
+    const hardware = !isFront
       ? buildHardwareHingeHoles('lid-back', T + lidH - hingeLayout.fromSeam)
       : { paths: [], holes3D: [] };
+    const slots = !isFront ? knuckleSlots('lid-back', T + lidH, -1, true) : { paths: [], holes3D: [] };
+    const lidHingeHoles = { paths: [...hardware.paths, ...slots.paths], holes3D: [...hardware.holes3D, ...slots.holes3D] };
     const res = specToPanel2D({
       id: `lid-${side}`,
       name: isFront ? 'Lid Front Lip' : 'Lid Back Wall (Hinge)',
@@ -1282,14 +1372,14 @@ function generateClamshellBox(
       thickness: T,
       kerf,
       countX: countW,
-      bottomCountX: !isFront && params.clamshellHingeType === 'knuckle-pin' ? countHingeW : countW,
       countY: countLidH,
       topEdge: 'even-tabs',
       rightEdge: 'even-tabs',
-      bottomEdge: botMode,
+      bottomEdge: 'flat-inner',
       leftEdge: 'even-tabs',
       ownCorners: true,
       extraPaths: lidHingeHoles.paths,
+      holeContours: lidHingeHoles.holes3D,
     });
     panels2D.push(res.panel2D);
     const zSign = isFront ? 1 : -1;
@@ -1324,18 +1414,6 @@ function generateClamshellBox(
     const isRight = side === 'right';
     const extraPaths: DielinePath[] = [];
     const holes3D: Point2D[][] = [];
-    if (params.clamshellHingeType === 'side-pivot') {
-      const r = params.hingePinDiameterMm / 2;
-      const cx = isRight ? T + innerD - T * 1.5 : T + T * 1.5;
-      const cy = T + lidH - T * 1.5;
-      extraPaths.push({
-        id: `lid-${side}-pivot-hole`,
-        layer: 'cut',
-        d: circleSvgPath(cx, cy, r),
-        closed: true,
-      });
-      holes3D.push(circlePts(cx, cy, r));
-    }
     const res = specToPanel2D({
       id: `lid-${side}`,
       name: isRight ? 'Lid Right Cheek' : 'Lid Left Cheek',
@@ -1393,7 +1471,9 @@ function generateClamshellBox(
     heightMm: claspH,
     thicknessMm: Math.max(1.2, T * 0.45),
     color: '#d49b3b',
-    closedPos: [0, seamY, innerD / 2 + T + 0.6],
+    // Its inner face stands 1 mm off the base front: swinging up about the hinge, the clasp's lower
+    // half drifts back a fraction of a millimetre before it clears the seam.
+    closedPos: [0, seamY, innerD / 2 + T + 1 + Math.max(1.2, T * 0.45) / 2],
     explodedPos: [0, seamY + explodeDist * 0.75, innerD / 2 + T + explodeDist * 0.65],
     rotation: [0, 0, 0],
     foldRig: {
@@ -1405,65 +1485,230 @@ function generateClamshellBox(
     },
   });
 
-  // Printed flat offset hinges on the outer back face: a leaf below the seam (stays with the base),
-  // a leaf above it (swings with the lid), and the knuckle standing proud along the seam.
-  if (isPrintedHinge) {
-    const leafW = hingeLayout.spacing + 8;
-    const leafT = 1.6;
-    // The plate runs 2.8 to 12.5 mm from the knuckle axis, which lies on the seam.
-    const leafH = 9.7;
-    const leafFromSeam = 7.65;
-    const backFaceZ = -(innerD / 2 + T);
-    const leafZ = backFaceZ - leafT / 2;
-    const knuckleZ = backFaceZ - 2.5;
-    hingeLayout.centersX.forEach((cx2D, idx) => {
+  // Every part that turns with the lid shares the lid's fold.
+  const lidRig: Panel3DTransform['foldRig'] = {
+    pivotOffset: hingePivot,
+    axis: 'x',
+    flatAngleRad: -Math.PI * 0.55,
+    foldedAngleRad: 0,
+    stage: [0.45, 1.0],
+  };
+  const backOut = (closed: [number, number, number]): [number, number, number] => [closed[0], closed[1], closed[2] - explodeDist * 1.1];
+  /** A round barrel segment on the hinge line, `len` long along x, with an optional bore. */
+  const barrel = (id: string, name: string, xc: number, len: number, r: number, boreR: number, color: string, onLid: boolean): Panel3DTransform => {
+    const ring = circlePts(r, r, r, 24);
+    const closedPos: [number, number, number] = [xc, hingeAxis[0], hingeAxis[1]];
+    return {
+      id,
+      name,
+      faceId: id,
+      widthMm: 2 * r,
+      heightMm: 2 * r,
+      thicknessMm: len,
+      color,
+      closedPos,
+      explodedPos: onLid ? closedPos : backOut(closedPos),
+      // Turned a quarter about Y, the disc lies across the hinge line and its thickness runs along x.
+      rotation: [0, Math.PI / 2, 0],
+      outlinePoints: ring,
+      holeContours: boreR > 0 ? [circlePts(r, r, boreR, 24)] : undefined,
+      ...(onLid ? { foldRig: lidRig } : {}),
+    };
+  };
+  /** A flat block: `w` along x, `h` along y, `t` along z, centred at (x, y, z). */
+  const block = (id: string, name: string, x: number, y: number, z: number, w: number, h: number, t: number, color: string, onLid: boolean): Panel3DTransform => {
+    const closedPos: [number, number, number] = [x, y, z];
+    return {
+      id,
+      name,
+      faceId: id,
+      widthMm: w,
+      heightMm: h,
+      thicknessMm: t,
+      color,
+      closedPos,
+      explodedPos: onLid ? closedPos : backOut(closedPos),
+      rotation: [0, 0, 0],
+      ...(onLid ? { foldRig: lidRig } : {}),
+    };
+  };
+  /** Three barrel segments with 0.3 mm gaps over [x0, x0 + L]: the base owns the outer two, the lid the middle one. */
+  const barrelSegments = (L: number, x0: number) => {
+    const seg = (L - 0.6) / 3;
+    return [0, 1, 2].map((j) => ({ xc: x0 + j * (seg + 0.3) + seg / 2, len: seg, onLid: j === 1 }));
+  };
+
+  if (hingeType === 'printed-hinge') {
+    // The printed flat offset hinge as printedHinge.ts builds it: plates 1.6 mm thick from 2.8 to
+    // 12.5 mm off the hinge line, flat on the back face; a Ø5 knuckle on the line 2.5 mm out; a
+    // web from each knuckle segment to its own plate.
+    const L = hingeLayout.spacing + 8;
+    const boreR = (Math.min(params.hingePinDiameterMm, 3) + 0.25) / 2;
+    const webIn = boreR + 0.3;
+    hingeWorldX.forEach((xc, idx) => {
       const i = idx + 1;
-      // The back wall is turned by pi about Y, so its 2D x runs toward world -x.
-      const x = innerW / 2 + T - cx2D;
-      panels3D.push({
-        id: `printed-hinge-${i}-base`,
-        name: `Printed Hinge ${i} (Base Leaf)`,
-        faceId: `printed-hinge-${i}-base`,
-        widthMm: leafW,
-        heightMm: leafH,
-        thicknessMm: leafT,
-        color: '#a3a3a3',
-        closedPos: [x, seamY - leafFromSeam, leafZ],
-        explodedPos: [x, seamY - leafFromSeam, leafZ - explodeDist * 1.15],
-        rotation: [0, 0, 0],
-      });
-      panels3D.push({
-        id: `printed-hinge-${i}-lid`,
-        name: `Printed Hinge ${i} (Lid Leaf)`,
-        faceId: `printed-hinge-${i}-lid`,
-        widthMm: leafW,
-        heightMm: leafH,
-        thicknessMm: leafT,
-        color: '#a3a3a3',
-        closedPos: [x, seamY + leafFromSeam, leafZ],
-        explodedPos: [x, seamY + leafFromSeam + explodeDist * 0.75, leafZ - explodeDist * 0.75],
-        rotation: [0, 0, 0],
-        foldRig: {
-          pivotOffset: hingePivot,
-          axis: 'x',
-          flatAngleRad: -Math.PI * 0.55,
-          foldedAngleRad: 0,
-          stage: [0.45, 1.0],
-        },
-      });
-      panels3D.push({
-        id: `printed-hinge-${i}-knuckle`,
-        name: `Printed Hinge ${i} (Knuckle)`,
-        faceId: `printed-hinge-${i}-knuckle`,
-        widthMm: leafW,
-        heightMm: 5,
-        thicknessMm: 5,
-        color: '#a3a3a3',
-        closedPos: [x, seamY, knuckleZ],
-        explodedPos: [x, seamY + explodeDist * 0.35, knuckleZ - explodeDist * 1.3],
-        rotation: [0, 0, 0],
+      for (const onLid of [false, true]) {
+        const sgn = onLid ? 1 : -1;
+        panels3D.push(
+          block(`printed-hinge-${i}-${onLid ? 'lid' : 'base'}`, `Printed Hinge ${i} (${onLid ? 'Lid' : 'Base'} Leaf)`, xc, seamY + sgn * 7.65, zBackFace - 0.8, L, 9.7, 1.6, '#a3a3a3', onLid)
+        );
+      }
+      barrelSegments(L, xc - L / 2).forEach((sg, j) => {
+        panels3D.push(barrel(`printed-hinge-${i}-knuckle-${j + 1}`, `Printed Hinge ${i} (Knuckle)`, sg.xc, sg.len, 2.5, boreR, '#a3a3a3', sg.onLid));
+        const sgn = sg.onLid ? 1 : -1;
+        const webH = 2.8 + 0.5 - webIn;
+        panels3D.push(
+          block(`printed-hinge-${i}-web-${j + 1}`, `Printed Hinge ${i} (Web)`, sg.xc, seamY + sgn * (webIn + webH / 2), zBackFace - 1.25, sg.len, webH, 2.5, '#a3a3a3', sg.onLid)
+        );
       });
     });
+  }
+
+  if (hingeType === 'butt-hardware') {
+    // A small brass butt hinge per position: leaves 0.8 mm thick, 10 mm each side of the seam, on
+    // a Ø4 barrel 2 mm out. Its screw holes are the pilot holes 5 mm from the seam.
+    const L = hingeLayout.spacing + 8;
+    hingeWorldX.forEach((xc, idx) => {
+      const i = idx + 1;
+      for (const onLid of [false, true]) {
+        const sgn = onLid ? 1 : -1;
+        panels3D.push(
+          block(`butt-hinge-${i}-${onLid ? 'lid' : 'base'}`, `Butt Hinge ${i} (${onLid ? 'Lid' : 'Base'} Leaf)`, xc, seamY + sgn * 5.5, zBackFace - 0.4, L, 9, 0.8, '#c9a227', onLid)
+        );
+      }
+      barrelSegments(L, xc - L / 2).forEach((sg, j) => {
+        panels3D.push(barrel(`butt-hinge-${i}-barrel-${j + 1}`, `Butt Hinge ${i} (Barrel)`, sg.xc, sg.len, 2, 0, '#c9a227', sg.onLid));
+      });
+    });
+  }
+
+  if (hingeType === 'knuckle-pin') {
+    // Knuckle plates, cut from the box's own sheet. Drawn in (u, v): u out from the back face, v up
+    // from the seam (down for a base plate). The body runs knHk along the wall and out to the round
+    // end around the pin; a glue tab one ply deep goes into the wall's slot.
+    const plate = (dir: 1 | -1): Point2D[] => {
+      const pts: Point2D[] = [
+        { x: 0, y: -dir * knHk },
+        { x: knE + knR, y: -dir * knHk },
+        { x: knE + knR, y: 0 },
+      ];
+      for (let i = 1; i < 12; i++) {
+        const a = (i / 12) * Math.PI;
+        pts.push({ x: knE + knR * Math.cos(a), y: dir * knR * Math.sin(a) });
+      }
+      pts.push(
+        { x: knE - knR, y: 0 },
+        { x: 0, y: 0 },
+        { x: 0, y: -dir * (knR + 1) },
+        { x: -T, y: -dir * (knR + 1) },
+        { x: -T, y: -dir * (knHk - 1) },
+        { x: 0, y: -dir * (knHk - 1) }
+      );
+      return pts;
+    };
+    for (const k of knuckles) {
+      // A lid plate's body runs up from the seam; a base plate's down.
+      const uv = plate(k.onLid ? -1 : 1);
+      const hole = circlePts(knE, 0, pinHoleR, 16);
+      const uMin = -T;
+      const uMax = knE + knR;
+      const vMin = Math.min(...uv.map((q) => q.y));
+      const vMax = Math.max(...uv.map((q) => q.y));
+      // Outline frame: x along u from its minimum, y down from the top.
+      const toFrame = (q: Point2D): Point2D => ({ x: q.x - uMin, y: vMax - q.y });
+      const outline = uv.map(toFrame);
+      const holeFrame = hole.map(toFrame);
+      const w = uMax - uMin;
+      const h = vMax - vMin;
+      panels2D.push({
+        id: k.id,
+        name: `Hinge knuckle (${k.onLid ? 'lid' : 'base'})`,
+        faceLabel: '',
+        widthMm: w,
+        heightMm: h,
+        safeRect: { x: 0, y: 0, width: w, height: h },
+        sheetX: 0,
+        sheetY: 0,
+        paths: [
+          { id: `${k.id}-cut`, layer: 'cut', d: pointsToSvgPath(outline, true), closed: true },
+          { id: `${k.id}-pin`, layer: 'cut', d: pointsToSvgPath(holeFrame, true), closed: true },
+        ],
+      });
+      const closedPos: [number, number, number] = [k.x, seamY + (vMin + vMax) / 2, zBackFace - (uMin + uMax) / 2];
+      panels3D.push({
+        id: k.id,
+        name: `Hinge Knuckle (${k.onLid ? 'Lid' : 'Base'})`,
+        faceId: k.id,
+        widthMm: w,
+        heightMm: h,
+        thicknessMm: T,
+        color: k.onLid ? '#e0c094' : '#d6b384',
+        closedPos,
+        explodedPos: k.onLid ? closedPos : backOut(closedPos),
+        // Turned a quarter about Y: the plate stands across the back wall, u running out along -z.
+        rotation: [0, Math.PI / 2, 0],
+        outlinePoints: outline,
+        holeContours: [holeFrame],
+        ...(k.onLid ? { foldRig: lidRig } : {}),
+      });
+    }
+  }
+
+  if (hingeType === 'side-pivot') {
+    // A cheek plate glued outside each lid side, from the lid's top face down past the seam over the
+    // base side wall, with the pin hole at P. Its bottom corners are rounded.
+    const plateW = innerD + 2 * T;
+    const plateTop = seamY + lidH + T;
+    const plateBottom = hingeAxis[0] - pivotK;
+    const plateH = plateTop - plateBottom;
+    const rc = Math.min(8, pivotK);
+    const outline: Point2D[] = [{ x: 0, y: 0 }, { x: plateW, y: 0 }];
+    for (const [cx, start] of [
+      [plateW - rc, 0],
+      [rc, Math.PI / 2],
+    ] as const) {
+      for (let i = 0; i <= 6; i++) {
+        const a = start + (i / 6) * (Math.PI / 2);
+        outline.push({ x: cx + rc * Math.cos(a), y: plateH - rc + rc * Math.sin(a) });
+      }
+    }
+    for (const side of ['left', 'right'] as const) {
+      const isRight = side === 'right';
+      // The left plate's x runs back to front, the right plate's front to back (as the side walls).
+      const holeX = isRight ? plateW - pivotM : pivotM;
+      const hole = circlePts(holeX, plateTop - hingeAxis[0], pinHoleR, 16);
+      const id = `lid-pivot-${side}`;
+      panels2D.push({
+        id,
+        name: `Pivot cheek (${side})`,
+        faceLabel: isRight ? 'PIVOT RIGHT' : 'PIVOT LEFT',
+        widthMm: plateW,
+        heightMm: plateH,
+        safeRect: { x: T, y: T, width: plateW - 2 * T, height: lidH },
+        sheetX: 0,
+        sheetY: 0,
+        paths: [
+          { id: `${id}-cut`, layer: 'cut', d: pointsToSvgPath(outline, true), closed: true },
+          { id: `${id}-pin`, layer: 'cut', d: pointsToSvgPath(hole, true), closed: true },
+        ],
+      });
+      const xSign = isRight ? 1 : -1;
+      panels3D.push({
+        id,
+        name: `Pivot Cheek (${isRight ? 'Right' : 'Left'})`,
+        faceId: id,
+        widthMm: plateW,
+        heightMm: plateH,
+        thicknessMm: T,
+        color: '#d9b689',
+        closedPos: [xSign * (innerW / 2 + T + T / 2), (plateTop + plateBottom) / 2, 0],
+        explodedPos: [xSign * (innerW / 2 + T + T / 2 + explodeDist * 0.7), (plateTop + plateBottom) / 2 + explodeDist * 0.75, 0],
+        rotation: [0, isRight ? Math.PI / 2 : -Math.PI / 2, 0],
+        outlinePoints: outline,
+        holeContours: [hole],
+        foldRig: lidRig,
+      });
+    }
   }
 
   return {

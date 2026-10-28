@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import { Box, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import type { BoxCategory } from '../engine/types';
 import { BOX_TYPES, boxTypeCategory, boxTypeThumb, CATEGORY_NAMES, type BoxType } from './boxTypes';
 import { Popover, usePopover } from './Popover';
@@ -9,19 +9,14 @@ interface BoxTypePickerProps {
   onSelect: (t: BoxType) => void;
 }
 
-/** A box type's cut sheet in miniature; a plain box icon for a 3D-printed one. */
+/** A box type as a small isometric drawing of the assembled box. */
 const Thumb: React.FC<{ type: BoxType; className: string }> = ({ type, className }) => {
   const thumb = boxTypeThumb(type);
-  if (!thumb) {
-    return (
-      <span className={`${className} box-thumb-icon`} aria-hidden="true">
-        <Box size={22} strokeWidth={1.5} />
-      </span>
-    );
-  }
   return (
     <svg className={className} viewBox={thumb.viewBox} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-      <path d={thumb.d} vectorEffect="non-scaling-stroke" />
+      {thumb.faces.map((d, i) => (
+        <path key={i} d={d} vectorEffect="non-scaling-stroke" />
+      ))}
     </svg>
   );
 };
