@@ -4,6 +4,7 @@ import { exportBoxSvg } from '../src/engine/exporters';
 import { generateBoxModel } from '../src/engine/boxGenerator';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { FaceArtwork } from '../src/engine/types';
+import type { TextOutline } from '../src/engine/textPlacement';
 
 const logo =
   '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="10 20 400 100" fill="#222" onload="alert(1)">' +
@@ -73,9 +74,49 @@ describe('artwork in the SVG export', () => {
     expect(print).toContain('<image id="art-photo"');
   });
 
-  it('keeps text, set in a web font, as an image', () => {
-    const text = { ...art('engrave', svgUrl, 'words'), textConfig: { text: 'Hi', fontFamily: 'Inter', fontWeight: '400' as const, fontStyle: 'normal' as const, textAlign: 'center' as const, color: '#000', letterSpacingEm: 0, lineHeight: 1.2 } };
-    const out = exportBoxSvg(model, [text]);
+  const text = (mode: FaceArtwork['mode']) => ({
+    ...art(mode, png, 'words'),
+    textConfig: { text: 'Hi\nthere', fontFamily: 'Inter', fontWeight: '400' as const, fontStyle: 'normal' as const, textAlign: 'center' as const, color: '#b45309', letterSpacingEm: 0, lineHeight: 1.2 },
+  });
+  // A 200 × 100 px render whose lines are each one square.
+  const outline: TextOutline = {
+    widthPx: 200,
+    heightPx: 100,
+    groups: [
+      { text: 'Hi', contours: [[{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 50 }, { x: 0, y: 50 }]] },
+      { text: 'there', contours: [[{ x: 100, y: 50 }, { x: 200, y: 50 }, { x: 200, y: 100 }, { x: 100, y: 100 }]] },
+    ],
+  };
+
+  it('keeps text as an image when it has no outline', () => {
+    const out = exportBoxSvg(model, [text('engrave')]);
     expect(out).toContain('<image id="art-words"');
+  });
+
+  it('writes text as its letters\' outlines on the Engrave layer, a filled path per line', () => {
+    const out = exportBoxSvg(model, [text('engrave')], 'all', new Map([['words', outline]]));
+    const engrave = out.slice(out.indexOf('id="Engrave_Artwork"'));
+    expect(out).not.toContain('<image id="art-words"');
+    expect(engrave).toContain('id="art1-text" data-name="words"');
+    expect(engrave).toContain('data-text="Hi"');
+    expect(engrave).toContain('data-text="there"');
+    expect(engrave.match(/<path id="art1-text-\d" [^>]*fill="#000000" fill-rule="nonzero"/g)).toHaveLength(2);
+  });
+
+  it('prints text outlines in the text\'s own colour', () => {
+    const out = exportBoxSvg(model, [text('print')], 'all', new Map([['words', outline]]));
+    const print = out.slice(out.indexOf('id="Print_Artwork"'));
+    expect(print).toContain('fill="#b45309"');
+  });
+
+  it('places text outlines in the artwork\'s box at the render\'s shape', () => {
+    const out = exportBoxSvg(model, [text('engrave')], 'all', new Map([['words', outline]]));
+    const d = out.match(/data-text="Hi" d="([^"]+)"/)![1];
+    const pts = [...d.matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/g)].map((m) => ({ x: +m[1], y: +m[2] }));
+    // 200 × 100 px into the 40 × 10 mm box: 20 × 10 mm, the first line the top-left quarter of it.
+    const w = Math.max(...pts.map((p) => p.x)) - Math.min(...pts.map((p) => p.x));
+    const h = Math.max(...pts.map((p) => p.y)) - Math.min(...pts.map((p) => p.y));
+    expect(w).toBeCloseTo(10, 3);
+    expect(h).toBeCloseTo(5, 3);
   });
 });

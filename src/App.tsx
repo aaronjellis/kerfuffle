@@ -36,6 +36,7 @@ import {
   renderTextArtworkToDataUrl,
   resolvePieceDimensions,
 } from './engine/googleFonts';
+import { availableStyle, fetchFontMeta, snapWeight } from './engine/fontSource';
 import { partForMesh, partsForTemplate, reconcileSelection, type PartId } from './ui/parts';
 import type { SectionHandlers } from './ui/sections';
 import { ANALYTICS_PROJECT } from './ui/analytics';
@@ -355,10 +356,18 @@ export const App: React.FC = () => {
   ) => {
     const baseCfg = art.textConfig || DEFAULT_TEXT_ARTWORK_CONFIG;
     const mergedCfg: TextArtworkConfig = { ...baseCfg, ...patch };
+    // A new font keeps the weight and slant only where it really has them.
+    if (patch.fontFamily && patch.fontFamily !== baseCfg.fontFamily) {
+      const meta = await fetchFontMeta(patch.fontFamily);
+      if (meta) {
+        mergedCfg.fontWeight = snapWeight(meta.weights, mergedCfg.fontWeight);
+        mergedCfg.fontStyle = availableStyle(meta.styles, mergedCfg.fontStyle);
+      }
+    }
     const modeToUse = nextMode || art.mode;
 
-    if (patch.fontFamily && patch.fontFamily !== baseCfg.fontFamily) {
-      await loadGoogleFont(patch.fontFamily);
+    if (patch.fontFamily || patch.fontWeight || patch.fontStyle) {
+      await loadGoogleFont(mergedCfg.fontFamily, Number(mergedCfg.fontWeight) || 400, mergedCfg.fontStyle);
     }
 
     const { dataUrl, aspectRatio } = renderTextArtworkToDataUrl(mergedCfg, modeToUse);
@@ -582,8 +591,22 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const handleDownloadSvg = (layerFilter: 'all' | 'score-only' | 'cut-only' = 'all') => {
-    const svg = exportBoxSvg(activeModel, activeArtworks, layerFilter);
+  /** Text artwork's vector outlines, loading the font tools only when the export has text. */
+  const textOutlinesForExport = async () => {
+    if (!activeArtworks.some((a) => a.textConfig)) return undefined;
+    try {
+      const { buildTextOutlines } = await import('./engine/textOutlineExport');
+      return await buildTextOutlines(activeArtworks);
+    } catch {
+      // Offline or blocked: text keeps its picture export.
+      return undefined;
+    }
+  };
+
+  const handleDownloadSvg = async (layerFilter: 'all' | 'score-only' | 'cut-only' = 'all') => {
+    // The score-only file carries no artwork.
+    const outlines = layerFilter === 'score-only' ? undefined : await textOutlinesForExport();
+    const svg = exportBoxSvg(activeModel, activeArtworks, layerFilter, outlines);
     const suffix = layerFilter === 'score-only' ? '-score' : layerFilter === 'cut-only' ? '-cut' : '';
     triggerDownload(
       new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }),
@@ -604,8 +627,8 @@ export const App: React.FC = () => {
     );
   };
 
-  const handleDownloadSplitSvg = () => {
-    handleDownloadSvg('score-only');
+  const handleDownloadSplitSvg = async () => {
+    await handleDownloadSvg('score-only');
     setTimeout(() => {
       handleDownloadSvg('cut-only');
     }, 250);
@@ -614,7 +637,7 @@ export const App: React.FC = () => {
   const handleDownloadPdf = async () => {
     setIsExportingPdf(true);
     try {
-      const pdfBytes = await exportBoxPdf(activeModel, activeArtworks);
+      const pdfBytes = await exportBoxPdf(activeModel, activeArtworks, await textOutlinesForExport());
       triggerDownload(
         new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }),
         `${slugBase}-${params.exportProfile}.pdf`

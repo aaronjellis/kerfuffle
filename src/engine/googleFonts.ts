@@ -51,11 +51,23 @@ export const DEFAULT_TEXT_ARTWORK_CONFIG: TextArtworkConfig = {
 };
 
 const loadedFamilies = new Set<string>();
+/** Each family's stylesheet request, settled once its `@font-face` rules are in the document. */
+const stylesheetLoads = new Map<string, Promise<void>>();
+
+function stylesheetLoaded(link: HTMLLinkElement): Promise<void> {
+  if (link.sheet) return Promise.resolve();
+  return new Promise((resolve) => {
+    link.addEventListener('load', () => resolve(), { once: true });
+    link.addEventListener('error', () => resolve(), { once: true });
+  });
+}
 
 /**
  * Dynamically injects a Google Fonts stylesheet for `fontFamily` and awaits browser font readiness.
+ * The stylesheet has to arrive first: until its `@font-face` rules exist, `document.fonts.load`
+ * finds nothing to load and resolves at once, and a canvas drawn then bakes in the fallback font.
  */
-export async function loadGoogleFont(fontFamily: string): Promise<void> {
+export async function loadGoogleFont(fontFamily: string, weight = 400, style: 'normal' | 'italic' = 'normal'): Promise<void> {
   const clean = fontFamily.trim();
   if (!clean || typeof document === 'undefined') return;
 
@@ -63,21 +75,24 @@ export async function loadGoogleFont(fontFamily: string): Promise<void> {
     loadedFamilies.add(clean);
     const encoded = encodeURIComponent(clean).replace(/%20/g, '+');
     const linkId = `gfont-${encoded.toLowerCase()}`;
-    if (!document.getElementById(linkId)) {
-      const link = document.createElement('link');
+    let link = document.getElementById(linkId) as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement('link');
       link.id = linkId;
       link.rel = 'stylesheet';
       link.href = `https://fonts.googleapis.com/css2?family=${encoded}:ital,wght@0,400;0,600;0,700;0,800;1,400;1,700&display=swap`;
       document.head.appendChild(link);
     }
+    stylesheetLoads.set(clean, stylesheetLoaded(link));
   }
+  await stylesheetLoads.get(clean);
 
-  if (typeof document !== 'undefined' && 'fonts' in document) {
+  if ('fonts' in document) {
+    const italic = style === 'italic' ? 'italic ' : '';
     try {
-      await Promise.all([
-        document.fonts.load(`400 48px "${clean}"`),
-        document.fonts.load(`700 48px "${clean}"`),
-      ]);
+      await Promise.all(
+        [...new Set([400, 700, weight])].map((w) => document.fonts.load(`${italic}${w} 48px "${clean}"`))
+      );
     } catch {
       // Ignore network/offline errors; fallback system font still renders cleanly
     }
@@ -102,9 +117,8 @@ export function preloadCuratedGoogleFonts(): void {
   link.rel = 'stylesheet';
   link.href = `https://fonts.googleapis.com/css2?${familiesParam}&display=swap`;
   document.head.appendChild(link);
-  for (const f of GOOGLE_FONT_CATALOG) {
-    loadedFamilies.add(f.family);
-  }
+  // This batch only has each family's 400 and 700 uprights, for the picker's previews; picking a
+  // family still loads its full stylesheet, with italics and the other weights.
 }
 
 function buildFallbackSvgDataUrl(
@@ -158,21 +172,50 @@ export function renderTextArtworkToDataUrl(
   mode: 'print' | 'engrave'
 ): { dataUrl: string; aspectRatio: number } {
   const fillColor = mode === 'engrave' ? '#111827' : config.color || '#111827';
+  const canvas = drawTextArtworkCanvas(config, fillColor);
+  if (!canvas) {
+    return buildFallbackSvgDataUrl(config, fillColor);
+  }
+  return {
+    dataUrl: canvas.toDataURL('image/png'),
+    aspectRatio: Math.max(0.15, Math.min(12, canvas.width / canvas.height)),
+  };
+}
+
+const canvasFontSpec = (config: TextArtworkConfig, sizePx: number) =>
+  `${config.fontStyle === 'italic' ? 'italic ' : ''}${config.fontWeight} ${sizePx}px "${config.fontFamily}", sans-serif`;
+
+/**
+ * How far below the top the canvas render puts the baseline, measured by the browser itself (it
+ * rounds the font's metrics its own way); null without a canvas.
+ */
+export function measureCanvasBaseline(config: TextArtworkConfig, sizePx: number): number | null {
+  if (typeof document === 'undefined') return null;
+  const ctx = document.createElement('canvas').getContext('2d');
+  if (!ctx) return null;
+  ctx.font = canvasFontSpec(config, sizePx);
+  ctx.textBaseline = 'top';
+  const m = ctx.measureText('H');
+  return typeof m.alphabeticBaseline === 'number' ? -m.alphabeticBaseline : null;
+}
+
+/** The text drawn on a canvas sized to it, in loaded fonts; null without a canvas (tests). */
+export function drawTextArtworkCanvas(config: TextArtworkConfig, fillColor: string): HTMLCanvasElement | null {
   const lines = (config.text || 'TEXT').split(/\r?\n/).filter((l, idx, arr) => l.length > 0 || arr.length === 1);
   const safeLines = lines.length > 0 ? lines : ['TEXT'];
 
   if (typeof document === 'undefined') {
-    return buildFallbackSvgDataUrl(config, fillColor);
+    return null;
   }
 
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (!ctx) {
-    return buildFallbackSvgDataUrl(config, fillColor);
+    return null;
   }
 
   const fontSizePx = 110;
-  const fontSpec = `${config.fontStyle === 'italic' ? 'italic ' : ''}${config.fontWeight} ${fontSizePx}px "${config.fontFamily}", sans-serif`;
+  const fontSpec = canvasFontSpec(config, fontSizePx);
   ctx.font = fontSpec;
 
   const extraTrackingPx = config.letterSpacingEm * fontSizePx;
@@ -198,7 +241,7 @@ export function renderTextArtworkToDataUrl(
 
   const drawCtx = canvas.getContext('2d');
   if (!drawCtx) {
-    return buildFallbackSvgDataUrl(config, fillColor);
+    return null;
   }
 
   drawCtx.clearRect(0, 0, totalW, totalH);
@@ -228,10 +271,7 @@ export function renderTextArtworkToDataUrl(
     }
   });
 
-  return {
-    dataUrl: canvas.toDataURL('image/png'),
-    aspectRatio: Math.max(0.15, Math.min(12, totalW / totalH)),
-  };
+  return canvas;
 }
 
 /**

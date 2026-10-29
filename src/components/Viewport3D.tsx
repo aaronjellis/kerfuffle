@@ -11,7 +11,7 @@ import { buildPrintPartWorldGeometry } from '../engine/printWorld';
 import type { PrintPartId } from '../engine/printParts';
 import { partForMesh, type PartId } from '../ui/parts';
 import { meshPartIdFor } from '../ui/meshParts';
-import { CubeFace, ViewCube, cubeTransform, faceViewOffset } from './ViewCube';
+import { CubeDir, QuarterTurn, ViewCube, cubeTransform, quarterTurnOffset, viewOffset } from './ViewCube';
 
 interface Viewport3DProps {
   model: GeneratedBoxModel;
@@ -70,7 +70,11 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const panelMeshesRef = useRef<Map<string, PanelEntry>>(new Map());
   const cubeBodyRef = useRef<HTMLDivElement>(null);
   // The view cube's handlers need the camera and controls, which the init effect creates.
-  const cubeActionsRef = useRef<{ orbit: (dx: number, dy: number) => void; pickFace: (face: CubeFace) => void }>();
+  const cubeActionsRef = useRef<{
+    orbit: (dx: number, dy: number) => void;
+    pickView: (dir: CubeDir) => void;
+    quarterTurn: (turn: QuarterTurn) => void;
+  }>();
 
   // 1. Initialize Three.js Scene once
   useEffect(() => {
@@ -182,6 +186,29 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       camera.lookAt(controls.target);
     };
 
+    /** Swings the camera, at its distance, to the offset `goalFor` gives; at once under reduced motion. */
+    const turnTo = (goalFor: (distance: number, offset: THREE.Vector3) => THREE.Vector3) => {
+      // Spend any coasting from the last drag now, so it doesn't pull the camera off the view.
+      controls.enableDamping = false;
+      controls.update();
+      controls.enableDamping = true;
+      const offset = camera.position.clone().sub(controls.target);
+      const distance = offset.length();
+      const goal = goalFor(distance, offset);
+      if (prefersReducedMotion()) {
+        turn = null;
+        placeCamera(goal);
+        return;
+      }
+      const from = offset.normalize();
+      turn = {
+        from,
+        spin: new THREE.Quaternion().setFromUnitVectors(from, goal.clone().normalize()),
+        distance,
+        start: performance.now(),
+      };
+    };
+
     cubeActionsRef.current = {
       // The same turn per pixel as OrbitControls, so the cube drags like the scene.
       orbit: (dx, dy) => {
@@ -195,27 +222,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         spherical.makeSafe();
         placeCamera(new THREE.Vector3().setFromSpherical(spherical));
       },
-      pickFace: (face) => {
-        // Spend any coasting from the last drag now, so it doesn't pull the camera off the view.
-        controls.enableDamping = false;
-        controls.update();
-        controls.enableDamping = true;
-        const offset = camera.position.clone().sub(controls.target);
-        const distance = offset.length();
-        const goal = faceViewOffset(face, distance);
-        if (prefersReducedMotion()) {
-          turn = null;
-          placeCamera(goal);
-          return;
-        }
-        const from = offset.normalize();
-        turn = {
-          from,
-          spin: new THREE.Quaternion().setFromUnitVectors(from, goal.clone().normalize()),
-          distance,
-          start: performance.now(),
-        };
-      },
+      pickView: (dir) => turnTo((distance) => viewOffset(dir, distance)),
+      quarterTurn: (quarter) => turnTo((_, offset) => quarterTurnOffset(offset, quarter)),
     };
 
     const noSpin = new THREE.Quaternion();
@@ -461,7 +469,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       <ViewCube
         bodyRef={cubeBodyRef}
         onOrbit={(dx, dy) => cubeActionsRef.current?.orbit(dx, dy)}
-        onPickFace={(face) => cubeActionsRef.current?.pickFace(face)}
+        onPickView={(dir) => cubeActionsRef.current?.pickView(dir)}
+        onQuarterTurn={(quarter) => cubeActionsRef.current?.quarterTurn(quarter)}
       />
     </>
   );

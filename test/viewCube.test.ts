@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { cubeTransform, faceViewOffset, type CubeFace } from '../src/components/ViewCube';
+import {
+  cellDir,
+  cubeTransform,
+  dirName,
+  faceViewOffset,
+  quarterTurnOffset,
+  viewOffset,
+  type CubeDir,
+  type CubeFace,
+} from '../src/components/ViewCube';
 
 /** Where the camera sees a world direction, in CSS screen space (y down, z toward the viewer). */
 const onScreen = (camera: THREE.Camera, world: THREE.Vector3) => {
@@ -52,5 +61,39 @@ describe('view cube', () => {
 
   it('puts the front at the bottom of the top view', () => {
     expect(onScreen(cameraAt(faceViewOffset('top', 300)), normals.front).y).toBeCloseTo(1, 3);
+  });
+
+  it('views a corner along its diagonal, keeping the distance', () => {
+    const offset = viewOffset([1, 1, 1], 300);
+    expect(offset.length()).toBeCloseTo(300, 6);
+    expect(offset.x).toBeCloseTo(offset.y, 6);
+    expect(offset.y).toBeCloseTo(offset.z, 6);
+    // All three sides show equally.
+    const camera = cameraAt(offset);
+    for (const n of [normals.front, normals.right, normals.top]) {
+      expect(onScreen(camera, n).z).toBeCloseTo(1 / Math.sqrt(3), 3);
+    }
+  });
+
+  it("names each grid cell by the side, edge or corner it sits on", () => {
+    // The front's top-right cell: the front's right is +x and its down is -y.
+    const dir: CubeDir = cellDir([0, 0, 1], [1, 0, 0], [0, -1, 0], 1, -1);
+    expect(dir).toEqual([1, 1, 1]);
+    expect(dirName(dir)).toBe('top front right corner');
+    expect(dirName(cellDir([0, 0, 1], [1, 0, 0], [0, -1, 0], 0, 1))).toBe('bottom front edge');
+    expect(dirName([0, 0, -1])).toBe('back');
+  });
+
+  it('quarter turns bring the next side round to face the viewer', () => {
+    const front = faceViewOffset('front', 300);
+    const toLeft = quarterTurnOffset(front, 'left');
+    expect(toLeft.clone().normalize().dot(normals.left)).toBeCloseTo(1, 6);
+    expect(quarterTurnOffset(front, 'right').clone().normalize().dot(normals.right)).toBeCloseTo(1, 6);
+    const up = quarterTurnOffset(front, 'up');
+    expect(up.clone().normalize().dot(normals.top)).toBeCloseTo(1, 3);
+    expect(up.length()).toBeCloseTo(300, 6);
+    // Another turn up stops at the top rather than flipping over.
+    expect(quarterTurnOffset(up, 'up').clone().normalize().dot(normals.top)).toBeCloseTo(1, 3);
+    expect(quarterTurnOffset(front, 'down').clone().normalize().dot(normals.bottom)).toBeCloseTo(1, 3);
   });
 });

@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import {
   AlignCenter,
   AlignLeft,
@@ -13,12 +13,36 @@ import {
   Type,
 } from 'lucide-react';
 import { NumberField } from '../../components/NumberField';
+import { fetchFontMeta, offeredWeights, type TextWeight } from '../../engine/fontSource';
 import { GOOGLE_FONT_CATALOG, resolvePieceDimensions } from '../../engine/googleFonts';
 import { SAMPLE_ARTWORK_PRESETS } from '../../engine/sampleArtworks';
 import type { FaceArtwork, TextArtworkConfig } from '../../engine/types';
 import { Field, Segmented } from '../Field';
 import { FACE_OPTIONS, unitHelpers } from './shared';
 import type { SectionProps } from './types';
+
+const WEIGHT_LABELS: Record<TextWeight, string> = {
+  '400': 'Regular (400)',
+  '600': 'Semibold (600)',
+  '700': 'Bold (700)',
+  '800': 'Extra bold (800)',
+};
+
+/** The weights and slants a font really has; null until known, or when it can't be looked up. */
+function useFontVariants(family: string | undefined): { weights: number[]; styles: string[] } | null {
+  const [variants, setVariants] = useState<{ family: string; weights: number[]; styles: string[] } | null>(null);
+  useEffect(() => {
+    if (!family) return;
+    let live = true;
+    fetchFontMeta(family).then((meta) => {
+      if (live) setVariants(meta ? { family, weights: meta.weights, styles: meta.styles } : null);
+    });
+    return () => {
+      live = false;
+    };
+  }, [family]);
+  return variants && variants.family === family ? variants : null;
+}
 
 const anchorName = (ax: -1 | 0 | 1, ay: -1 | 0 | 1): string => {
   if (ax === 0 && ay === 0) return 'Snap to the center';
@@ -67,6 +91,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
     artworks.find((a) => a.id === selectedArtworkId) ||
     artworks.find((a) => a.faceId === selectedFaceId) ||
     null;
+  const fontVariants = useFontVariants(selectedArtwork?.textConfig?.fontFamily);
 
   return (
     <>
@@ -321,16 +346,20 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
                         })
                       }
                     >
-                      <option value="400">Regular (400)</option>
-                      <option value="600">Semibold (600)</option>
-                      <option value="700">Bold (700)</option>
-                      <option value="800">Extra bold (800)</option>
+                      {(fontVariants ? offeredWeights(fontVariants.weights) : (Object.keys(WEIGHT_LABELS) as TextWeight[])).map(
+                        (w) => (
+                          <option key={w} value={w}>
+                            {WEIGHT_LABELS[w]}
+                          </option>
+                        )
+                      )}
                     </select>
                     <button
                       type="button"
                       className="icon-btn"
                       aria-pressed={selectedArtwork.textConfig.fontStyle === 'italic'}
                       aria-label="Italic"
+                      disabled={Boolean(fontVariants && !fontVariants.styles.includes('italic'))}
                       onClick={() =>
                         updateTextConfig(selectedArtwork, {
                           fontStyle:
@@ -339,7 +368,11 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
                               : 'italic',
                         })
                       }
-                      title="Italic"
+                      title={
+                        fontVariants && !fontVariants.styles.includes('italic')
+                          ? `${selectedArtwork.textConfig.fontFamily} has no italic`
+                          : 'Italic'
+                      }
                     >
                       <Italic size={18} strokeWidth={1.75} aria-hidden="true" />
                     </button>

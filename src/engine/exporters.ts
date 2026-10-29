@@ -1,4 +1,5 @@
 import { PDFDocument, rgb } from 'pdf-lib';
+import { placeTextOutline, type TextOutline } from './textPlacement';
 import {
   BoxParameters,
   BoxPanel2D,
@@ -82,10 +83,29 @@ const escapeAttr = (s: string) =>
  * All panel positions are baked directly into <path d="..."> coordinates (zero transform="translate" matrices)
  * so xTool Studio, LightBurn, and Illustrator preserve 100.00% true physical scale on import.
  */
+/**
+ * A text artwork's outlines as a group of filled paths, one per line (or per lines whose letters
+ * touch), each named by its text so it's easy to find in laser software.
+ */
+function textOutlineGroup(
+  outline: TextOutline,
+  artwork: FaceArtwork,
+  idPrefix: string,
+  box: { x: number; y: number; w: number; h: number }
+): string {
+  const fill = artwork.mode === 'engrave' ? '#000000' : artwork.textConfig?.color || '#111827';
+  const paths = outline.groups.map(
+    (g, k) =>
+      `<path id="${idPrefix}text-${k + 1}" data-text="${escapeAttr(g.text)}" d="${placeTextOutline(outline, box, artwork.rotationDeg, g)}" fill="${fill}" fill-rule="nonzero" />`
+  );
+  return `<g id="${idPrefix}text" data-name="${escapeAttr(artwork.name)}">${paths.join('')}</g>`;
+}
+
 export function exportBoxSvg(
   model: GeneratedBoxModel,
   artworks: FaceArtwork[],
-  layerFilter: 'all' | 'score-only' | 'cut-only' = 'all'
+  layerFilter: 'all' | 'score-only' | 'cut-only' = 'all',
+  textOutlines?: Map<string, TextOutline>
 ): string {
   const { params, panels2D, sheetWidthMm, sheetHeightMm } = model;
   const profile = EXPORT_PROFILES[params.exportProfile];
@@ -151,8 +171,8 @@ export function exportBoxSvg(
   }
 
   // Artwork set to Engrave goes on its own layer; the rest prints. An uploaded SVG comes in as its
-  // own vector shapes, so laser software can line- or fill-engrave it; a photo, or text in a web
-  // font the laser software won't have, stays an embedded image.
+  // own vector shapes, and text as its letters' merged outlines (from `textOutlines`), so laser
+  // software can line- or fill-engrave them; a photo, or text without an outline, stays an image.
   const artworkNodes: string[] = [];
   const engraveNodes: string[] = [];
   resolvedArts.forEach((item, i) => {
@@ -168,7 +188,12 @@ export function exportBoxSvg(
         ? ` transform="rotate(${fmt(artwork.rotationDeg)} ${fmt(cx)} ${fmt(cy)})"`
         : '';
     const svg = artwork.textConfig ? null : svgTextFromDataUrl(artwork.dataUrl);
-    const vector = svg ? inlineSvgArtwork(svg, `art${i + 1}-`, { x, y, w, h }, artwork.rotationDeg) : null;
+    const outline = artwork.textConfig ? textOutlines?.get(artwork.id) : undefined;
+    const vector = outline
+      ? textOutlineGroup(outline, artwork, `art${i + 1}-`, { x, y, w, h })
+      : svg
+      ? inlineSvgArtwork(svg, `art${i + 1}-`, { x, y, w, h }, artwork.rotationDeg)
+      : null;
     const node =
       vector ??
       `<image id="art-${artwork.id}" href="${artwork.dataUrl}" x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" preserveAspectRatio="xMidYMid meet"${transform} />`;
@@ -278,7 +303,8 @@ export function exportBoxSvg(
  */
 export async function exportBoxPdf(
   model: GeneratedBoxModel,
-  artworks: FaceArtwork[]
+  artworks: FaceArtwork[],
+  textOutlines?: Map<string, TextOutline>
 ): Promise<Uint8Array> {
   const { params, panels2D, sheetWidthMm, sheetHeightMm } = model;
   const profile = EXPORT_PROFILES[params.exportProfile];
@@ -331,6 +357,27 @@ export async function exportBoxPdf(
   // 2. Render & Embed Face Artworks (supports both PNG/JPG and rasterized high-DPI SVG for PDF compatibility)
   const resolvedArts = resolveSheetArtworks(panels2D, artworks);
   for (const item of resolvedArts) {
+    const outline = item.artwork.textConfig ? textOutlines?.get(item.artwork.id) : undefined;
+    if (outline) {
+      // Text as its letters' outlines, in points measured down from the page's top.
+      const box = {
+        x: (item.sheetCenterX - item.artwork.widthMm / 2) * MM_TO_PT,
+        y: (item.sheetCenterY - item.artwork.heightMm / 2) * MM_TO_PT,
+        w: item.artwork.widthMm * MM_TO_PT,
+        h: item.artwork.heightMm * MM_TO_PT,
+      };
+      const color = hexToPdfRgb(
+        item.artwork.mode === 'engrave' ? '#000000' : item.artwork.textConfig?.color || '#111827'
+      );
+      for (const group of outline.groups) {
+        page.drawSvgPath(placeTextOutline(outline, box, item.artwork.rotationDeg, group), {
+          x: 0,
+          y: pageHeightPt,
+          color,
+        });
+      }
+      continue;
+    }
     try {
       const pngBytes = await dataUrlToPngBytes(
         item.artwork.dataUrl,

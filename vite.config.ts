@@ -7,5 +7,11 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // HarfBuzz (text outlines for export) starts its WebAssembly with a top-level await.
+    target: 'es2022',
+  },
+  // Pre-bundling would move HarfBuzz away from the .wasm file it loads beside itself.
+  optimizeDeps: {
+    exclude: ['harfbuzzjs'],
   },
 });
