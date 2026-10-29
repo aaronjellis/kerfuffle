@@ -4,9 +4,13 @@
  */
 export const ANALYTICS_PROJECT = 'kerfuffle';
 
-/** A file download that succeeded, from the Export menu or a section's STL button. */
+/**
+ * A file download that succeeded, from the Export menu or a section's STL button. The labs
+ * feedback widget hears about it too, so it can suggest a sibling experiment once.
+ */
 export function captureExport(format: string, template: string): void {
   window.posthog?.capture('export_downloaded', { format, template, project: ANALYTICS_PROJECT });
+  window.labsFeedback?.milestone?.('export');
 }
 
 /**
