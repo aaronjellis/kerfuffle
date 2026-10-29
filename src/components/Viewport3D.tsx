@@ -7,6 +7,7 @@ import {
   GeneratedBoxModel,
   Panel3DTransform,
 } from '../engine/types';
+import { livingHingeZoneCuts } from '../engine/fingerJointEngine';
 import { buildPrintPartWorldGeometry } from '../engine/printWorld';
 import type { PrintPartId } from '../engine/printParts';
 import { partForMesh, type PartId } from '../ui/parts';
@@ -416,6 +417,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         }
       }
 
+      if (spec.id === 'living-hinge-lid') mesh.add(buildLivingHingeCutLines(model, spec));
+      if (spec.surfaceLines?.length) mesh.add(buildSurfaceLines(spec));
+
       wrapper.add(mesh);
       boxGroup.add(wrapper);
       panelMeshesRef.current.set(spec.id, { wrapper, meshes: [mesh], spec });
@@ -673,9 +677,9 @@ function createFaceArtworkDecalMesh(
  * Builds the 3D curved living-hinge wrap lid mesh:
  * - Integrated Lower Back Wall (with finger joints) when 'one-piece-back' or 'side-arch-tabs',
  *   or mating Rear Finger-Jointed Skirt when 'finger-joint-back'
- * - Rear 90° curved kerf-lattice hinge zone with alternating uncut wood bridges wrapping over the back shoulder
+ * - Rear 90° bend wrapping over the back shoulder, its kerf cuts drawn by `buildLivingHingeCutLines`
  * - Flat top deck at Y = +innerH/2 + T/2 (with optional side-arch retainer slots)
- * - Front 90° curved kerf-lattice hinge zone with alternating uncut wood bridges wrapping over the front shoulder
+ * - Front 90° bend wrapping over the front shoulder
  * - Front overhang lip + catch tongue overlapping the top of the lower front wall
  */
 function buildLivingHingeLidGeometry(
@@ -699,8 +703,6 @@ function buildLivingHingeLidGeometry(
   const topFlatD = Math.max(10, innerD - 2 * bendRadius);
   const frontLipH = Math.min(14, straightH * 0.38);
   const seamY = -innerH / 2 + straightH;
-  const pitch = Math.max(1.8, params.livingHingePitchMm);
-
   const parts: THREE.BufferGeometry[] = [];
 
   // 1. Flat Top Deck (spans X in [-wFull/2 .. +wFull/2], Z in [-topFlatD/2 .. +topFlatD/2], Y in [innerH/2 .. innerH/2 + T])
@@ -738,59 +740,23 @@ function buildLivingHingeLidGeometry(
     parts.push(topDeck);
   }
 
-  // 2. Helper to build a 90° Curved Living-Hinge Zone with kerf-separated ribs AND alternating uncut wood bridges
-  //    plus end-collars so the curve is 100% physically connected from end to end!
-  const arcLength = (Math.PI * bendRadius) / 2;
-  const numRibs = Math.max(8, Math.min(28, Math.round(arcLength / pitch)));
-  const rMid = bendRadius + T / 2;
-  const dTheta = Math.PI / 2 / numRibs;
-  const stepArcLen = rMid * dTheta;
-  const ribArcLen = Math.max(0.8, stepArcLen * 0.72);
-  const bridgeArcLen = stepArcLen * 1.12;
-  const bridgeW = 4.5;
-
+  // 2. Each 90° bend: a smooth quarter-round of the sheet, inner radius bendRadius. The cuts are
+  //    drawn on it as lines by `buildLivingHingeCutLines`.
   const addCurvedHingeZone = (isFront: boolean) => {
     const zCenter = isFront ? innerD / 2 - bendRadius : -innerD / 2 + bendRadius;
-    const yCenter = seamY;
     const zSign = isFront ? 1 : -1;
-
-    // End-collars at phi = 0 (meeting Top Deck) and phi = PI/2 (meeting Back Wall or Front Lip)
-    const topCollar = new THREE.BoxGeometry(wFull, T, stepArcLen * 0.65);
-    topCollar.translate(0, innerH / 2 + T / 2, zCenter);
-    parts.push(topCollar);
-
-    const botCollar = new THREE.BoxGeometry(wFull, stepArcLen * 0.65, T);
-    botCollar.translate(0, seamY, zCenter + zSign * rMid);
-    parts.push(botCollar);
-
-    for (let i = 0; i < numRibs; i++) {
-      // Angle phi measured from the top vertical (+Y) down toward +Z (front) or -Z (back)
-      const phi = (i + 0.5) * dTheta;
-      const ribY = yCenter + Math.cos(phi) * rMid;
-      const ribZ = zCenter + zSign * Math.sin(phi) * rMid;
-
-      const ribGeom = new THREE.BoxGeometry(wFull, T, ribArcLen);
-      ribGeom.rotateX(zSign * phi);
-      ribGeom.translate(0, ribY, ribZ);
-      parts.push(ribGeom);
-
-      // Uncut alternating wood bridges across the kerf slit between rib i and rib i+1
-      const bridgePhi = (i + 1) * dTheta;
-      if (i < numRibs - 1) {
-        const bY = yCenter + Math.cos(bridgePhi) * rMid;
-        const bZ = zCenter + zSign * Math.sin(bridgePhi) * rMid;
-        const bridgeXs =
-          i % 2 === 0
-            ? [-wFull / 2 + bridgeW / 2, 0, wFull / 2 - bridgeW / 2]
-            : [-wFull / 6, wFull / 6];
-        for (const bx of bridgeXs) {
-          const bGeom = new THREE.BoxGeometry(bridgeW, T, bridgeArcLen);
-          bGeom.rotateX(zSign * bridgePhi);
-          bGeom.translate(bx, bY, bZ);
-          parts.push(bGeom);
-        }
-      }
-    }
+    const steps = 32;
+    const ring = (r: number) =>
+      Array.from({ length: steps + 1 }, (_, i) => {
+        const phi = (i / steps) * (Math.PI / 2);
+        // The shape's x is world -z: rotateY(π/2) below turns shape (x, y, depth) into world (depth, y, -x).
+        return new THREE.Vector2(-(zCenter + zSign * Math.sin(phi) * r), seamY + Math.cos(phi) * r);
+      });
+    const shape = new THREE.Shape([...ring(bendRadius + T), ...ring(bendRadius).reverse()]);
+    const bend = new THREE.ExtrudeGeometry(shape, { depth: wFull, bevelEnabled: false });
+    bend.rotateY(Math.PI / 2);
+    bend.translate(-wFull / 2, 0, 0);
+    parts.push(bend);
   };
 
   addCurvedHingeZone(false); // Rear 90° living hinge bend
@@ -827,6 +793,66 @@ function buildLivingHingeLidGeometry(
   }
 
   return mergeBufferGeometries(parts);
+}
+
+/**
+ * The wrap lid's kerf cuts as dark lines on the outside of both bends, laid along the curve as the
+ * flat pattern wraps it: the front bend runs from the lip up to the deck, the rear from the deck down.
+ */
+function buildLivingHingeCutLines(model: GeneratedBoxModel, spec: Panel3DTransform): THREE.LineSegments {
+  const innerD = model.innerDims.depthMm;
+  const innerH = model.innerDims.heightMm;
+  const T = spec.thicknessMm;
+  const wFull = model.innerDims.widthMm + 2 * T;
+  // The same bend as `buildLivingHingeLidGeometry` and the engine's wrap.
+  const bendRadius = Math.max(10, Math.min(innerH * 0.42, innerD * 0.35, innerH - 15));
+  const seamY = innerH / 2 - bendRadius;
+  const arcLength = (Math.PI * bendRadius) / 2;
+  const r = bendRadius + T + 0.08;
+  const cuts = livingHingeZoneCuts(model.params, wFull, arcLength);
+  const verts: number[] = [];
+  for (const isFront of [true, false]) {
+    const zCenter = isFront ? innerD / 2 - bendRadius : -innerD / 2 + bendRadius;
+    const zSign = isFront ? 1 : -1;
+    const at = (x: number, s: number) => {
+      const phi = (isFront ? 1 - s / arcLength : s / arcLength) * (Math.PI / 2);
+      return [x - wFull / 2, seamY + Math.cos(phi) * r, zCenter + zSign * Math.sin(phi) * r];
+    };
+    for (const shape of cuts) {
+      for (const line of shape) {
+        for (let i = 0; i + 1 < line.length; i++) {
+          const a = line[i];
+          const b = line[i + 1];
+          // Long runs across the bend follow the curve in short steps.
+          const n = Math.max(1, Math.ceil(Math.abs(b.y - a.y) / 1.5));
+          for (let k = 0; k < n; k++) {
+            const t0 = k / n;
+            const t1 = (k + 1) / n;
+            verts.push(...at(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0));
+            verts.push(...at(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1));
+          }
+        }
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  return new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: EDGE_COLOR }));
+}
+
+/** A flat panel's open cuts, drawn on both faces just proud of the wood. */
+function buildSurfaceLines(spec: Panel3DTransform): THREE.LineSegments {
+  const verts: number[] = [];
+  for (const z of [spec.thicknessMm / 2 + 0.05, -spec.thicknessMm / 2 - 0.05]) {
+    for (const line of spec.surfaceLines ?? []) {
+      for (let i = 0; i + 1 < line.length; i++) {
+        for (const p of [line[i], line[i + 1]]) verts.push(p.x - spec.widthMm / 2, -(p.y - spec.heightMm / 2), z);
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  return new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: EDGE_COLOR }));
 }
 
 function mergeBufferGeometries(

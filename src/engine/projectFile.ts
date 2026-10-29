@@ -1,4 +1,5 @@
 import type { BoxParameters, DisplayUnit, FaceArtwork, FacePatternSettings, FacePatternStyle } from './types';
+import { isHingePatternId } from './livingHinge';
 import { BOX_TEMPLATES, DEFAULT_BOX_PARAMETERS } from './presets';
 
 /** The project file's extension; the file itself is JSON. */
@@ -70,6 +71,7 @@ export function parseProject(text: string): KerfProject {
   params.facePatterns = Object.fromEntries(
     Object.entries(params.facePatterns).filter(([, p]) => isPattern(p)),
   ) as Record<string, FacePatternSettings>;
+  if (!isHingePatternId(params.livingHingePattern)) params.livingHingePattern = DEFAULT_BOX_PARAMETERS.livingHingePattern;
   const template = BOX_TEMPLATES.find((t) => t.id === params.templateId);
   if (!template) throw new ProjectFileError('This project uses a box template this version doesn’t have.');
   params.category = template.category;

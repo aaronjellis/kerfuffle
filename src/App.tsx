@@ -17,6 +17,8 @@ import {
 import { generateBoxModel } from './engine/boxGenerator';
 import { imageAspect, sizeForAspect } from './engine/artworkImage';
 import { generateKerfTestModel, kerfTestValues } from './engine/kerfTest';
+import { generateHingeCardsModel, hingeCardSettings, type HingeCardSweep } from './engine/hingeCards';
+import { HINGE_PATTERN_IDS, type HingePatternId } from './engine/livingHinge';
 import { parseProject, PROJECT_EXTENSION, ProjectFileError, serializeProject } from './engine/projectFile';
 import { exportPrintedHingeStl } from './engine/printedHinge';
 import {
@@ -44,6 +46,7 @@ import { AppBar } from './ui/AppBar';
 import { Inspector } from './ui/Inspector';
 import { currentBoxType, type BoxType } from './ui/boxTypes';
 import { KerfTestPanel } from './ui/KerfTestPanel';
+import { HingeCardsPanel } from './ui/HingeCardsPanel';
 import { Stage, type ViewMode } from './ui/Stage';
 import { withPrintedPinClamp } from './ui/paramRules';
 
@@ -91,6 +94,13 @@ const saveFit = (fit: StoredFit) => {
 /** The kerf test while it is open: how far the values are shifted, and the side picked as best. */
 interface KerfTestState {
   shift: number;
+  picked: number | null;
+}
+
+/** The hinge test cards while they are open: the patterns on them, what varies, and the card picked. */
+interface HingeCardsState {
+  patterns: HingePatternId[];
+  sweep: HingeCardSweep;
   picked: number | null;
 }
 
@@ -144,10 +154,23 @@ export const App: React.FC = () => {
     const dock = kerfPicked === null ? 2 : kerfValues.indexOf(kerfPicked);
     return generateKerfTestModel(params, kerfValues, dock);
   }, [kerfTest, kerfValues, kerfPicked, params]);
-  /** What the stage shows and the exports cut: the test pieces while the test is open. */
-  const activeModel = kerfTestModel ?? model;
+
+  const [hingeCards, setHingeCards] = useState<HingeCardsState | null>(null);
+  const hingeCardList = useMemo(
+    () => (hingeCards ? hingeCardSettings(hingeCards.patterns, hingeCards.sweep) : []),
+    [hingeCards]
+  );
+  const hingeCardsModel = useMemo(
+    () => (hingeCardList.length > 0 ? generateHingeCardsModel(params, hingeCardList) : null),
+    [hingeCardList, params]
+  );
+  /** A test's own pieces, which carry no artwork, while a test is open. */
+  const testModel = kerfTestModel ?? hingeCardsModel;
+  /** What the stage shows and the exports cut: the test pieces while a test is open. */
+  const activeModel = testModel ?? model;
 
   const openKerfTest = () => {
+    setHingeCards(null);
     setKerfTest({ shift: 0, picked: null });
     window.posthog?.capture('kerf_test_opened', { project: ANALYTICS_PROJECT });
   };
@@ -163,6 +186,26 @@ export const App: React.FC = () => {
     markOnboarded();
     setKerfTest(null);
     window.posthog?.capture('kerf_test_closed', { outcome, project: ANALYTICS_PROJECT });
+  };
+
+  const openHingeCards = () => {
+    setKerfTest(null);
+    setHingeCards({ patterns: [...HINGE_PATTERN_IDS], sweep: 'none', picked: null });
+    window.posthog?.capture('hinge_cards_opened', { project: ANALYTICS_PROJECT });
+  };
+  const closeHingeCards = (outcome: 'used' | 'closed') => {
+    const card = hingeCards?.picked != null ? hingeCardList[hingeCards.picked] : undefined;
+    if (outcome === 'used' && card) {
+      setParams((prev) => ({
+        ...prev,
+        livingHingePattern: card.pattern,
+        livingHingePitchMm: card.pitchMm,
+        livingHingeCutMm: card.cutMm,
+        livingHingeBridgeMm: card.bridgeMm,
+      }));
+    }
+    setHingeCards(null);
+    window.posthog?.capture('hinge_cards_closed', { outcome, pattern: card?.pattern, project: ANALYTICS_PROJECT });
   };
 
   const updateParam = <K extends keyof BoxParameters>(
@@ -231,7 +274,7 @@ export const App: React.FC = () => {
 
   /** A click on a 3D mesh opens the part it belongs to; a face also becomes the artwork target. */
   const handleSelectMeshPart = (meshPartId: string) => {
-    if (kerfTest) return;
+    if (testModel) return;
     // With Pattern open, a click on a side that can take a pattern picks it for editing there.
     if (selectedPart === 'pattern' && model.patternFaceIds.includes(meshPartId)) {
       setSelectedFaceId(meshPartId);
@@ -246,7 +289,7 @@ export const App: React.FC = () => {
   /** A face or an artwork picked in 2D becomes the artwork target app-wide: Artwork opens and 3D highlights it. */
   const handlePickFace2D = (faceId: string) => {
     // A drag on the artwork already selected is not a new pick: no second part_selected, search clear or scroll.
-    if (kerfTest || (faceId === selectedFaceId && selectedPart === 'artwork')) return;
+    if (testModel || (faceId === selectedFaceId && selectedPart === 'artwork')) return;
     // With Pattern open, a click on a side that can take a pattern picks it for editing there.
     if (selectedPart === 'pattern' && model.patternFaceIds.includes(faceId)) {
       setSelectedFaceId(faceId);
@@ -517,9 +560,11 @@ export const App: React.FC = () => {
 
   const slugBase = kerfTestModel
     ? `kerfuffle-kerf-test-${params.materialThicknessMm.toFixed(2)}mm`
+    : hingeCardsModel
+    ? `kerfuffle-hinge-cards-${params.materialThicknessMm.toFixed(2)}mm`
     : `kerfuffle-${params.templateId}-${Math.round(model.innerDims.widthMm)}x${Math.round(model.innerDims.depthMm)}x${Math.round(model.innerDims.heightMm)}mm`;
   /** The test pieces carry no artwork. */
-  const activeArtworks = kerfTestModel ? [] : artworks;
+  const activeArtworks = testModel ? [] : artworks;
 
   const confirmDiscard = () =>
     !unsaved || window.confirm('Your changes to this box aren’t saved. Continue and lose them?');
@@ -564,6 +609,7 @@ export const App: React.FC = () => {
     try {
       const project = parseProject(await file.text());
       setKerfTest(null);
+      setHingeCards(null);
       setDisplayUnit(project.displayUnit);
       loadProject(project.params, project.artworks);
       window.posthog?.capture('project_opened', { template: project.params.templateId, project: ANALYTICS_PROJECT });
@@ -702,6 +748,7 @@ export const App: React.FC = () => {
     downloadStl: handleDownloadStl,
     downloadStlParts: handleDownloadStlParts,
     openKerfTest,
+    openHingeCards,
   };
   const sectionProps = { params, updateParam, displayUnit, model, handlers: sectionHandlers };
 
@@ -768,6 +815,32 @@ export const App: React.FC = () => {
             onDownloadSvg={() => handleDownloadSvg('all')}
             onUse={() => closeKerfTest('used')}
             onSkip={() => closeKerfTest('skipped')}
+            sectionProps={{ ...sectionProps, handlers: { ...sectionHandlers, openKerfTest: undefined } }}
+          />
+        ) : hingeCards ? (
+          <HingeCardsPanel
+            patterns={hingeCards.patterns}
+            onTogglePattern={(id) =>
+              setHingeCards((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      picked: null,
+                      patterns: prev.patterns.includes(id)
+                        ? prev.patterns.filter((p) => p !== id)
+                        : HINGE_PATTERN_IDS.filter((p) => p === id || prev.patterns.includes(p)),
+                    }
+                  : prev
+              )
+            }
+            sweep={hingeCards.sweep}
+            onSweep={(sweep) => setHingeCards((prev) => (prev ? { ...prev, sweep, picked: null } : prev))}
+            cards={hingeCardList}
+            picked={hingeCards.picked}
+            onPick={(i) => setHingeCards((prev) => (prev ? { ...prev, picked: i } : prev))}
+            onDownloadSvg={() => handleDownloadSvg('all')}
+            onUse={() => closeHingeCards('used')}
+            onClose={() => closeHingeCards('closed')}
             sectionProps={{ ...sectionProps, handlers: { ...sectionHandlers, openKerfTest: undefined } }}
           />
         ) : (

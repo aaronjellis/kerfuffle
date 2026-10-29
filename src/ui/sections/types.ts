@@ -50,6 +50,8 @@ export interface SectionHandlers {
 
   /** Opens the kerf test in place of the inspector; absent inside the test itself. */
   openKerfTest?: () => void;
+  /** Opens the living-hinge test cards in place of the inspector. */
+  openHingeCards?: () => void;
 }
 
 export interface SectionProps {

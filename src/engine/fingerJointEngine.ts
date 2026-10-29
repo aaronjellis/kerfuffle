@@ -1,3 +1,4 @@
+import { hingeCuts, hingePatternInfo, hingeShapePath, type HingePatternSettings, type HingeShape } from './livingHinge';
 import {
   BoxDims,
   BoxPanel2D,
@@ -1718,6 +1719,21 @@ function generateClamshellBox(
   };
 }
 
+/** The hinge settings a box's parameters hold. */
+export const livingHingeSettings = (params: BoxParameters): HingePatternSettings => ({
+  pattern: params.livingHingePattern,
+  pitchMm: params.livingHingePitchMm,
+  cutMm: params.livingHingeCutMm,
+  bridgeMm: params.livingHingeBridgeMm,
+});
+
+/**
+ * One bend zone's cuts on the living-hinge wrap: `width` across, `arcLength` along the bend,
+ * origin at the zone's start. Both zones are the same, and the 3D view draws them from this too.
+ */
+export const livingHingeZoneCuts = (params: BoxParameters, width: number, arcLength: number): HingeShape[] =>
+  hingeCuts(livingHingeSettings(params), { x: 0, y: 0, width, height: arcLength });
+
 /**
  * Generates a Living-Hinge Curved-Shoulder Box:
  * - Left & Right walls have rounded top-back and top-front corners of radius R
@@ -2008,55 +2024,18 @@ function generateLivingHingeBox(
   const zone2Start = zone1End + topFlatD;
   const zone2End = zone2Start + arcLength;
 
-  const pitch = Math.max(1.8, params.livingHingePitchMm);
   const extraWrapPaths: DielinePath[] = [];
   const wFull = innerW + 2 * T;
-  const bridge = 3.5;
 
-  const addLivingHingeZone = (yStart: number, yEnd: number, prefix: string) => {
-    let row = 0;
-    for (let y = yStart; y <= yEnd; y += pitch) {
-      if (row % 2 === 0) {
-        const mid = wFull / 2;
-        extraWrapPaths.push({
-          id: `${prefix}-r${row}-a`,
-          layer: 'cut',
-          d: `M ${fmt(3)} ${fmt(y)} L ${fmt(mid - bridge / 2)} ${fmt(y)}`,
-          closed: false,
-        });
-        extraWrapPaths.push({
-          id: `${prefix}-r${row}-b`,
-          layer: 'cut',
-          d: `M ${fmt(mid + bridge / 2)} ${fmt(y)} L ${fmt(wFull - 3)} ${fmt(y)}`,
-          closed: false,
-        });
-      } else {
-        const third = wFull / 3;
-        extraWrapPaths.push({
-          id: `${prefix}-r${row}-c`,
-          layer: 'cut',
-          d: `M 0 ${fmt(y)} L ${fmt(third - bridge)} ${fmt(y)}`,
-          closed: false,
-        });
-        extraWrapPaths.push({
-          id: `${prefix}-r${row}-d`,
-          layer: 'cut',
-          d: `M ${fmt(third)} ${fmt(y)} L ${fmt(2 * third)} ${fmt(y)}`,
-          closed: false,
-        });
-        extraWrapPaths.push({
-          id: `${prefix}-r${row}-e`,
-          layer: 'cut',
-          d: `M ${fmt(2 * third + bridge)} ${fmt(y)} L ${fmt(wFull)} ${fmt(y)}`,
-          closed: false,
-        });
-      }
-      row++;
-    }
+  const addLivingHingeZone = (yStart: number, prefix: string) => {
+    livingHingeZoneCuts(params, wFull, arcLength).forEach((shape, i) => {
+      const moved = shape.map((line) => line.map((p) => ({ x: p.x, y: p.y + yStart })));
+      extraWrapPaths.push({ id: `${prefix}-${i}`, layer: 'cut', d: hingeShapePath(moved), closed: false });
+    });
   };
 
-  addLivingHingeZone(zone1Start, zone1End, 'lh-z1');
-  addLivingHingeZone(zone2Start, zone2End, 'lh-z2');
+  addLivingHingeZone(zone1Start, 'lh-z1');
+  addLivingHingeZone(zone2Start, 'lh-z2');
 
   // If `hasSideArchTabs`, add the two mating retainer slots in the flat top deck (`zone1End .. zone2Start`)
   // aligned with the Left Wall (x = 0..T) and Right Wall (x = wFull - T .. wFull)
@@ -2200,7 +2179,7 @@ function generateLivingHingeBox(
   return {
     panels2D,
     panels3D,
-    fingerCountSummary: `Living Hinge (${attachLabel}, R=${fmt(bendRadius)}mm curve, ${pitch}mm kerf pitch)`,
+    fingerCountSummary: `Living Hinge (${attachLabel}, R=${fmt(bendRadius)}mm curve, ${hingePatternInfo(params.livingHingePattern).name.toLowerCase()} kerf at ${fmt(params.livingHingePitchMm)}mm)`,
   };
 }
 

@@ -1,3 +1,5 @@
+import type { HingePatternId } from './livingHinge';
+
 export type BoxCategory = 'wood-finger' | 'cardboard-fold' | '3d-print';
 
 export type BoxTemplateId =
@@ -109,7 +111,13 @@ export interface BoxParameters {
   hingeFingerWidthMm: number;
   includeHingeScrewHoles: boolean;
   hingePinDiameterMm: number;
+  livingHingePattern: HingePatternId;
+  /** Row spacing, or a lattice's line spacing or cell size */
   livingHingePitchMm: number;
+  /** Slit length, for slit patterns */
+  livingHingeCutMm: number;
+  /** Uncut wood between slits, or at each lattice junction */
+  livingHingeBridgeMm: number;
   livingHingeAttachMode: LivingHingeAttachMode;
   dividerCols: number;
   dividerRows: number;
@@ -223,6 +231,8 @@ export interface Panel3DTransform {
   outlinePoints?: Point2D[];
   /** Optional interior hole contours (e.g., living hinge slits, thumb holes, knuckle slots) */
   holeContours?: Point2D[][];
+  /** Open cuts drawn as lines on both faces, in the outline's frame: slits too thin to model as holes */
+  surfaceLines?: Point2D[][];
   /** For hinged lids or folding cardboard flaps: hierarchical parent & fold axis */
   foldRig?: {
     parentId?: string;
