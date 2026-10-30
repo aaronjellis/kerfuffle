@@ -51,6 +51,25 @@ export const SheetSection: React.FC<SectionProps> = ({ params, updateParam, disp
         </Field>
       </div>
 
+      {params.category === 'wood-finger' && (
+        <>
+          <Switch
+            label="Cut shared edges once"
+            checked={params.shareCutLines}
+            onChange={(v) => updateParam('shareCutLines', v)}
+          />
+          <p className="helper-note">
+            {params.shareCutLines
+              ? model.stats.sharedCutMm > 0
+                ? `Pieces sit edge to edge and ${(model.stats.sharedCutMm / 1000).toFixed(2)} m of shared edge is cut once, about ${Math.round((100 * model.stats.sharedCutMm) / (model.stats.totalCutLengthMm + model.stats.sharedCutMm))}% less cutting. `
+                : 'Pieces sit edge to edge, but none share a straight edge in this layout. '
+              : 'Packs pieces edge to edge and cuts each shared straight edge once. '}
+            A piece that shares an edge loses it from its own outline: it still cuts out whole, but in your laser
+            software it won't move as one closed shape.
+          </p>
+        </>
+      )}
+
       <Field label="Export profile">
         <select
           value={params.exportProfile}

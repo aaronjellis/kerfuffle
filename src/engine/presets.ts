@@ -404,6 +404,7 @@ export const DEFAULT_BOX_PARAMETERS: BoxParameters = {
   bedPresetId: 'xtool-m2',
   sheetMarginMm: 8,
   partSpacingMm: 5,
+  shareCutLines: false,
   showDimensions: true,
   includeRegistrationMarks: false,
 };

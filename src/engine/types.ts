@@ -172,6 +172,8 @@ export interface BoxParameters {
   bedPresetId: string;
   sheetMarginMm: number;
   partSpacingMm: number;
+  /** Pack wood pieces edge to edge and cut each shared straight edge once */
+  shareCutLines: boolean;
   showDimensions: boolean;
   includeRegistrationMarks: boolean;
 }
@@ -285,6 +287,8 @@ export interface GeneratedBoxModel {
   stats: {
     totalCutLengthMm: number;
     totalScoreLengthMm: number;
+    /** Cut length saved by cutting shared edges once, when that's on */
+    sharedCutMm: number;
     panelCount: number;
     fingerCountSummary?: string;
   };
