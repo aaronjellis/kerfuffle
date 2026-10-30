@@ -150,3 +150,59 @@ describe('pattern faces', () => {
     }
   });
 });
+
+describe('patterns on shaped walls', () => {
+  /** Distance from p to a closed outline's edge, negative outside it (the outline convex). */
+  const insideBy = (outline: Point2D[], p: Point2D) => {
+    let area = 0;
+    outline.forEach((a, i) => {
+      const b = outline[(i + 1) % outline.length];
+      area += a.x * b.y - b.x * a.y;
+    });
+    const sign = Math.sign(area);
+    let min = Infinity;
+    outline.forEach((a, i) => {
+      const b = outline[(i + 1) % outline.length];
+      const side = sign * ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x));
+      const d = segDist(a, b, p);
+      min = Math.min(min, side >= 0 ? d : -d);
+    });
+    return min;
+  };
+
+  it.each([false, true])('fills a living-hinge side wall’s arch, padded from its edge (guides %s)', (guides) => {
+    const pad = 6;
+    const params: BoxParameters = {
+      ...DEFAULT_BOX_PARAMETERS,
+      templateId: 'finger-living-hinge',
+      livingHingeTopGuides: guides,
+      facePatterns: { left: { style: 'diamond', cellMm: 10, barMm: 2, paddingMm: pad } },
+    };
+    const m = generateBoxModel(params);
+    const left = m.panels2D.find((p) => p.id === 'left')!;
+    const outline = left.patternOutline!;
+    const holes = left.paths.filter((p) => p.id.includes('-pattern-left-'));
+    expect(holes.length).toBeGreaterThan(10);
+    const pts = holes.flatMap((h) =>
+      [...h.d.matchAll(/[ML]\s*(-?[\d.]+)\s+(-?[\d.]+)/g)].map((x) => ({ x: Number(x[1]), y: Number(x[2]) })),
+    );
+    // Every hole stays the padding inside the wall's arched outline...
+    // (Within 0.05 mm: the rounded corners are drawn as short chords.)
+    for (const p of pts) expect(insideBy(outline, p)).toBeGreaterThan(pad - 0.05);
+    // ...and the pattern now reaches up into the arch, above the old rectangle's top.
+    expect(Math.min(...pts.map((p) => p.y))).toBeLessThan(left.safeRect.y - 5);
+    // The 3D wall carries the same holes.
+    const p3 = m.panels3D.find((p) => p.id === 'left')!;
+    expect(p3.holeContours!.length).toBe(holes.length);
+  });
+
+  it('keeps an ordinary wall’s pattern in its padded rectangle', () => {
+    const holes = generatePatternHoles({ style: 'grid', cellMm: 14, barMm: 3, paddingMm: 8 }, 120, 80);
+    for (const h of holes) for (const p of h) {
+      expect(p.x).toBeGreaterThanOrEqual(8 - 1e-9);
+      expect(p.x).toBeLessThanOrEqual(112 + 1e-9);
+      expect(p.y).toBeGreaterThanOrEqual(8 - 1e-9);
+      expect(p.y).toBeLessThanOrEqual(72 + 1e-9);
+    }
+  });
+});

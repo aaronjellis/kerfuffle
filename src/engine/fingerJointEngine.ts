@@ -2076,6 +2076,13 @@ function generateLivingHingeBox(
       widthMm: actualW,
       heightMm: actualH,
       safeRect: { x: T, y: bendRadius, width: innerD, height: straightH },
+      // Patterns may use the whole inside of the wall, arch and all: the rounded top inside the
+      // finger joints, down to the floor's joint line.
+      patternOutline: [
+        ...archPts.filter((p) => p.y >= T - 1e-9),
+        { x: T + innerD, y: T + bendRadius + straightH },
+        { x: T, y: T + bendRadius + straightH },
+      ].map((p) => ({ x: p.x, y: p.y - yMinOffset })),
       sheetX: 0,
       sheetY: 0,
       paths: [

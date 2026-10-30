@@ -210,6 +210,11 @@ export interface BoxPanel2D {
   sheetY: number;
   /** Cut, score, and guide vector paths in panel-local coordinates */
   paths: DielinePath[];
+  /**
+   * The face's usable outline for see-through patterns, in the panel's frame, when it isn't the safe
+   * rectangle: a curved wall's arch. Convex.
+   */
+  patternOutline?: Point2D[];
   /** Optional sub-regions for 1-piece folding cardboard so artwork can be placed on individual faces */
   subFaces?: {
     id: string;

@@ -31,6 +31,86 @@ function polyPerimeter(p: Poly): number {
   return l;
 }
 
+/**
+ * A convex outline inset by `inset` on every side, its corners rounded to `r`: each edge pushed in
+ * by inset + r, then the result grown back by r with an arc at every corner. Empty when nothing's left.
+ */
+function roundedInset(outline: Poly, inset: number, r: number): Poly {
+  const sign = Math.sign(polyArea(outline)) || 1;
+  let shape = convexHull(outline);
+  const d = inset + r;
+  for (let i = 0; i < outline.length && shape.length > 0; i++) {
+    const a = outline[i];
+    const b = outline[(i + 1) % outline.length];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 1e-9) continue;
+    // Inward normal for the outline's winding (y down).
+    const nx = (-sign * (b.y - a.y)) / len;
+    const ny = (sign * (b.x - a.x)) / len;
+    const side = (p: Point2D) => (p.x - a.x) * nx + (p.y - a.y) * ny - d;
+    const input = shape;
+    shape = [];
+    for (let j = 0; j < input.length; j++) {
+      const cur = input[j];
+      const prev = input[(j + input.length - 1) % input.length];
+      const sc = side(cur);
+      const sp = side(prev);
+      if (sc >= 0) {
+        if (sp < 0) shape.push(lerpAt(prev, cur, sp, sc));
+        shape.push(cur);
+      } else if (sp >= 0) {
+        shape.push(lerpAt(prev, cur, sp, sc));
+      }
+    }
+  }
+  shape = convexHull(shape);
+  if (shape.length < 3 || r <= 0) return shape;
+  // Grow back by r: each corner becomes an arc between its two edges' outward normals.
+  const s2 = Math.sign(polyArea(shape)) || 1;
+  const out: Poly = [];
+  for (let i = 0; i < shape.length; i++) {
+    const prev = shape[(i + shape.length - 1) % shape.length];
+    const v = shape[i];
+    const next = shape[(i + 1) % shape.length];
+    const normal = (p: Point2D, q: Point2D) => {
+      const l = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+      return Math.atan2((-s2 * (q.x - p.x)) / l, (s2 * (q.y - p.y)) / l);
+    };
+    const a0 = normal(prev, v);
+    let a1 = normal(v, next);
+    // Turn the short way round the corner.
+    while (a1 - a0 > Math.PI) a1 -= TAU;
+    while (a0 - a1 > Math.PI) a1 += TAU;
+    const steps = Math.max(1, Math.ceil(Math.abs(a1 - a0) / (Math.PI / 16)));
+    for (let k = 0; k <= steps; k++) {
+      const t = a0 + ((a1 - a0) * k) / steps;
+      out.push({ x: v.x + r * Math.cos(t), y: v.y + r * Math.sin(t) });
+    }
+  }
+  return convexHull(out);
+}
+
+/** The convex hull, Andrew's monotone chain, points closer than 0.05 mm merged. */
+function convexHull(points: Poly): Poly {
+  const pts = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (pts.length < 3) return pts;
+  const cross = (o: Point2D, a: Point2D, b: Point2D) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const half = (list: Poly) => {
+    const h: Poly = [];
+    for (const p of list) {
+      while (h.length >= 2 && cross(h[h.length - 2], h[h.length - 1], p) <= 0) h.pop();
+      h.push(p);
+    }
+    h.pop();
+    return h;
+  };
+  const hull = [...half(pts), ...half([...pts].reverse())];
+  return hull.filter((p, i) => {
+    const q = hull[(i + hull.length - 1) % hull.length];
+    return Math.hypot(p.x - q.x, p.y - q.y) > 0.05;
+  });
+}
+
 /** Sutherland–Hodgman: `subject` clipped to the convex `window`. */
 function clipConvex(subject: Poly, window: Poly): Poly {
   const sign = Math.sign(polyArea(window)) || 1;
@@ -274,22 +354,32 @@ function spiralLattice(cx: number, cy: number, reach: number, cell: number, bar:
 
 /**
  * Holes for a `width × height` region (origin top-left, y down), centred on it and clipped to the
- * region inset by `paddingMm` with rounded corners. Slivers thinner than 1 mm are dropped.
+ * region inset by `paddingMm` with rounded corners. With an `outline` (region-local, convex) the
+ * holes follow that shape instead, as on an arched wall. Slivers thinner than 1 mm are dropped.
  */
-export function generatePatternHoles(spec: FacePatternSettings, width: number, height: number): Poly[] {
+export function generatePatternHoles(spec: FacePatternSettings, width: number, height: number, outline?: Point2D[]): Poly[] {
   if (spec.style === 'none') return [];
   const cell = Math.max(4, spec.cellMm);
   const bar = Math.max(0.8, Math.min(spec.barMm, cell * 0.6));
   const pad = Math.max(0, spec.paddingMm);
-  const x0 = pad;
-  const y0 = pad;
-  const x1 = width - pad;
-  const y1 = height - pad;
+  let window: Poly;
+  if (outline) {
+    window = roundedInset(outline, pad, 3);
+    if (window.length < 3) return [];
+  } else {
+    const w = width - 2 * pad;
+    const h = height - 2 * pad;
+    if (w <= 0 || h <= 0) return [];
+    window = roundedWindow(pad, pad, width - pad, height - pad, Math.min(3, w / 2, h / 2));
+  }
+  const x0 = Math.min(...window.map((p) => p.x));
+  const y0 = Math.min(...window.map((p) => p.y));
+  const x1 = Math.max(...window.map((p) => p.x));
+  const y1 = Math.max(...window.map((p) => p.y));
   if (x1 - x0 < cell * 0.75 || y1 - y0 < cell * 0.75) return [];
-  const window = roundedWindow(x0, y0, x1, y1, Math.min(3, (x1 - x0) / 2, (y1 - y0) / 2));
   const cx = width / 2;
   const cy = height / 2;
-  const reach = Math.hypot(x1 - x0, y1 - y0) / 2;
+  const reach = Math.max(...window.map((p) => Math.hypot(p.x - cx, p.y - cy)));
   const out: Poly[] = [];
   for (const raw of rawHoles(spec.style, cx, cy, reach, cell, bar)) {
     // Cheap reject: holes wholly outside the window's box.
@@ -309,6 +399,8 @@ export interface PatternFaceTarget {
   panel2DId: string;
   /** The face's region in the 2D panel's frame. */
   region: { x: number; y: number; width: number; height: number };
+  /** The face's usable outline, region-local, when it isn't the whole region. */
+  outline?: Point2D[];
   panel3DId: string;
   /** Region-local point (origin at the region's top-left) to the 3D panel's outline frame. */
   to3D: (p: Point2D) => Point2D;
@@ -349,7 +441,16 @@ export function resolvePatternFaces(
     let panel2DId: string | undefined;
     let region: PatternFaceTarget['region'] | undefined;
     const direct = panels2D.find((p) => p.id === p3.id);
-    if (direct) {
+    let outline: Point2D[] | undefined;
+    if (direct?.patternOutline) {
+      // A shaped face: the region is the outline's bounding box, the outline relative to it.
+      const o = direct.patternOutline;
+      const ox = Math.min(...o.map((p) => p.x));
+      const oy = Math.min(...o.map((p) => p.y));
+      panel2DId = direct.id;
+      region = { x: ox, y: oy, width: Math.max(...o.map((p) => p.x)) - ox, height: Math.max(...o.map((p) => p.y)) - oy };
+      outline = o.map((p) => ({ x: p.x - ox, y: p.y - oy }));
+    } else if (direct) {
       panel2DId = direct.id;
       region = { ...direct.safeRect };
     } else {
@@ -369,7 +470,7 @@ export function resolvePatternFaces(
       if (!p3.outlinePoints || !direct) continue;
       const minX = Math.min(...p3.outlinePoints.map((p) => p.x));
       const minY = Math.min(...p3.outlinePoints.map((p) => p.y));
-      targets.push({ faceId, panel2DId, region: r, panel3DId: p3.id, to3D: (p) => ({ x: r.x + p.x + minX, y: r.y + p.y + minY }) });
+      targets.push({ faceId, panel2DId, region: r, outline, panel3DId: p3.id, to3D: (p) => ({ x: r.x + p.x + minX, y: r.y + p.y + minY }) });
       continue;
     }
 
@@ -415,7 +516,7 @@ export function applyFacePatterns(
   const out2D = panels2D.map((p) => ({ ...p, paths: [...p.paths] }));
   const out3D = panels3D.map((p) => ({ ...p }));
   for (const t of chosen) {
-    const holes = generatePatternHoles(params.facePatterns[t.faceId], t.region.width, t.region.height);
+    const holes = generatePatternHoles(params.facePatterns[t.faceId], t.region.width, t.region.height, t.outline);
     if (holes.length === 0) continue;
     const p2 = out2D.find((p) => p.id === t.panel2DId)!;
     holes.forEach((h, i) =>
