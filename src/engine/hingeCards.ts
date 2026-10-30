@@ -1,13 +1,18 @@
 /**
- * Living-hinge test cards: one card per pattern, or per step of one setting, each engraved with its
- * settings and drilled at one corner so the set bolts together into a swatch fan.
+ * Living-hinge test cards: one card per pattern, laid out like a laser material-test matrix. Each
+ * card carries three hinge zones that step one setting under, at and over the pattern's default,
+ * each zone headed by an engraved line with its settings and estimated bend, and solid wood between
+ * zones so each one bends on its own. A hole in one corner bolts the set into a swatch fan.
  */
 import type { BoxPanel2D, BoxParameters, DielinePath, GeneratedBoxModel, Panel3DTransform, Point2D } from './types';
 import { assembleModel } from './boxGenerator';
 import { pointsToSvgPath } from './fingerJointEngine';
 import {
+  HINGE_PITCH_RANGE_MM,
+  MIN_HINGE_BRIDGE_MM,
+  MIN_HINGE_CUT_MM,
+  hingeBendRadiusMm,
   hingeCuts,
-  hingeMinWebMm,
   hingePatternInfo,
   hingeShapePath,
   type HingePatternId,
@@ -17,62 +22,81 @@ import { buildRoundedRectPoints } from './roundedRect';
 import { buildSingleStrokeTextPath } from './vectorFont';
 
 export const CARD_WIDTH_MM = 50;
-export const CARD_HEIGHT_MM = 100;
+export const CARD_HEIGHT_MM = 130;
 const CORNER_R = 3;
 /** The bolt hole: an M5 bolt passes with a little play. */
 export const CARD_HOLE_D_MM = 5.4;
 /** The hole's centre, from the card's top-left corner. */
-export const CARD_HOLE_AT: Point2D = { x: 9, y: 9 };
-/** The pattern fills the card's full width from here down, leaving a solid foot. */
-export const CARD_PATTERN_TOP_MM = 25;
-const CARD_FOOT_MM = 6;
+export const CARD_HOLE_AT: Point2D = { x: 8, y: 8 };
+/** The header band with the hole, the pattern's name and the sheet. */
+export const CARD_HEADER_MM = 16;
+/** Each zone's engraved settings line, on solid wood above its cuts. */
+export const ZONE_LABEL_MM = 7;
+/** Each zone's cuts. */
+export const ZONE_HINGE_MM = 29;
+const CARD_FOOT_MM = CARD_HEIGHT_MM - CARD_HEADER_MM - 3 * (ZONE_LABEL_MM + ZONE_HINGE_MM);
 
-/** What the set varies: nothing (one card per pattern), the pitch, or the bridge. */
-export type HingeCardSweep = 'none' | 'pitch' | 'bridge';
-const SWEEP_STEPS = [0.8, 1, 1.25];
+/** The setting a card's three zones step through. */
+export type HingeCardVary = 'pitch' | 'cut' | 'bridge';
+export const ZONE_LETTERS = ['A', 'B', 'C'] as const;
+/** Each zone's share of the default; B is the pattern's default. */
+const ZONE_STEPS: Record<HingeCardVary, [number, number, number]> = {
+  pitch: [0.8, 1, 1.3],
+  cut: [0.75, 1, 1.25],
+  bridge: [0.7, 1, 1.4],
+};
+
+export interface HingeCardSet {
+  pattern: HingePatternId;
+  /** Zones A, B and C, top to bottom. */
+  zones: HingePatternSettings[];
+}
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
-/** Every card's settings, pattern by pattern, each at its defaults or stepped either side of them. */
-export function hingeCardSettings(patterns: HingePatternId[], sweep: HingeCardSweep): HingePatternSettings[] {
-  return patterns.flatMap((id) => {
-    const info = hingePatternInfo(id);
-    const base: HingePatternSettings = { pattern: id, ...info.defaults };
-    if (sweep === 'none') return [base];
-    const [lo, hi] = info.pitchRangeMm;
-    const steps = SWEEP_STEPS.map((k) =>
-      sweep === 'pitch'
+/** One card per pattern, its zones stepping `vary` under, at and over the pattern's default. */
+export function hingeCardSets(patterns: HingePatternId[], vary: HingeCardVary): HingeCardSet[] {
+  const [lo, hi] = HINGE_PITCH_RANGE_MM;
+  return patterns.map((pattern) => {
+    const info = hingePatternInfo(pattern);
+    const base: HingePatternSettings = { pattern, ...info.defaults };
+    // A pattern without a slit length steps its row spacing instead.
+    const by = vary === 'cut' && !info.usesCut ? 'pitch' : vary;
+    const zones = ZONE_STEPS[by].map((k) =>
+      by === 'pitch'
         ? { ...base, pitchMm: Math.min(hi, Math.max(lo, round1(base.pitchMm * k))) }
-        : { ...base, bridgeMm: Math.max(0.6, round1(base.bridgeMm * k)) },
+        : by === 'cut'
+          ? { ...base, cutMm: Math.max(MIN_HINGE_CUT_MM, Math.round(base.cutMm * k)) }
+          : { ...base, bridgeMm: Math.max(MIN_HINGE_BRIDGE_MM, round1(base.bridgeMm * k)) },
     );
-    // A step clamped onto its neighbour would make a duplicate card.
-    return steps.filter((s, i) => i === 0 || s.pitchMm !== steps[i - 1].pitchMm || s.bridgeMm !== steps[i - 1].bridgeMm);
+    return { pattern, zones };
   });
 }
 
 const num = (v: number) => Number(v.toFixed(2)).toString();
 
-/** The lines engraved on a card: its pattern, then its sizes. */
-export function hingeCardLabel(s: HingePatternSettings): string[] {
-  const info = hingePatternInfo(s.pattern);
-  return [
-    info.name,
-    `${info.usesCut ? 'SPACING' : 'CELL'} ${num(s.pitchMm)}`,
-    ...(info.usesCut ? [`SLIT ${num(s.cutMm)}`] : []),
-    `BRIDGE ${num(s.bridgeMm)}`,
-  ];
+/**
+ * A zone's engraved line: its letter, spacing, slit and bridge in millimetres, and its estimated
+ * bend radius. "A  SP 1.2  SL 30  BR 3  R11".
+ */
+export function hingeZoneLabel(zone: number, s: HingePatternSettings, thicknessMm: number, kerfMm: number): string {
+  const bend = hingeBendRadiusMm(s, thicknessMm, kerfMm, CARD_WIDTH_MM);
+  const r = Number.isFinite(bend) ? `R${Math.round(bend)}` : 'NO BEND';
+  const slit = hingePatternInfo(s.pattern).usesCut ? `  SL ${num(s.cutMm)}` : '';
+  return `${ZONE_LETTERS[zone]}  SP ${num(s.pitchMm)}${slit}  BR ${num(s.bridgeMm)}  ${r}`;
+}
+
+/** Where zone `i`'s settings line and cuts sit on the card. */
+export function cardZone(i: number) {
+  const top = CARD_HEADER_MM + i * (ZONE_LABEL_MM + ZONE_HINGE_MM);
+  return {
+    labelY: top + ZONE_LABEL_MM / 2,
+    region: { x: 0, y: top + ZONE_LABEL_MM, width: CARD_WIDTH_MM, height: ZONE_HINGE_MM },
+  };
 }
 
 const circle = (c: Point2D, r: number, n = 36): Point2D[] =>
   Array.from({ length: n }, (_, i) => ({ x: c.x + r * Math.cos((i / n) * 2 * Math.PI), y: c.y + r * Math.sin((i / n) * 2 * Math.PI) }));
-
-/** The region of a card the pattern fills. */
-export const cardPatternRegion = () => ({
-  x: 0,
-  y: CARD_PATTERN_TOP_MM,
-  width: CARD_WIDTH_MM,
-  height: CARD_HEIGHT_MM - CARD_PATTERN_TOP_MM - CARD_FOOT_MM,
-});
 
 interface Card {
   panel2D: BoxPanel2D;
@@ -81,68 +105,48 @@ interface Card {
   slits: Point2D[][];
 }
 
-function buildCard(index: number, s: HingePatternSettings, T: number, kerfMm: number): Card {
+const text = (id: string, lines: string[], x: number, y: number, cap: number, maxW: number): DielinePath => ({
+  id,
+  layer: 'score',
+  d: buildSingleStrokeTextPath(lines, { centerX: x, centerY: y, capHeightMm: cap, maxWidthMm: maxW }),
+  closed: false,
+});
+
+function buildCard(index: number, set: HingeCardSet, T: number, kerfMm: number): Card {
   const id = `hinge-card-${index + 1}`;
   const outline = buildRoundedRectPoints(CARD_WIDTH_MM, CARD_HEIGHT_MM, CORNER_R);
   const hole = circle(CARD_HOLE_AT, CARD_HOLE_D_MM / 2);
-  const shapes = hingeCuts(s, cardPatternRegion());
-  const [name, ...sizes] = hingeCardLabel(s);
-  // Text sits right of the hole, centred in what's left of the label band.
-  const textX = (CARD_HOLE_AT.x + CARD_HOLE_D_MM / 2 + CARD_WIDTH_MM - 2) / 2;
-  const textW = CARD_WIDTH_MM - 2 - (CARD_HOLE_AT.x + CARD_HOLE_D_MM / 2) - 2;
-  const nameCap = 3.6;
-  const sizeCap = 2.2;
-  const sizesH = sizes.length * sizeCap + (sizes.length - 1) * sizeCap * 0.45;
-  const top = 3.5;
-  const labels: DielinePath[] = [
-    {
-      id: `${id}-name`,
-      layer: 'score',
-      d: buildSingleStrokeTextPath([name], { centerX: textX, centerY: top + nameCap / 2, capHeightMm: nameCap, maxWidthMm: textW }),
-      closed: false,
-    },
-    {
-      id: `${id}-sizes`,
-      layer: 'score',
-      d: buildSingleStrokeTextPath(sizes, {
-        centerX: textX,
-        centerY: top + nameCap + 2 + sizesH / 2,
-        capHeightMm: sizeCap,
-        maxWidthMm: textW,
-      }),
-      closed: false,
-    },
+  // The header's text sits right of the hole, centred in what's left of the band.
+  const holeRight = CARD_HOLE_AT.x + CARD_HOLE_D_MM / 2;
+  const headX = (holeRight + CARD_WIDTH_MM - 2) / 2;
+  const headW = CARD_WIDTH_MM - 2 - holeRight - 2;
+  const paths: DielinePath[] = [
+    { id: `${id}-outline`, layer: 'cut', d: pointsToSvgPath(outline, true), closed: true },
+    { id: `${id}-hole`, layer: 'cut', d: pointsToSvgPath(hole, true), closed: true },
+    text(`${id}-name`, [hingePatternInfo(set.pattern).name], headX, 6, 3.6, headW),
+    text(`${id}-sheet`, [`${num(T)} MM SHEET  KERF ${num(kerfMm)}`], headX, 12, 1.6, headW),
   ];
-  const web = hingeMinWebMm(s, kerfMm);
+  const slits: Point2D[][] = [];
+  set.zones.forEach((s, z) => {
+    const { labelY, region } = cardZone(z);
+    paths.push(text(`${id}-zone-${ZONE_LETTERS[z]}-label`, [hingeZoneLabel(z, s, T, kerfMm)], CARD_WIDTH_MM / 2, labelY, 2, CARD_WIDTH_MM - 5));
+    hingeCuts(s, region).forEach((shape, k) => {
+      paths.push({ id: `${id}-zone-${ZONE_LETTERS[z]}-slit-${k}`, layer: 'cut', d: hingeShapePath(shape), closed: false });
+      slits.push(...shape);
+    });
+  });
   const panel2D: BoxPanel2D = {
     id,
     name: `Card ${index + 1}`,
-    faceLabel: `${hingePatternInfo(s.pattern).name} card`,
+    faceLabel: `${hingePatternInfo(set.pattern).name} card`,
     widthMm: CARD_WIDTH_MM,
     heightMm: CARD_HEIGHT_MM,
-    safeRect: { x: 0, y: CARD_PATTERN_TOP_MM, width: CARD_WIDTH_MM, height: CARD_HEIGHT_MM - CARD_PATTERN_TOP_MM },
+    safeRect: { x: 0, y: CARD_HEADER_MM, width: CARD_WIDTH_MM, height: CARD_HEIGHT_MM - CARD_HEADER_MM - CARD_FOOT_MM },
     sheetX: 0,
     sheetY: 0,
-    paths: [
-      { id: `${id}-outline`, layer: 'cut', d: pointsToSvgPath(outline, true), closed: true },
-      { id: `${id}-hole`, layer: 'cut', d: pointsToSvgPath(hole, true), closed: true },
-      ...shapes.map((shape, k) => ({ id: `${id}-slit-${k}`, layer: 'cut' as const, d: hingeShapePath(shape), closed: false })),
-      ...labels,
-      // The thickness, small, in the foot: cards from different sheets stay apart in the fan.
-      {
-        id: `${id}-thickness`,
-        layer: 'score',
-        d: buildSingleStrokeTextPath([`${num(T)} MM  WEB ${num(web)}`], {
-          centerX: CARD_WIDTH_MM / 2,
-          centerY: CARD_HEIGHT_MM - CARD_FOOT_MM / 2,
-          capHeightMm: 1.8,
-          maxWidthMm: CARD_WIDTH_MM - 8,
-        }),
-        closed: false,
-      },
-    ],
+    paths,
   };
-  return { panel2D, outline, hole, slits: shapes.flat() };
+  return { panel2D, outline, hole, slits };
 }
 
 /** The fan's total sweep in 3D; each card turns an equal share of it about the bolt. */
@@ -152,7 +156,7 @@ const FAN_DEG = 110;
  * The test cards on the sheet, and in 3D lying fanned about the bolt like a swatch book, card 1 on
  * the bottom. Opening the view lifts them apart.
  */
-export function generateHingeCardsModel(params: BoxParameters, cards: HingePatternSettings[]): GeneratedBoxModel {
+export function generateHingeCardsModel(params: BoxParameters, cards: HingeCardSet[]): GeneratedBoxModel {
   const T = params.materialThicknessMm;
   const built = cards.map((s, i) => buildCard(i, s, T, params.kerfMm));
   const step = cards.length > 1 ? Math.min(18, FAN_DEG / (cards.length - 1)) : 0;
@@ -201,7 +205,7 @@ export function generateHingeCardsModel(params: BoxParameters, cards: HingePatte
     };
   });
   const dims = { widthMm: maxX - minX, depthMm: maxZ - minZ, heightMm: Math.max(T, cards.length * T) };
-  const names = [...new Set(cards.map((c) => hingePatternInfo(c.pattern).name))];
+  const names = cards.map((c) => hingePatternInfo(c.pattern).name);
   return assembleModel(
     params,
     dims,

@@ -7,7 +7,7 @@ import {
   GeneratedBoxModel,
   Panel3DTransform,
 } from '../engine/types';
-import { livingHingeZoneCuts } from '../engine/fingerJointEngine';
+import { livingHingeZoneCuts, wrapBendRadiusMm } from '../engine/fingerJointEngine';
 import { buildPrintPartWorldGeometry } from '../engine/printWorld';
 import type { PrintPartId } from '../engine/printParts';
 import { partForMesh, type PartId } from '../ui/parts';
@@ -34,6 +34,7 @@ interface Viewport3DProps {
 const DEFAULT_BACKGROUND = '#0f141c';
 const EDGE_COLOR = '#452c16';
 const EDGES_NAME = 'panel-edges';
+const LID_CUTS_NAME = 'lid-cuts';
 /** How long a view cube pick takes to swing the camera round. */
 const VIEW_TURN_MS = 450;
 
@@ -425,7 +426,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       panelMeshesRef.current.set(spec.id, { wrapper, meshes: [mesh], spec });
     }
 
-    applyAssemblyTransform(panelMeshesRef.current, assemblyProgress, model.params.templateId);
+    applyAssemblyTransform(panelMeshesRef.current, assemblyProgress, model);
   }, [model, artworks, showWireframe]);
 
   // 2b. Highlight the selected part (or, for Artwork, the selected face) without rebuilding.
@@ -463,8 +464,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
   // 3. Smoothly update panel positions/rotations when assemblyProgress slider moves
   useEffect(() => {
-    applyAssemblyTransform(panelMeshesRef.current, assemblyProgress, model.params.templateId);
-  }, [assemblyProgress, model.params.templateId]);
+    applyAssemblyTransform(panelMeshesRef.current, assemblyProgress, model);
+  }, [assemblyProgress, model]);
 
   // The cube sits beside the canvas, not over it, so its taps never reach the panel picking.
   return (
@@ -498,9 +499,13 @@ function disposeObject(root: THREE.Object3D) {
 function applyAssemblyTransform(
   map: Map<string, PanelEntry>,
   progress: number,
-  templateId?: string
+  model: GeneratedBoxModel
 ) {
+  const templateId = model.params.templateId;
   const t = Math.max(0, Math.min(1, progress));
+  // The living-hinge lid straightens out flat as it lifts away, and curls back over as it closes.
+  const lid = map.get('living-hinge-lid');
+  if (lid?.meshes[0]) bendLivingHingeLid(lid.meshes[0], model, lid.spec, (Math.PI / 2) * t * t * (3 - 2 * t));
   const isClamshell =
     templateId === 'finger-clamshell' ||
     templateId === '3d-snap-box';
@@ -674,6 +679,43 @@ function createFaceArtworkDecalMesh(
 }
 
 /**
+ * The living-hinge wrap's two bends at `bend` radians each (π/2 closed, 0 laid flat), the top deck
+ * held still. Each bend keeps its flat zone's arc length on its inner face, so straightening it
+ * rolls the lip and the back wall out along the curve the way the sheet really unrolls.
+ */
+function wrapBend(model: GeneratedBoxModel, bend: number) {
+  const innerD = model.innerDims.depthMm;
+  const innerH = model.innerDims.heightMm;
+  const closedR = wrapBendRadiusMm(innerD, innerH);
+  const arcLength = (Math.PI * closedR) / 2;
+  const deckY = innerH / 2;
+  const deckEdge = innerD / 2 - closedR;
+  const flat = bend < 1e-4;
+  const r = flat ? Infinity : arcLength / bend;
+  /** [y, z] of the point `s` along the bend's inner face from the deck, `d` out from it. */
+  const at = (isFront: boolean, s: number, d: number): [number, number] => {
+    const zSign = isFront ? 1 : -1;
+    if (flat) return [deckY + d, zSign * (deckEdge + s)];
+    const phi = s / r;
+    return [deckY - r + (r + d) * Math.cos(phi), zSign * (deckEdge + (r + d) * Math.sin(phi))];
+  };
+  /**
+   * Carries a part built on the closed wrap (bend π/2) to where it hangs off the bend's end now:
+   * turned about x by the bend it has lost, its corner on the bend's end moved to match.
+   */
+  const carry = (isFront: boolean) => {
+    const [cy, cz] = at(isFront, arcLength, 0);
+    const closedEnd = new THREE.Vector3(0, deckY - closedR, (isFront ? 1 : -1) * (deckEdge + closedR));
+    const turn = (isFront ? 1 : -1) * (bend - Math.PI / 2);
+    return new THREE.Matrix4()
+      .makeTranslation(0, cy, cz)
+      .multiply(new THREE.Matrix4().makeRotationX(turn))
+      .multiply(new THREE.Matrix4().makeTranslation(-closedEnd.x, -closedEnd.y, -closedEnd.z));
+  };
+  return { arcLength, at, carry };
+}
+
+/**
  * Builds the 3D curved living-hinge wrap lid mesh:
  * - Integrated Lower Back Wall (with finger joints) when 'one-piece-back' or 'side-arch-tabs',
  *   or mating Rear Finger-Jointed Skirt when 'finger-joint-back'
@@ -684,7 +726,8 @@ function createFaceArtworkDecalMesh(
  */
 function buildLivingHingeLidGeometry(
   model: GeneratedBoxModel,
-  spec: Panel3DTransform
+  spec: Panel3DTransform,
+  bend = Math.PI / 2
 ): THREE.BufferGeometry {
   const { params, innerDims } = model;
   const innerW = innerDims.widthMm;
@@ -695,10 +738,7 @@ function buildLivingHingeLidGeometry(
   const attachMode = params.livingHingeAttachMode || 'one-piece-back';
   const hasSideArchTabs = attachMode === 'side-arch-tabs';
 
-  const bendRadius = Math.max(
-    10,
-    Math.min(innerH * 0.42, innerD * 0.35, innerH - 15)
-  );
+  const bendRadius = wrapBendRadiusMm(innerD, innerH);
   const straightH = Math.max(15, innerH - bendRadius);
   const topFlatD = Math.max(10, innerD - 2 * bendRadius);
   const frontLipH = Math.min(14, straightH * 0.38);
@@ -740,40 +780,44 @@ function buildLivingHingeLidGeometry(
     parts.push(topDeck);
   }
 
-  // 2. Each 90° bend: a smooth quarter-round of the sheet, inner radius bendRadius. The cuts are
-  //    drawn on it as lines by `buildLivingHingeCutLines`.
+  const wrap = wrapBend(model, bend);
+
+  // 2. Each bend: the sheet curved through `bend` about a line along x, inner radius chosen so its
+  //    arc length stays the flat zone's. The cuts are drawn on it by `buildLivingHingeCutLines`.
   const addCurvedHingeZone = (isFront: boolean) => {
-    const zCenter = isFront ? innerD / 2 - bendRadius : -innerD / 2 + bendRadius;
-    const zSign = isFront ? 1 : -1;
     const steps = 32;
-    const ring = (r: number) =>
+    const ring = (d: number) =>
       Array.from({ length: steps + 1 }, (_, i) => {
-        const phi = (i / steps) * (Math.PI / 2);
+        const [y, z] = wrap.at(isFront, (i / steps) * wrap.arcLength, d);
         // The shape's x is world -z: rotateY(π/2) below turns shape (x, y, depth) into world (depth, y, -x).
-        return new THREE.Vector2(-(zCenter + zSign * Math.sin(phi) * r), seamY + Math.cos(phi) * r);
+        return new THREE.Vector2(-z, y);
       });
-    const shape = new THREE.Shape([...ring(bendRadius + T), ...ring(bendRadius).reverse()]);
-    const bend = new THREE.ExtrudeGeometry(shape, { depth: wFull, bevelEnabled: false });
-    bend.rotateY(Math.PI / 2);
-    bend.translate(-wFull / 2, 0, 0);
-    parts.push(bend);
+    const shape = new THREE.Shape([...ring(T), ...ring(0).reverse()]);
+    const geom = new THREE.ExtrudeGeometry(shape, { depth: wFull, bevelEnabled: false });
+    geom.rotateY(Math.PI / 2);
+    geom.translate(-wFull / 2, 0, 0);
+    parts.push(geom);
   };
 
-  addCurvedHingeZone(false); // Rear 90° living hinge bend
-  addCurvedHingeZone(true); // Front 90° living hinge bend
+  addCurvedHingeZone(false); // Rear living hinge bend
+  addCurvedHingeZone(true); // Front living hinge bend
 
-  // 3. Front Overhang Lip + Front Catch Tongue (which slots into the Lower Front Wall catch cutout)
+  // 3. Front Overhang Lip + Front Catch Tongue, built closed, then carried to the front bend's end.
   const frontLip = new THREE.BoxGeometry(wFull, frontLipH, T);
   frontLip.translate(0, seamY - frontLipH / 2, innerD / 2 + T / 2);
+  frontLip.applyMatrix4(wrap.carry(true));
   parts.push(frontLip);
 
   const catchW = Math.min(24, Math.max(10, innerW * 0.24));
-  const catchTab = new THREE.BoxGeometry(catchW, T, T * 1.4);
-  catchTab.translate(0, seamY - frontLipH + T * 0.6, innerD / 2);
+  // The catch tongue hangs one thickness below the lip, in its plane, into the front wall's notch.
+  const catchTab = new THREE.BoxGeometry(catchW, T, T);
+  catchTab.translate(0, seamY - frontLipH - T / 2, innerD / 2 + T / 2);
+  catchTab.applyMatrix4(wrap.carry(true));
   parts.push(catchTab);
 
-  // 4. Integrated Lower Back Wall (for 1-piece modes) OR Rear Finger-Jointed Edge (for 2-piece finger-joint-back mode)
-  //    Welded directly to the bottom of the rear 90° living-hinge curve at Y = seamY, Z in [-(innerD/2 + T) .. -innerD/2]!
+  // 4. Integrated Lower Back Wall (for 1-piece modes) OR Rear Finger-Jointed Edge (for 2-piece
+  //    finger-joint-back mode), built closed at Y = seamY, Z in [-(innerD/2 + T) .. -innerD/2], then
+  //    carried to the rear bend's end.
   if (spec.outlinePoints && spec.outlinePoints.length >= 3) {
     const rearShape = new THREE.Shape(
       spec.outlinePoints.map(
@@ -785,10 +829,12 @@ function buildLivingHingeLidGeometry(
       bevelEnabled: false,
     });
     rearWallGeom.translate(0, 0, -(innerD / 2 + T));
+    rearWallGeom.applyMatrix4(wrap.carry(false));
     parts.push(rearWallGeom);
   } else {
     const rearAnchor = new THREE.BoxGeometry(wFull, T * 1.5, T);
     rearAnchor.translate(0, seamY - T * 0.25, -innerD / 2 - T / 2);
+    rearAnchor.applyMatrix4(wrap.carry(false));
     parts.push(rearAnchor);
   }
 
@@ -799,24 +845,22 @@ function buildLivingHingeLidGeometry(
  * The wrap lid's kerf cuts as dark lines on the outside of both bends, laid along the curve as the
  * flat pattern wraps it: the front bend runs from the lip up to the deck, the rear from the deck down.
  */
-function buildLivingHingeCutLines(model: GeneratedBoxModel, spec: Panel3DTransform): THREE.LineSegments {
-  const innerD = model.innerDims.depthMm;
-  const innerH = model.innerDims.heightMm;
+function buildLivingHingeCutLines(
+  model: GeneratedBoxModel,
+  spec: Panel3DTransform,
+  bend = Math.PI / 2
+): THREE.LineSegments {
   const T = spec.thicknessMm;
   const wFull = model.innerDims.widthMm + 2 * T;
-  // The same bend as `buildLivingHingeLidGeometry` and the engine's wrap.
-  const bendRadius = Math.max(10, Math.min(innerH * 0.42, innerD * 0.35, innerH - 15));
-  const seamY = innerH / 2 - bendRadius;
-  const arcLength = (Math.PI * bendRadius) / 2;
-  const r = bendRadius + T + 0.08;
-  const cuts = livingHingeZoneCuts(model.params, wFull, arcLength);
+  const wrap = wrapBend(model, bend);
+  const L = wrap.arcLength;
+  const cuts = livingHingeZoneCuts(model.params, wFull, L);
   const verts: number[] = [];
   for (const isFront of [true, false]) {
-    const zCenter = isFront ? innerD / 2 - bendRadius : -innerD / 2 + bendRadius;
-    const zSign = isFront ? 1 : -1;
-    const at = (x: number, s: number) => {
-      const phi = (isFront ? 1 - s / arcLength : s / arcLength) * (Math.PI / 2);
-      return [x - wFull / 2, seamY + Math.cos(phi) * r, zCenter + zSign * Math.sin(phi) * r];
+    // The front zone's cuts run from the lip (s = 0) up to the deck; the rear's from the deck down.
+    const point = (x: number, s: number) => {
+      const [y, z] = wrap.at(isFront, isFront ? L - s : s, T + 0.08);
+      return [x - wFull / 2, y, z];
     };
     for (const shape of cuts) {
       for (const line of shape) {
@@ -828,8 +872,8 @@ function buildLivingHingeCutLines(model: GeneratedBoxModel, spec: Panel3DTransfo
           for (let k = 0; k < n; k++) {
             const t0 = k / n;
             const t1 = (k + 1) / n;
-            verts.push(...at(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0));
-            verts.push(...at(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1));
+            verts.push(...point(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0));
+            verts.push(...point(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1));
           }
         }
       }
@@ -837,7 +881,33 @@ function buildLivingHingeCutLines(model: GeneratedBoxModel, spec: Panel3DTransfo
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-  return new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: EDGE_COLOR }));
+  const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: EDGE_COLOR }));
+  lines.name = LID_CUTS_NAME;
+  return lines;
+}
+
+/**
+ * Re-bends the wrap lid's mesh, its edges and its cut lines to `bend` radians per bend. Skips work
+ * when the bend has barely moved, so dragging the slider stays smooth.
+ */
+function bendLivingHingeLid(mesh: THREE.Mesh, model: GeneratedBoxModel, spec: Panel3DTransform, bend: number) {
+  const last = mesh.userData.lidBend as number | undefined;
+  if (last !== undefined && Math.abs(last - bend) < 0.004) return;
+  mesh.userData.lidBend = bend;
+  mesh.geometry.dispose();
+  mesh.geometry = buildLivingHingeLidGeometry(model, spec, bend);
+  const edges = mesh.getObjectByName(EDGES_NAME) as THREE.LineSegments | undefined;
+  if (edges) {
+    edges.geometry.dispose();
+    edges.geometry = new THREE.EdgesGeometry(mesh.geometry, 20);
+  }
+  const cuts = mesh.getObjectByName(LID_CUTS_NAME) as THREE.LineSegments | undefined;
+  if (cuts) {
+    const fresh = buildLivingHingeCutLines(model, spec, bend);
+    cuts.geometry.dispose();
+    cuts.geometry = fresh.geometry;
+    (fresh.material as THREE.Material).dispose();
+  }
 }
 
 /** A flat panel's open cuts, drawn on both faces just proud of the wood. */

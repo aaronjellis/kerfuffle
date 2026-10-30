@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
+  CARD_HEADER_MM,
   CARD_HEIGHT_MM,
   CARD_HOLE_AT,
   CARD_HOLE_D_MM,
-  CARD_PATTERN_TOP_MM,
   CARD_WIDTH_MM,
+  cardZone,
   generateHingeCardsModel,
-  hingeCardLabel,
-  hingeCardSettings,
+  hingeCardSets,
+  hingeZoneLabel,
 } from '../src/engine/hingeCards';
-import { HINGE_PATTERNS, HINGE_PATTERN_IDS, hingePatternInfo } from '../src/engine/livingHinge';
+import { HINGE_PATTERNS, HINGE_PATTERN_IDS, HINGE_PITCH_RANGE_MM, hingeBendRadiusMm } from '../src/engine/livingHinge';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { Panel3DTransform, Point2D } from '../src/engine/types';
 
@@ -27,51 +28,54 @@ const toWorld = (p: Panel3DTransform, pt: Point2D) =>
     .applyEuler(new THREE.Euler(...p.rotation))
     .add(new THREE.Vector3(...p.closedPos));
 
-describe('hinge card settings', () => {
-  it('makes one card per pattern at its defaults', () => {
-    const cards = hingeCardSettings(all, 'none');
+describe('hinge card sets', () => {
+  it('makes one card per pattern, its middle zone at the pattern’s defaults', () => {
+    const cards = hingeCardSets(all, 'pitch');
     expect(cards.map((c) => c.pattern)).toEqual(all);
-    cards.forEach((c, i) => expect(c).toEqual({ pattern: all[i], ...HINGE_PATTERNS[i].defaults }));
+    cards.forEach((c, i) => {
+      expect(c.zones).toHaveLength(3);
+      expect(c.zones[1]).toEqual({ pattern: all[i], ...HINGE_PATTERNS[i].defaults });
+    });
   });
 
-  it('steps the pitch under, at and over the default, inside the pattern’s range', () => {
-    const cards = hingeCardSettings(['straight', 'honeycomb'], 'pitch');
-    expect(cards.map((c) => c.pitchMm)).toEqual([2, 2.5, 3.1, 6.4, 8, 10]);
-    for (const c of cards) {
-      const [lo, hi] = hingePatternInfo(c.pattern).pitchRangeMm;
-      expect(c.pitchMm).toBeGreaterThanOrEqual(lo);
-      expect(c.pitchMm).toBeLessThanOrEqual(hi);
+  it('steps the row spacing tight to loose, inside the offered range', () => {
+    const [straight] = hingeCardSets(['straight'], 'pitch');
+    expect(straight.zones.map((z) => z.pitchMm)).toEqual([1.2, 1.5, 2]);
+    for (const z of straight.zones) {
+      expect(z.pitchMm).toBeGreaterThanOrEqual(HINGE_PITCH_RANGE_MM[0]);
+      expect(z.pitchMm).toBeLessThanOrEqual(HINGE_PITCH_RANGE_MM[1]);
     }
   });
 
-  it('steps the bridge and keeps everything else', () => {
-    const cards = hingeCardSettings(['wave'], 'bridge');
-    expect(cards.map((c) => c.bridgeMm)).toEqual([3.2, 4, 5]);
-    expect(new Set(cards.map((c) => c.pitchMm)).size).toBe(1);
+  it('steps the slit or the bridge and keeps everything else', () => {
+    const [cut] = hingeCardSets(['wave'], 'cut');
+    expect(cut.zones.map((z) => z.cutMm)).toEqual([23, 30, 38]);
+    const [bridge] = hingeCardSets(['wave'], 'bridge');
+    expect(bridge.zones.map((z) => z.bridgeMm)).toEqual([2.1, 3, 4.2]);
+    expect(new Set(bridge.zones.map((z) => z.pitchMm)).size).toBe(1);
+  });
+
+  it('runs from the tightest bend to the loosest when the spacing grows', () => {
+    const [c] = hingeCardSets(['straight'], 'pitch');
+    const r = c.zones.map((z) => hingeBendRadiusMm(z, 3, 0.12));
+    expect(r[0]).toBeLessThan(r[1]);
+    expect(r[1]).toBeLessThan(r[2]);
   });
 });
 
-describe('hinge card labels', () => {
-  it('name the pattern and every size it uses', () => {
-    expect(hingeCardLabel({ pattern: 'straight', pitchMm: 2.5, cutMm: 30, bridgeMm: 3.5 })).toEqual([
-      'Straight',
-      'SPACING 2.5',
-      'SLIT 30',
-      'BRIDGE 3.5',
-    ]);
-    expect(hingeCardLabel({ pattern: 'honeycomb', pitchMm: 8, cutMm: 30, bridgeMm: 2 })).toEqual([
-      'Honeycomb',
-      'CELL 8',
-      'BRIDGE 2',
-    ]);
+describe('hinge zone labels', () => {
+  it('give the zone letter, spacing, slit, bridge and estimated bend', () => {
+    const s = { pattern: 'straight' as const, pitchMm: 1.5, cutMm: 30, bridgeMm: 3 };
+    const r = Math.round(hingeBendRadiusMm(s, 3, 0.12));
+    expect(hingeZoneLabel(0, s, 3, 0.12)).toBe(`A  SP 1.5  SL 30  BR 3  R${r}`);
   });
 });
 
 describe('hinge cards model', () => {
-  const cards = hingeCardSettings(all, 'none');
+  const cards = hingeCardSets(all, 'pitch');
   const m = generateHingeCardsModel(params, cards);
 
-  it('lays out a card per setting, each a rounded card with a bolt hole, slits and engraved labels', () => {
+  it('lays out a rounded card per pattern with a bolt hole, a header and three labelled zones', () => {
     expect(m.panels2D.map((p) => p.id)).toEqual(cards.map((_, i) => `hinge-card-${i + 1}`));
     for (const p of m.panels2D) {
       expect(p.widthMm).toBe(CARD_WIDTH_MM);
@@ -79,36 +83,49 @@ describe('hinge cards model', () => {
       const ids = p.paths.map((x) => x.id);
       expect(ids).toContain(`${p.id}-outline`);
       expect(ids).toContain(`${p.id}-hole`);
-      expect(p.paths.filter((x) => x.id.includes('-slit-')).length).toBeGreaterThan(10);
       expect(p.paths.filter((x) => x.layer === 'score').map((x) => x.id)).toEqual([
         `${p.id}-name`,
-        `${p.id}-sizes`,
-        `${p.id}-thickness`,
+        `${p.id}-sheet`,
+        `${p.id}-zone-A-label`,
+        `${p.id}-zone-B-label`,
+        `${p.id}-zone-C-label`,
       ]);
-    }
-  });
-
-  it('keeps the slits inside the card, below the label band', () => {
-    for (const p of m.panels2D) {
-      for (const path of p.paths.filter((x) => x.id.includes('-slit-'))) {
-        for (const pt of points(path.d)) {
-          expect(pt.x).toBeGreaterThanOrEqual(-1e-6);
-          expect(pt.x).toBeLessThanOrEqual(CARD_WIDTH_MM + 1e-6);
-          expect(pt.y).toBeGreaterThanOrEqual(CARD_PATTERN_TOP_MM - 1e-6);
-          expect(pt.y).toBeLessThanOrEqual(CARD_HEIGHT_MM - 5);
-        }
+      for (const z of ['A', 'B', 'C']) {
+        expect(p.paths.filter((x) => x.id.startsWith(`${p.id}-zone-${z}-slit-`)).length).toBeGreaterThan(8);
       }
     }
   });
 
-  it('keeps the labels clear of the bolt hole and the pattern', () => {
+  it('keeps each zone’s slits inside its own band, clear of the labels', () => {
+    for (const p of m.panels2D) {
+      (['A', 'B', 'C'] as const).forEach((z, i) => {
+        const { region } = cardZone(i);
+        for (const path of p.paths.filter((x) => x.id.startsWith(`${p.id}-zone-${z}-slit-`))) {
+          for (const pt of points(path.d)) {
+            expect(pt.x).toBeGreaterThanOrEqual(-1e-6);
+            expect(pt.x).toBeLessThanOrEqual(CARD_WIDTH_MM + 1e-6);
+            expect(pt.y).toBeGreaterThanOrEqual(region.y - 1e-6);
+            expect(pt.y).toBeLessThanOrEqual(region.y + region.height + 1e-6);
+          }
+        }
+      });
+    }
+  });
+
+  it('keeps every label inside the card, on solid wood, clear of the bolt hole', () => {
     const r = CARD_HOLE_D_MM / 2;
     for (const p of m.panels2D) {
-      for (const path of p.paths.filter((x) => x.id.endsWith('-name') || x.id.endsWith('-sizes'))) {
-        for (const pt of points(path.d)) {
+      for (const path of p.paths.filter((x) => x.layer === 'score')) {
+        const pts = points(path.d);
+        expect(pts.length).toBeGreaterThan(0);
+        for (const pt of pts) {
           expect(Math.hypot(pt.x - CARD_HOLE_AT.x, pt.y - CARD_HOLE_AT.y)).toBeGreaterThan(r + 1);
-          expect(pt.y).toBeLessThan(CARD_PATTERN_TOP_MM - 1);
+          expect(pt.x).toBeGreaterThan(1);
           expect(pt.x).toBeLessThan(CARD_WIDTH_MM - 1);
+          // Header text above the first zone; zone labels above their own cuts.
+          const zone = [0, 1, 2].find((i) => path.id.endsWith(`-zone-${'ABC'[i]}-label`));
+          const bottom = zone === undefined ? CARD_HEADER_MM : cardZone(zone).region.y;
+          expect(pt.y).toBeLessThan(bottom);
         }
       }
     }

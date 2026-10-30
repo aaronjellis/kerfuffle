@@ -1,23 +1,37 @@
 /**
  * Living-hinge kerf patterns: the cuts that let a rigid sheet bend. A region is a rectangle, origin
- * top-left, y down; the sheet bends about lines running along x, so the cuts mostly run along x.
+ * top-left, y down; the sheet bends about lines running along x, so the cuts run along x in rows.
  *
- * Every pattern is a set of shapes, each one or more open polylines cut by the laser. Two shapes
- * never touch: the wood between them, the web, holds the hinge together, and its narrowest point
- * decides whether the hinge flexes or snaps (`hingeMinWebMm`).
+ * Every pattern is rows of slits, each row's slits broken by uncut bridges and every other row
+ * moved half a step, so each strip of wood between two rows is held only where the rows' bridges
+ * alternate. Bending twists those strips: the longer and thinner the free stretch of strip between
+ * a bridge above and one below (a link), the further it twists before the wood gives. The rows'
+ * shapes (straight, wavy, zigzag, mirrored) only change how wide the strip is along its length.
+ * `hingeMinWebMm` measures the narrowest wood; `hingeBendRadiusMm` estimates the tightest bend.
  */
 import type { Point2D } from './types';
 
-export const HINGE_PATTERN_IDS = ['straight', 'wave', 'cross', 'diamond', 'triangle', 'honeycomb'] as const;
+export const HINGE_PATTERN_IDS = [
+  'straight',
+  'brick',
+  'split',
+  'serpentine',
+  'wave',
+  'zigzag',
+  'chevron',
+  'diamond',
+  'triangle',
+  'honeycomb',
+] as const;
 export type HingePatternId = (typeof HINGE_PATTERN_IDS)[number];
 
 export interface HingePatternSettings {
   pattern: HingePatternId;
-  /** Row spacing for slit patterns; for lattices, the spacing of parallel cut lines. */
+  /** Spacing of the rows of slits. */
   pitchMm: number;
-  /** Slit length. Lattices take theirs from the pitch and ignore it. */
+  /** Slit length. */
   cutMm: number;
-  /** Uncut wood between slits in a row, or at each lattice junction. */
+  /** Uncut wood between slits in a row. */
   bridgeMm: number;
 }
 
@@ -25,68 +39,89 @@ export interface HingePatternInfo {
   id: HingePatternId;
   name: string;
   description: string;
-  /** Whether the slit length applies. */
+  /** Whether the slit length applies; serpentine rows run the hinge's full width. */
   usesCut: boolean;
-  /** What the pitch means for this pattern. */
-  pitchLabel: string;
-  pitchRangeMm: [number, number];
   defaults: Omit<HingePatternSettings, 'pattern'>;
 }
+
+/** The row spacings the UI offers, in millimetres. */
+export const HINGE_PITCH_RANGE_MM: [number, number] = [1, 6];
 
 export const HINGE_PATTERNS: HingePatternInfo[] = [
   {
     id: 'straight',
     name: 'Straight',
-    description: 'Staggered straight slits. The classic: bends one way, the most of any pattern.',
+    description: 'Staggered straight slits: the most bend for the least cutting.',
     usesCut: true,
-    pitchLabel: 'Row spacing',
-    pitchRangeMm: [1.5, 8],
-    defaults: { pitchMm: 2.5, cutMm: 30, bridgeMm: 3.5 },
+    defaults: { pitchMm: 1.5, cutMm: 30, bridgeMm: 3 },
+  },
+  {
+    id: 'brick',
+    name: 'Brick',
+    description:
+      'Straight slits staggered in thirds, like brickwork. Stiffer than straight at the same sizes, since bridges a third of a step apart make some links short: it needs long slits.',
+    usesCut: true,
+    defaults: { pitchMm: 1.5, cutMm: 44, bridgeMm: 3 },
+  },
+  {
+    id: 'split',
+    name: 'Split bridge',
+    description:
+      'Straight slits with a short cross-cut through every bridge, so each bridge bends as well as the strips twisting. Softer than straight, but weaker; the estimate counts only the strips.',
+    usesCut: true,
+    defaults: { pitchMm: 1.8, cutMm: 36, bridgeMm: 3 },
+  },
+  {
+    id: 'serpentine',
+    name: 'Serpentine',
+    description:
+      'Each row runs in from alternate side edges, so the wood is one long strip zigzagging across. The softest pattern and the weakest; it twists too.',
+    usesCut: false,
+    defaults: { pitchMm: 2, cutMm: 30, bridgeMm: 4 },
   },
   {
     id: 'wave',
     name: 'Wave',
-    description: 'Staggered wavy slits. Bends one way, a little stiffer than straight, and spreads the strain.',
+    description: 'Wavy slits, every row in step. Bends nearly as far as straight, with softer corners.',
     usesCut: true,
-    pitchLabel: 'Row spacing',
-    pitchRangeMm: [1.5, 8],
-    defaults: { pitchMm: 3, cutMm: 30, bridgeMm: 4 },
+    defaults: { pitchMm: 1.6, cutMm: 30, bridgeMm: 3 },
   },
   {
-    id: 'cross',
-    name: 'Cross',
-    description: 'Staggered crosses. Bends one way and twists a little.',
+    id: 'zigzag',
+    name: 'Zigzag',
+    description: 'Zigzag slits, every row in step, so the wood between them runs in chevrons.',
     usesCut: true,
-    pitchLabel: 'Row spacing',
-    pitchRangeMm: [1.5, 8],
-    defaults: { pitchMm: 3, cutMm: 16, bridgeMm: 4 },
+    defaults: { pitchMm: 1.6, cutMm: 30, bridgeMm: 3 },
+  },
+  {
+    id: 'chevron',
+    name: 'Chevron',
+    description: 'Each slit one broad V, the rows nested inside one another like stacked chevrons.',
+    usesCut: true,
+    defaults: { pitchMm: 1.6, cutMm: 30, bridgeMm: 3 },
   },
   {
     id: 'diamond',
     name: 'Diamond',
-    description: 'A lattice of long diamonds. Bends both ways.',
-    usesCut: false,
-    pitchLabel: 'Line spacing',
-    pitchRangeMm: [3, 20],
-    defaults: { pitchMm: 6, cutMm: 30, bridgeMm: 2.8 },
+    description:
+      'Zigzag rows mirrored in pairs, so the wood between them pinches into chains of diamonds. The pinches stiffen it: it needs long slits.',
+    usesCut: true,
+    defaults: { pitchMm: 1.6, cutMm: 36, bridgeMm: 2.5 },
   },
   {
     id: 'triangle',
     name: 'Triangle',
-    description: 'A lattice of triangles. Bends both ways and twists; the stiffest pattern.',
-    usesCut: false,
-    pitchLabel: 'Line spacing',
-    pitchRangeMm: [4, 20],
-    defaults: { pitchMm: 7, cutMm: 30, bridgeMm: 2.8 },
+    description: 'Straight rows and zigzag rows in turn, so the wood between them runs in triangles.',
+    usesCut: true,
+    defaults: { pitchMm: 1.5, cutMm: 36, bridgeMm: 2.5 },
   },
   {
     id: 'honeycomb',
     name: 'Honeycomb',
-    description: 'A lattice of hexagons. Bends both ways and stretches a little.',
-    usesCut: false,
-    pitchLabel: 'Cell size',
-    pitchRangeMm: [4, 24],
-    defaults: { pitchMm: 8, cutMm: 30, bridgeMm: 2 },
+    description:
+      'Stepped rows mirrored in pairs, so the wood between them runs in chains of hexagons. Stiffer than straight: it needs long slits.',
+    usesCut: true,
+    defaults: { pitchMm: 1.6, cutMm: 36, bridgeMm: 2.5 },
   },
 ];
 
@@ -114,149 +149,288 @@ const clampSettings = (s: HingePatternSettings): HingePatternSettings => {
   const info = hingePatternInfo(s.pattern);
   return {
     pattern: info.id,
-    pitchMm: Math.max(1, Number.isFinite(s.pitchMm) ? s.pitchMm : info.defaults.pitchMm),
+    pitchMm: Math.max(0.5, Number.isFinite(s.pitchMm) ? s.pitchMm : info.defaults.pitchMm),
     cutMm: Math.max(MIN_HINGE_CUT_MM, Number.isFinite(s.cutMm) ? s.cutMm : info.defaults.cutMm),
     bridgeMm: Math.max(MIN_HINGE_BRIDGE_MM, Number.isFinite(s.bridgeMm) ? s.bridgeMm : info.defaults.bridgeMm),
   };
 };
 
-/** Wave slits swing this share of the row spacing either side of the row. */
-const WAVE_AMPLITUDE = 0.35;
-/** A wave's length, in row spacings. */
-const WAVE_LENGTH = 4;
-/** A cross's upright reaches this share of the row spacing either side of the row. */
-const CROSS_REACH = 0.6;
-/** Diamond lines lean this far from the bend line, so the diamonds lie long across it. */
-const DIAMOND_ANGLE = Math.PI / 6;
-
-/** How far a pattern's cuts reach either side of their row line. */
-function rowReach(s: HingePatternSettings): number {
-  if (s.pattern === 'wave') return WAVE_AMPLITUDE * s.pitchMm;
-  if (s.pattern === 'cross') return CROSS_REACH * s.pitchMm;
-  return 0;
+/** A row's shape: how far the slit sits off its row line at x, and its slope there. */
+interface Profile {
+  y: (x: number) => number;
+  slope: (x: number) => number;
+  /** Where a polyline must have a corner; empty for smooth or straight rows. */
+  corners: number;
+  /** One repeat along x; 0 for a straight row. */
+  period: number;
 }
 
+const FLAT: Profile = { y: () => 0, slope: () => 0, corners: 0, period: 0 };
+
+/** A shape repeating every `period`, scaled to `amp` either side of the row line. */
+function shaped(kind: 'sine' | 'zigzag' | 'stepped', amp: number, period: number, sign: 1 | -1, phase = 0): Profile {
+  const u = (x: number) => ((((x / period + phase) % 1) + 1) % 1);
+  if (kind === 'sine') {
+    const k = (2 * Math.PI) / period;
+    return { y: (x) => sign * amp * Math.sin(k * x), slope: (x) => sign * amp * k * Math.cos(k * x), corners: 0, period };
+  }
+  if (kind === 'zigzag') {
+    // Up a quarter, down a half, up a quarter: corners every quarter period.
+    const tri = (v: number) => (v < 0.25 ? 4 * v : v < 0.75 ? 2 - 4 * v : 4 * v - 4);
+    const dtri = (v: number) => (v < 0.25 || v >= 0.75 ? 4 : -4);
+    return { y: (x) => sign * amp * tri(u(x)), slope: (x) => (sign * amp * dtri(u(x))) / period, corners: 4, period };
+  }
+  // Stepped: a flat top a third long, a ramp a sixth, a flat bottom a third, a ramp a sixth; half
+  // of a hexagon either side of the row line.
+  const step = (v: number) => (v < 1 / 3 ? 1 : v < 0.5 ? 1 - 12 * (v - 1 / 3) : v < 5 / 6 ? -1 : -1 + 12 * (v - 5 / 6));
+  const dstep = (v: number) => (v < 1 / 3 || (v >= 0.5 && v < 5 / 6) ? 0 : v < 0.5 ? -12 : 12);
+  return { y: (x) => sign * amp * step(u(x)), slope: (x) => (sign * amp * dstep(u(x))) / period, corners: 6, period };
+}
+
+/** Each shaped pattern's height either side of the row line, and repeat, in row spacings. */
+const ROW_SHAPES: Record<'wave' | 'zigzag' | 'diamond' | 'triangle' | 'honeycomb', { amp: number; length: number }> = {
+  wave: { amp: 0.35, length: 4 },
+  zigzag: { amp: 0.35, length: 4 },
+  // Mirrored rows pinch the strip between them; deep pinches stiffen it fast, so these stay shallow.
+  diamond: { amp: 0.14, length: 5 },
+  triangle: { amp: 0.22, length: 4 },
+  honeycomb: { amp: 0.14, length: 6 },
+};
+
 /**
- * Slit patterns: rows `pitch` apart, centred on the region, each row's slits `cut` long with
- * `bridge` between them, every other row moved half a step so its slits cover the last row's bridges.
+ * Row r's shape. Heights scale with the row spacing so the web stays in proportion; each repeat is
+ * stretched to fit a whole number of times into half a slit step, so every bridge lands at the same
+ * point of the shape in every row and the hinge flexes the same along its width.
  */
-function rowShapes(s: HingePatternSettings, hw: number, hh: number): HingeShape[] {
+function rowProfile(s: HingePatternSettings, r: number): Profile {
+  const p = s.pitchMm;
+  // A chevron's V spans one slit and its bridge, its point at the slit's middle, on one grid for
+  // every row: rows staggered half a step still nest, every V parallel to its neighbours.
+  if (s.pattern === 'chevron') return shaped('zigzag', CHEVRON_RISE * p, s.cutMm + s.bridgeMm, 1, 0.25);
+  if (!(s.pattern in ROW_SHAPES)) return FLAT;
+  const pattern = s.pattern as keyof typeof ROW_SHAPES;
+  const odd = ((r % 2) + 2) % 2 === 1;
+  const { amp, length } = ROW_SHAPES[pattern];
+  const half = (s.cutMm + s.bridgeMm) / 2;
+  const period = half / Math.max(1, Math.round(half / (length * p)));
+  switch (pattern) {
+    case 'wave':
+      return shaped('sine', amp * p, period, 1);
+    case 'zigzag':
+      return shaped('zigzag', amp * p, period, 1);
+    case 'diamond':
+      return shaped('zigzag', amp * p, period, odd ? -1 : 1);
+    case 'triangle':
+      return odd ? shaped('zigzag', amp * p, period, 1) : FLAT;
+    case 'honeycomb':
+      return shaped('stepped', amp * p, period, odd ? -1 : 1);
+  }
+}
+
+/** A chevron's rise either side of the row line, in row spacings. */
+const CHEVRON_RISE = 2;
+/** A split bridge's cross-cut reaches this share of the row spacing either side of the row. */
+const SPLIT_REACH = 0.35;
+
+/** Rows before the stagger repeats: brick staggers in thirds, the rest in halves. */
+const rowRepeat = (s: HingePatternSettings) => (s.pattern === 'brick' ? 3 : 2);
+
+/** How far any row's slits reach either side of their row line. */
+const rowReach = (s: HingePatternSettings) =>
+  Math.max(...[0, 1].map((r) => {
+    const f = rowProfile(s, r);
+    return f.period === 0 ? 0 : Math.max(...Array.from({ length: 49 }, (_, k) => Math.abs(f.y((k / 48) * f.period))));
+  }));
+
+/** Row r's stagger along x: half a slit step every other row, or a third in turn for brick. */
+const rowOffset = (s: HingePatternSettings, r: number) => {
+  const n = rowRepeat(s);
+  return ((((r % n) + n) % n) * (s.cutMm + s.bridgeMm)) / n;
+};
+
+/**
+ * Serpentine as straight slits sized to the hinge's width: one bridge per row, at alternate side
+ * edges, so each slit runs from one side edge to a bridge's width short of the other. Returned with
+ * the stagger's start that puts row 0's bridge against the right edge.
+ */
+function serpentineAsStraight(s: HingePatternSettings, widthMm: number): { s: HingePatternSettings; start: number } {
+  const w = Math.max(widthMm, 3 * s.bridgeMm);
+  const step = 2 * (w - s.bridgeMm);
+  return { s: { ...s, pattern: 'straight', cutMm: step - s.bridgeMm }, start: -(w - s.bridgeMm) / 2 };
+}
+
+/** A slit from x0 to x1 along a row's shape, with a point at every corner and fine steps on curves. */
+function slitLine(f: Profile, x0: number, x1: number, y: number): Point2D[] {
+  if (f.period === 0) return [{ x: x0, y }, { x: x1, y }];
+  // Sample on a grid fixed to x = 0, so every row's corners land on the same x and every corner is hit.
+  const step = f.period / (f.corners > 0 ? f.corners * 2 : 32);
+  const xs = [x0];
+  for (let k = Math.floor(x0 / step) + 1; k * step < x1; k++) xs.push(k * step);
+  xs.push(x1);
+  return xs.map((x) => ({ x, y: y + f.y(x) }));
+}
+
+/** Every slit of the pattern, unclipped, centred on the origin and covering at least ±hw × ±hh. */
+function rawShapes(settings: HingePatternSettings, hw: number, hh: number): HingeShape[] {
+  let s = clampSettings(settings);
+  let start = 0;
+  if (s.pattern === 'serpentine') ({ s, start } = serpentineAsStraight(s, 2 * hw));
+  const split = s.pattern === 'split';
   const p = s.pitchMm;
   const step = s.cutMm + s.bridgeMm;
   const reach = rowReach(s);
   const rows = Math.max(1, Math.floor((2 * hh - 2 * reach) / p + 1e-9) + 1);
-  const amp = WAVE_AMPLITUDE * p;
-  const lambda = WAVE_LENGTH * p;
   const out: HingeShape[] = [];
   for (let r = 0; r < rows; r++) {
     const y = -((rows - 1) * p) / 2 + r * p;
-    const off = r % 2 === 1 ? step / 2 : 0;
+    const f = rowProfile(s, r);
+    const off = start + rowOffset(s, r);
     const iMin = Math.floor((-hw - step - off) / step);
     const iMax = Math.ceil((hw + step - off) / step);
     for (let i = iMin; i <= iMax; i++) {
       const cx = off + i * step;
-      const x0 = cx - s.cutMm / 2;
-      const x1 = cx + s.cutMm / 2;
-      if (s.pattern === 'wave') {
-        // One wave for every row, so neighbouring slits run parallel and the web stays even.
-        const n = Math.max(2, Math.ceil(((x1 - x0) / lambda) * 32));
-        const line = Array.from({ length: n + 1 }, (_, k) => {
-          const x = x0 + ((x1 - x0) * k) / n;
-          return { x, y: y + amp * Math.sin((2 * Math.PI * x) / lambda) };
-        });
-        out.push([line]);
-      } else if (s.pattern === 'cross') {
-        out.push([
-          [{ x: x0, y }, { x: x1, y }],
-          [{ x: cx, y: y - reach }, { x: cx, y: y + reach }],
-        ]);
-      } else {
-        out.push([[{ x: x0, y }, { x: x1, y }]]);
+      out.push([slitLine(f, cx - s.cutMm / 2, cx + s.cutMm / 2, y)]);
+      // The cross-cut through the bridge after this slit, square to the row.
+      if (split) {
+        const bx = cx + step / 2;
+        out.push([[{ x: bx, y: y - SPLIT_REACH * p }, { x: bx, y: y + SPLIT_REACH * p }]]);
       }
     }
   }
   return out;
 }
 
-/** Lattice edges as slits, each stopped `bridge / 2` short of both junctions. */
-function edgeSlits(edges: [Point2D, Point2D][], bridge: number): HingeShape[] {
-  const out: HingeShape[] = [];
-  for (const [a, b] of edges) {
-    const len = Math.hypot(b.x - a.x, b.y - a.y);
-    const keep = len - bridge;
-    if (keep < 0.3) continue;
-    const ux = (b.x - a.x) / len;
-    const uy = (b.y - a.y) / len;
-    const h = bridge / 2;
-    out.push([[{ x: a.x + ux * h, y: a.y + uy * h }, { x: b.x - ux * h, y: b.y - uy * h }]]);
+/**
+ * The shear strain wood takes in twisting before it cracks. Wood's own figure varies with species,
+ * plies and moisture; 1% puts Boxes.py's long-standing defaults (3 mm sheet, rows 1.5 mm apart,
+ * 3 mm bridges, 12 mm and longer links) at about a 16 mm bend, which is how they're used. The
+ * hinge test cards are how to check it for a given sheet.
+ */
+export const HINGE_SHEAR_STRAIN = 0.01;
+
+/**
+ * Saint-Venant torsion of a solid rectangle, long side a over short side c (Roark): twist stiffness
+ * K = β a c³ and stress capacity Q = α a c², by aspect ratio.
+ */
+const TORSION_TABLE: [number, number, number][] = [
+  [1, 0.208, 0.141],
+  [1.2, 0.219, 0.166],
+  [1.5, 0.231, 0.196],
+  [2, 0.246, 0.229],
+  [2.5, 0.258, 0.249],
+  [3, 0.267, 0.263],
+  [4, 0.282, 0.281],
+  [5, 0.291, 0.291],
+  [10, 0.312, 0.312],
+];
+
+function torsionSection(width: number, thickness: number): { K: number; Q: number } {
+  const a = Math.max(width, thickness);
+  const c = Math.min(width, thickness);
+  const ratio = a / c;
+  let alpha: number;
+  let beta: number;
+  if (ratio >= 10) {
+    // Thin strips tend to a third, less an end correction.
+    alpha = beta = (1 - 0.63 / ratio) / 3;
+  } else {
+    const i = TORSION_TABLE.findIndex(([r]) => r >= ratio);
+    const [r1, a1, b1] = TORSION_TABLE[Math.max(1, i)];
+    const [r0, a0, b0] = TORSION_TABLE[Math.max(0, i - 1)];
+    const t = r1 === r0 ? 0 : (ratio - r0) / (r1 - r0);
+    alpha = a0 + (a1 - a0) * t;
+    beta = b0 + (b1 - b0) * t;
   }
-  return out;
+  return { K: beta * a * c ** 3, Q: alpha * a * c ** 2 };
 }
 
-/** Lattice patterns' junction-to-junction edges, centred on the origin, covering ±hw × ±hh. */
-function latticeEdges(s: HingePatternSettings, hw: number, hh: number): [Point2D, Point2D][] {
-  const p = s.pitchMm;
-  const edges: [Point2D, Point2D][] = [];
-  if (s.pattern === 'triangle') {
-    // Three families of lines, p apart, through the vertices of equilateral triangles of side a.
-    const a = (2 * p) / Math.sqrt(3);
-    const J = Math.ceil(hh / p) + 1;
-    for (let j = -J; j <= J; j++) {
-      const I = Math.ceil(hw / a) + 2;
-      for (let i = -I; i <= I; i++) {
-        const v = { x: a * (i + j / 2), y: p * j };
-        edges.push([v, { x: v.x + a, y: v.y }]);
-        edges.push([v, { x: v.x + a / 2, y: v.y + p }]);
-        edges.push([v, { x: v.x - a / 2, y: v.y + p }]);
-      }
-    }
-  } else if (s.pattern === 'diamond') {
-    // Two families leaning ±DIAMOND_ANGLE, p apart; they cross every L along each line.
-    const L = p / Math.sin(2 * DIAMOND_ANGLE);
-    const dx = L * Math.cos(DIAMOND_ANGLE);
-    const dy = L * Math.sin(DIAMOND_ANGLE);
-    const N = Math.ceil(hh / dy) + 1;
-    const M = Math.ceil(hw / dx) + 1;
-    for (let n = -N; n <= N; n++) {
-      for (let m = -M; m <= M; m++) {
-        if ((((m + n) % 2) + 2) % 2 !== 0) continue;
-        const v = { x: m * dx, y: n * dy };
-        edges.push([v, { x: v.x + dx, y: v.y + dy }]);
-        edges.push([v, { x: v.x + dx, y: v.y - dy }]);
-      }
-    }
-  } else if (s.pattern === 'honeycomb') {
-    // Hexagons p across their flats, flats along the bend line; every edge once.
-    const side = p / Math.sqrt(3);
-    const seen = new Set<string>();
-    const I = Math.ceil(hw / (1.5 * side)) + 1;
-    const J = Math.ceil(hh / p) + 1;
-    for (let i = -I; i <= I; i++) {
-      for (let j = -J; j <= J; j++) {
-        const c = { x: 1.5 * side * i, y: p * j + (((i % 2) + 2) % 2 === 1 ? p / 2 : 0) };
-        const corners = Array.from({ length: 6 }, (_, k) => ({
-          x: c.x + side * Math.cos((k * Math.PI) / 3),
-          y: c.y + side * Math.sin((k * Math.PI) / 3),
-        }));
-        for (let k = 0; k < 6; k++) {
-          const a = corners[k];
-          const b = corners[(k + 1) % 6];
-          const key = `${Math.round((a.x + b.x) * 500)},${Math.round((a.y + b.y) * 500)}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          edges.push([a, b]);
-        }
-      }
-    }
-  }
-  return edges;
-}
+const bendCache = new Map<string, number>();
 
-/** Every shape of the pattern, unclipped, centred on the origin and covering at least ±hw × ±hh. */
-function rawShapes(settings: HingePatternSettings, hw: number, hh: number): HingeShape[] {
+/** The hinge width a serpentine's estimate assumes when none is given. */
+export const DEFAULT_HINGE_WIDTH_MM = 100;
+
+/**
+ * The tightest radius the hinge bends to before its links crack, in millimetres, by the twisting
+ * links model (DefProc's lattice hinge analysis): bending the sheet about x twists every strip of
+ * wood between two rows by the same angle across its length, each link between alternating bridges
+ * taking a share by its stiffness. A strip may twist until its most strained link reaches
+ * `HINGE_SHEAR_STRAIN`; the strips' twists add up over the rows to the curve. Infinity when the
+ * cuts leave a strip no wood at all.
+ *
+ * It ignores the bridges' own give and the kerf gaps closing, both small next to the links' twist,
+ * so read it as a guide for comparing settings; the test cards say what a given sheet really does.
+ * A split bridge's cross-cuts only add bridge give, so it estimates like straight slits. A
+ * serpentine's links span the hinge, so it needs the hinge's `widthMm`.
+ */
+export function hingeBendRadiusMm(
+  settings: HingePatternSettings,
+  thicknessMm: number,
+  kerfMm: number,
+  widthMm = DEFAULT_HINGE_WIDTH_MM,
+): number {
   const s = clampSettings(settings);
-  if (s.pattern === 'straight' || s.pattern === 'wave' || s.pattern === 'cross') return rowShapes(s, hw, hh);
-  return edgeSlits(latticeEdges(s, hw, hh), s.bridgeMm);
+  // A serpentine's links run the hinge's whole width, so it bends like straight slits that long.
+  if (s.pattern === 'serpentine') return hingeBendRadiusMm(serpentineAsStraight(s, widthMm).s, thicknessMm, kerfMm);
+  const key = `${s.pattern}|${s.pitchMm}|${s.cutMm}|${s.bridgeMm}|${thicknessMm}|${kerfMm}`;
+  const hit = bendCache.get(key);
+  if (hit !== undefined) return hit;
+  const p = s.pitchMm;
+  const step = s.cutMm + s.bridgeMm;
+  const ds = Math.min(0.05, step / 400);
+  // One strip per row of the stagger's repeat makes a full repeat of row shapes and stagger; average
+  // over several slit steps so links whose shape repeat falls differently along x all count.
+  const span = 6 * step;
+  const strips = Array.from({ length: rowRepeat(s) }, (_, r) => {
+    const above = rowProfile(s, r);
+    const below = rowProfile(s, r + 1);
+    const offAbove = rowOffset(s, r);
+    const offBelow = rowOffset(s, r + 1);
+    // Bridges are centred half a step past each slit centre; links run between neighbouring
+    // bridges of the two rows, which alternate along x.
+    const bridges = [
+      ...Array.from({ length: 8 }, (_, i) => ({ x: offAbove + (i + 0.5) * step })),
+      ...Array.from({ length: 8 }, (_, i) => ({ x: offBelow + (i + 0.5) * step })),
+    ]
+      .map((b) => b.x)
+      .sort((a, b) => a - b)
+      .filter((x) => x <= span + step);
+    let stiffness = 0;
+    let capacity = Infinity;
+    for (let i = 0; i + 1 < bridges.length; i++) {
+      const x0 = bridges[i] + s.bridgeMm / 2;
+      const x1 = bridges[i + 1] - s.bridgeMm / 2;
+      if (x1 - x0 < 1e-6) continue;
+      let compliance = 0;
+      let qMin = Infinity;
+      for (let x = x0; x < x1; x += ds) {
+        const xm = Math.min(x + ds / 2, x1);
+        const slope = (above.slope(xm) + below.slope(xm)) / 2;
+        const stretch = Math.sqrt(1 + slope * slope);
+        const width = (p + below.y(xm) - above.y(xm)) / stretch - kerfMm;
+        if (width <= 0) return null;
+        const { K, Q } = torsionSection(width, thicknessMm);
+        compliance += (Math.min(ds, x1 - x) * stretch) / K;
+        qMin = Math.min(qMin, Q);
+      }
+      // Twisted by θ, this link carries torque θG / compliance and strains θ / (compliance · Q):
+      // the strip can twist until its weakest link reaches the limit.
+      stiffness += 1 / compliance;
+      capacity = Math.min(capacity, HINGE_SHEAR_STRAIN * compliance * qMin);
+    }
+    return { stiffness, capacity };
+  });
+  if (strips.some((st) => st === null)) {
+    bendCache.set(key, Infinity);
+    return Infinity;
+  }
+  const solid = strips as { stiffness: number; capacity: number }[];
+  // One bending moment runs through every strip: the strip that reaches its limit first stops the
+  // bend, and each strip twists in proportion to its own flexibility.
+  const moment = Math.min(...solid.map((st) => st.capacity * st.stiffness));
+  const twist = solid.reduce((sum, st) => sum + moment / st.stiffness, 0);
+  const radius = (solid.length * p) / twist;
+  bendCache.set(key, radius);
+  return radius;
 }
 
 type Side = 'x' | 'y' | null;

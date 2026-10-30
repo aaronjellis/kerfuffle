@@ -1,3 +1,4 @@
+import { polygonDifference, polygonUnion, startAtTopRight } from './polygonOps';
 import { hingeCuts, hingePatternInfo, hingeShapePath, type HingePatternSettings, type HingeShape } from './livingHinge';
 import {
   BoxDims,
@@ -1719,6 +1720,13 @@ function generateClamshellBox(
   };
 }
 
+/**
+ * The inner radius of the living-hinge wrap's curved shoulders, clamped so the straight lower wall
+ * stays at least 15 mm and the flat top deck at least 10 mm.
+ */
+export const wrapBendRadiusMm = (innerD: number, innerH: number): number =>
+  Math.max(10, Math.min(innerH * 0.42, innerD * 0.35, innerH - 15));
+
 /** The hinge settings a box's parameters hold. */
 export const livingHingeSettings = (params: BoxParameters): HingePatternSettings => ({
   pattern: params.livingHingePattern,
@@ -1761,11 +1769,7 @@ function generateLivingHingeBox(
     attachMode === 'one-piece-back' || attachMode === 'side-arch-tabs';
   const hasSideArchTabs = attachMode === 'side-arch-tabs';
 
-  // Radius of the curved top shoulders (clamped so straight lower wall is at least 15mm and top flat deck is at least 16mm)
-  const bendRadius = Math.max(
-    10,
-    Math.min(innerH * 0.42, innerD * 0.35, innerH - 15)
-  );
+  const bendRadius = wrapBendRadiusMm(innerD, innerH);
   const straightH = Math.max(15, innerH - bendRadius);
   const topFlatD = Math.max(10, innerD - 2 * bendRadius);
   const arcLength = (Math.PI * bendRadius) / 2; // 90-degree curved shoulder arc length
@@ -1811,56 +1815,55 @@ function generateLivingHingeBox(
     outlinePoints: bottomRes.outlinePoints,
   });
 
-  // 2. LOWER FRONT WALL (with horizontal Catch Slot that receives the Living-Hinge Lid's front catch tab!)
+  // 2. LOWER FRONT WALL: it stops `frontLipH` below the seam, where the closed lid's front lip
+  //    comes down in the same plane and rests on it. A notch in its top edge takes the lip's catch
+  //    tongue, which locates the lid side to side and front to back.
   //    & LOWER BACK WALL (separate with interlocking top fingers when 'finger-joint-back', or integrated into 1-piece wrap when 'one-piece-back')
-  const lowerWallYCenter = -innerH / 2 + straightH / 2;
-  const catchSlotY = T + Math.max(3.5, frontLipH - T * 1.2);
-  const catchSlotPts: Point2D[] = [
-    { x: T + innerW / 2 - catchW / 2, y: catchSlotY },
-    { x: T + innerW / 2 + catchW / 2, y: catchSlotY },
-    { x: T + innerW / 2 + catchW / 2, y: catchSlotY + T },
-    { x: T + innerW / 2 - catchW / 2, y: catchSlotY + T },
-  ];
-
+  const frontH = straightH - frontLipH;
+  const countFrontH = computeOddFingerCount(frontH, params.fingerWidthMm);
+  const lowerWallYCenter = -innerH / 2 + frontH / 2;
   const frontRes = specToPanel2D({
     id: 'front',
-    name: 'Lower Front Wall (With Lid Catch Slot)',
+    name: 'Lower Front Wall (With Lid Catch Notch)',
     faceLabel: 'LOWER FRONT',
     innerW,
-    innerH: straightH,
+    innerH: frontH,
     thickness: T,
     kerf,
     countX: countW,
-    countY: countStraightH,
+    countY: countFrontH,
     topEdge: 'flat-inner',
     rightEdge: 'even-tabs',
     bottomEdge: 'even-tabs',
     leftEdge: 'even-tabs',
     ownCorners: true,
-    extraPaths: [
-      {
-        id: 'front-lid-catch-slot',
-        layer: 'cut',
-        d: pointsToSvgPath(catchSlotPts, true),
-        closed: true,
-      },
-    ],
-    holeContours: [catchSlotPts],
   });
+  // The notch runs from above the top edge down one thickness, so the tongue seats flush.
+  const notch: Point2D[] = [
+    { x: T + innerW / 2 - catchW / 2, y: 0 },
+    { x: T + innerW / 2 + catchW / 2, y: 0 },
+    { x: T + innerW / 2 + catchW / 2, y: 2 * T },
+    { x: T + innerW / 2 - catchW / 2, y: 2 * T },
+  ];
+  const frontOutline = polygonDifference(frontRes.outlinePoints, notch);
+  frontRes.panel2D.paths = frontRes.panel2D.paths.map((path) =>
+    path.id === 'front-outline'
+      ? { ...path, d: pointsToSvgPath(frontOutline.map((p) => ({ x: p.x, y: p.y - T })), true) }
+      : path,
+  );
   panels2D.push(frontRes.panel2D);
   panels3D.push({
     id: 'front',
     name: frontRes.panel2D.name,
     faceId: 'front',
     widthMm: innerW + 2 * T,
-    heightMm: straightH + 2 * T,
+    heightMm: frontH + 2 * T,
     thicknessMm: T,
     color: '#dfc195',
     closedPos: [0, lowerWallYCenter, innerD / 2 + T / 2],
     explodedPos: [0, lowerWallYCenter, innerD / 2 + T / 2 + explodeDist],
     rotation: [0, 0, 0],
-    outlinePoints: frontRes.outlinePoints,
-    holeContours: [catchSlotPts],
+    outlinePoints: frontOutline,
   });
 
   // Lower Back Spine Wall:
@@ -1926,7 +1929,20 @@ function generateLivingHingeBox(
       leftEdge: 'odd-tabs',
       ownCorners: false,
     };
-    const rawLowerPts = buildFingerPanelPolygon(baseSpec);
+    // The front edge, the right wall's left and the left wall's right, carries fingers only as high
+    // as the shortened front wall; above that it stays flat, behind the lid's lip. The fingers come
+    // from a panel the front wall's height laid over the bottom of a flat-fronted one, so they mate
+    // with the front wall's.
+    const frontEdge: keyof Pick<FingerPanelSpec, 'leftEdge' | 'rightEdge'> = isRight ? 'leftEdge' : 'rightEdge';
+    const backEdge: keyof Pick<FingerPanelSpec, 'leftEdge' | 'rightEdge'> = isRight ? 'rightEdge' : 'leftEdge';
+    const flatFront = buildFingerPanelPolygon({ ...baseSpec, [frontEdge]: 'flat-inner' });
+    const frontFingers = buildFingerPanelPolygon({
+      ...baseSpec,
+      innerH: frontH,
+      countY: countFrontH,
+      [backEdge]: 'flat-inner',
+    }).map((p) => ({ x: p.x, y: p.y + frontLipH }));
+    const rawLowerPts = startAtTopRight(polygonUnion(flatFront, frontFingers), T + innerD, T);
 
     const archPts: Point2D[] = [];
     const arcSteps = 12;
@@ -1957,7 +1973,7 @@ function generateLivingHingeBox(
       });
     }
 
-    const restLowerPts = rawLowerPts.slice(2).map((p) => ({
+    const restLowerPts = rawLowerPts.map((p) => ({
       x: p.x,
       y: p.y + bendRadius,
     }));

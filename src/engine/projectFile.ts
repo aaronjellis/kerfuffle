@@ -71,7 +71,13 @@ export function parseProject(text: string): KerfProject {
   params.facePatterns = Object.fromEntries(
     Object.entries(params.facePatterns).filter(([, p]) => isPattern(p)),
   ) as Record<string, FacePatternSettings>;
-  if (!isHingePatternId(params.livingHingePattern)) params.livingHingePattern = DEFAULT_BOX_PARAMETERS.livingHingePattern;
+  // A pattern this version doesn't have falls back to straight, with straight's own sizes.
+  if (!isHingePatternId(params.livingHingePattern)) {
+    params.livingHingePattern = DEFAULT_BOX_PARAMETERS.livingHingePattern;
+    params.livingHingePitchMm = DEFAULT_BOX_PARAMETERS.livingHingePitchMm;
+    params.livingHingeCutMm = DEFAULT_BOX_PARAMETERS.livingHingeCutMm;
+    params.livingHingeBridgeMm = DEFAULT_BOX_PARAMETERS.livingHingeBridgeMm;
+  }
   const template = BOX_TEMPLATES.find((t) => t.id === params.templateId);
   if (!template) throw new ProjectFileError('This project uses a box template this version doesn’t have.');
   params.category = template.category;

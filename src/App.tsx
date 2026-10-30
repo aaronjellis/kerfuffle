@@ -17,7 +17,7 @@ import {
 import { generateBoxModel } from './engine/boxGenerator';
 import { imageAspect, sizeForAspect } from './engine/artworkImage';
 import { generateKerfTestModel, kerfTestValues } from './engine/kerfTest';
-import { generateHingeCardsModel, hingeCardSettings, type HingeCardSweep } from './engine/hingeCards';
+import { generateHingeCardsModel, hingeCardSets, type HingeCardVary } from './engine/hingeCards';
 import { HINGE_PATTERN_IDS, type HingePatternId } from './engine/livingHinge';
 import { parseProject, PROJECT_EXTENSION, ProjectFileError, serializeProject } from './engine/projectFile';
 import { exportPrintedHingeStl } from './engine/printedHinge';
@@ -46,7 +46,7 @@ import { AppBar } from './ui/AppBar';
 import { Inspector } from './ui/Inspector';
 import { currentBoxType, type BoxType } from './ui/boxTypes';
 import { KerfTestPanel } from './ui/KerfTestPanel';
-import { HingeCardsPanel } from './ui/HingeCardsPanel';
+import { HingeCardsPanel, type HingeCardPick } from './ui/HingeCardsPanel';
 import { Stage, type ViewMode } from './ui/Stage';
 import { withPrintedPinClamp } from './ui/paramRules';
 
@@ -97,11 +97,11 @@ interface KerfTestState {
   picked: number | null;
 }
 
-/** The hinge test cards while they are open: the patterns on them, what varies, and the card picked. */
+/** The hinge test cards while they are open: the patterns on them, what their zones vary, and the zone picked. */
 interface HingeCardsState {
   patterns: HingePatternId[];
-  sweep: HingeCardSweep;
-  picked: number | null;
+  vary: HingeCardVary;
+  picked: HingeCardPick | null;
 }
 
 export const App: React.FC = () => {
@@ -157,7 +157,7 @@ export const App: React.FC = () => {
 
   const [hingeCards, setHingeCards] = useState<HingeCardsState | null>(null);
   const hingeCardList = useMemo(
-    () => (hingeCards ? hingeCardSettings(hingeCards.patterns, hingeCards.sweep) : []),
+    () => (hingeCards ? hingeCardSets(hingeCards.patterns, hingeCards.vary) : []),
     [hingeCards]
   );
   const hingeCardsModel = useMemo(
@@ -190,11 +190,12 @@ export const App: React.FC = () => {
 
   const openHingeCards = () => {
     setKerfTest(null);
-    setHingeCards({ patterns: [...HINGE_PATTERN_IDS], sweep: 'none', picked: null });
+    setHingeCards({ patterns: [...HINGE_PATTERN_IDS], vary: 'pitch', picked: null });
     window.posthog?.capture('hinge_cards_opened', { project: ANALYTICS_PROJECT });
   };
   const closeHingeCards = (outcome: 'used' | 'closed') => {
-    const card = hingeCards?.picked != null ? hingeCardList[hingeCards.picked] : undefined;
+    const pick = hingeCards?.picked;
+    const card = pick ? hingeCardList[pick.card]?.zones[pick.zone] : undefined;
     if (outcome === 'used' && card) {
       setParams((prev) => ({
         ...prev,
@@ -833,11 +834,11 @@ export const App: React.FC = () => {
                   : prev
               )
             }
-            sweep={hingeCards.sweep}
-            onSweep={(sweep) => setHingeCards((prev) => (prev ? { ...prev, sweep, picked: null } : prev))}
+            vary={hingeCards.vary}
+            onVary={(vary) => setHingeCards((prev) => (prev ? { ...prev, vary, picked: null } : prev))}
             cards={hingeCardList}
             picked={hingeCards.picked}
-            onPick={(i) => setHingeCards((prev) => (prev ? { ...prev, picked: i } : prev))}
+            onPick={(pick) => setHingeCards((prev) => (prev ? { ...prev, picked: pick } : prev))}
             onDownloadSvg={() => handleDownloadSvg('all')}
             onUse={() => closeHingeCards('used')}
             onClose={() => closeHingeCards('closed')}

@@ -488,7 +488,19 @@
   stroke: var(--accent);
 }
 
-/* The test cards, one per line, numbered as engraved order on the sheet. */
+/* The test cards, a group per card with a line per zone, lettered as engraved. */
+.hinge-card-subhead {
+  margin: 0.5rem 0 0.25rem;
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+  color: var(--ink);
+}
+
+.hinge-card-group + .hinge-card-group {
+  margin-top: 0.25rem;
+}
+
+
 .hinge-card-list {
   display: grid;
   gap: 0.375rem;
@@ -504,6 +516,12 @@
   min-width: 1.25rem;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
+}
+
+/* The narrowest-wood and bend lines under the hinge sizes, each its own line. */
+.hinge-readout {
+  display: grid;
+  gap: 0.25rem;
 }
 
 .hinge-web-warning,
