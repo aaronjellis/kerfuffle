@@ -119,6 +119,14 @@ export interface BoxParameters {
   /** Uncut wood between slits, or at each lattice junction */
   livingHingeBridgeMm: number;
   livingHingeAttachMode: LivingHingeAttachMode;
+  /** A finger hole through the lid's catch tongue, to press it home and pull it free */
+  livingHingeThumbHole: boolean;
+  /** The finger hole's width across the tongue */
+  livingHingeThumbHoleWidthMm: number;
+  /** The finger hole's height; its ends are rounded to half of it */
+  livingHingeThumbHoleHeightMm: number;
+  /** Loose tabs rising from the side walls into the lid's top, to hold it square unlatched */
+  livingHingeTopGuides: boolean;
   dividerCols: number;
   dividerRows: number;
   /** Cardboard Fold specific */

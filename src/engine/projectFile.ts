@@ -71,6 +71,11 @@ export function parseProject(text: string): KerfProject {
   params.facePatterns = Object.fromEntries(
     Object.entries(params.facePatterns).filter(([, p]) => isPattern(p)),
   ) as Record<string, FacePatternSettings>;
+  // The old attachment that carried the top guides is now the one-piece back with guides switched on.
+  if (params.livingHingeAttachMode === 'side-arch-tabs') {
+    params.livingHingeAttachMode = 'one-piece-back';
+    params.livingHingeTopGuides = true;
+  }
   // A pattern this version doesn't have falls back to straight, with straight's own sizes.
   if (!isHingePatternId(params.livingHingePattern)) {
     params.livingHingePattern = DEFAULT_BOX_PARAMETERS.livingHingePattern;

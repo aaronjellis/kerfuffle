@@ -7,7 +7,8 @@ import {
   GeneratedBoxModel,
   Panel3DTransform,
 } from '../engine/types';
-import { livingHingeZoneCuts, wrapBendRadiusMm } from '../engine/fingerJointEngine';
+import { catchTongueEdge, catchTongueRadii, livingHingeCatch, livingHingeZoneCuts, wrapBendRadiusMm } from '../engine/fingerJointEngine';
+import { buildRoundedRectPoints } from '../engine/roundedRect';
 import { buildPrintPartWorldGeometry } from '../engine/printWorld';
 import type { PrintPartId } from '../engine/printParts';
 import { partForMesh, type PartId } from '../ui/parts';
@@ -680,23 +681,26 @@ function createFaceArtworkDecalMesh(
 
 /**
  * The living-hinge wrap's two bends at `bend` radians each (π/2 closed, 0 laid flat), the top deck
- * held still. Each bend keeps its flat zone's arc length on its inner face, so straightening it
+ * held still. Each bend keeps its flat zone's length at mid-thickness, so straightening it
  * rolls the lip and the back wall out along the curve the way the sheet really unrolls.
  */
 function wrapBend(model: GeneratedBoxModel, bend: number) {
   const innerD = model.innerDims.depthMm;
   const innerH = model.innerDims.heightMm;
+  const T = model.params.materialThicknessMm;
   const closedR = wrapBendRadiusMm(innerD, innerH);
-  const arcLength = (Math.PI * closedR) / 2;
+  // The engine's flat zone length: the bend's length at mid-thickness, which bending keeps.
+  const arcLength = (Math.PI * (closedR + T / 2)) / 2;
   const deckY = innerH / 2;
   const deckEdge = innerD / 2 - closedR;
   const flat = bend < 1e-4;
-  const r = flat ? Infinity : arcLength / bend;
-  /** [y, z] of the point `s` along the bend's inner face from the deck, `d` out from it. */
+  const mid = flat ? Infinity : arcLength / bend;
+  const r = mid - T / 2;
+  /** [y, z] of the point `s` along the bend's mid-thickness from the deck, `d` out from its inner face. */
   const at = (isFront: boolean, s: number, d: number): [number, number] => {
     const zSign = isFront ? 1 : -1;
     if (flat) return [deckY + d, zSign * (deckEdge + s)];
-    const phi = s / r;
+    const phi = s / mid;
     return [deckY - r + (r + d) * Math.cos(phi), zSign * (deckEdge + (r + d) * Math.sin(phi))];
   };
   /**
@@ -736,7 +740,7 @@ function buildLivingHingeLidGeometry(
   const T = spec.thicknessMm;
   const wFull = innerW + 2 * T;
   const attachMode = params.livingHingeAttachMode || 'one-piece-back';
-  const hasSideArchTabs = attachMode === 'side-arch-tabs';
+  const hasSideArchTabs = attachMode === 'side-arch-tabs' || params.livingHingeTopGuides;
 
   const bendRadius = wrapBendRadiusMm(innerD, innerH);
   const straightH = Math.max(15, innerH - bendRadius);
@@ -747,25 +751,23 @@ function buildLivingHingeLidGeometry(
 
   // 1. Flat Top Deck (spans X in [-wFull/2 .. +wFull/2], Z in [-topFlatD/2 .. +topFlatD/2], Y in [innerH/2 .. innerH/2 + T])
   if (hasSideArchTabs) {
+    // The deck with a notch in each side edge, where the side walls' guide tabs rise through it.
     const sideTabW = Math.min(16, Math.max(6, topFlatD * 0.45));
+    const h = sideTabW / 2;
     const deckShape = new THREE.Shape([
       new THREE.Vector2(-wFull / 2, -topFlatD / 2),
       new THREE.Vector2(wFull / 2, -topFlatD / 2),
+      new THREE.Vector2(wFull / 2, -h),
+      new THREE.Vector2(wFull / 2 - T, -h),
+      new THREE.Vector2(wFull / 2 - T, h),
+      new THREE.Vector2(wFull / 2, h),
       new THREE.Vector2(wFull / 2, topFlatD / 2),
       new THREE.Vector2(-wFull / 2, topFlatD / 2),
+      new THREE.Vector2(-wFull / 2, h),
+      new THREE.Vector2(-wFull / 2 + T, h),
+      new THREE.Vector2(-wFull / 2 + T, -h),
+      new THREE.Vector2(-wFull / 2, -h),
     ]);
-    for (const xSign of [-1, 1]) {
-      const x0 = xSign === -1 ? -wFull / 2 + 0.4 : wFull / 2 - T;
-      const x1 = xSign === -1 ? -wFull / 2 + T : wFull / 2 - 0.4;
-      deckShape.holes.push(
-        new THREE.Path([
-          new THREE.Vector2(x0, -sideTabW / 2),
-          new THREE.Vector2(x0, sideTabW / 2),
-          new THREE.Vector2(x1, sideTabW / 2),
-          new THREE.Vector2(x1, -sideTabW / 2),
-        ])
-      );
-    }
     const topDeck = new THREE.ExtrudeGeometry(deckShape, {
       depth: T,
       bevelEnabled: false,
@@ -808,10 +810,25 @@ function buildLivingHingeLidGeometry(
   frontLip.applyMatrix4(wrap.carry(true));
   parts.push(frontLip);
 
-  const catchW = Math.min(24, Math.max(10, innerW * 0.24));
-  // The catch tongue hangs one thickness below the lip, in its plane, into the front wall's notch.
-  const catchTab = new THREE.BoxGeometry(catchW, T, T);
-  catchTab.translate(0, seamY - frontLipH - T / 2, innerD / 2 + T / 2);
+  // The catch tongue hangs below the lip, in its plane, into the front wall's notch, its finger
+  // hole through the middle.
+  const tongue = livingHingeCatch(params, innerW, straightH - frontLipH);
+  const radii = catchTongueRadii(tongue.width, tongue.height);
+  const tongueShape = new THREE.Shape(
+    catchTongueEdge(tongue.width, tongue.height, radii.tip, radii.root).map((p) => new THREE.Vector2(p.x, -p.y))
+  );
+  if (tongue.hole) {
+    const { width: hw, height: hh } = tongue.hole;
+    tongueShape.holes.push(
+      new THREE.Path(
+        buildRoundedRectPoints(hw, hh, hh / 2).map(
+          (p) => new THREE.Vector2(p.x - hw / 2, -tongue.height / 2 - (p.y - hh / 2))
+        )
+      )
+    );
+  }
+  const catchTab = new THREE.ExtrudeGeometry(tongueShape, { depth: T, bevelEnabled: false });
+  catchTab.translate(0, seamY - frontLipH, innerD / 2);
   catchTab.applyMatrix4(wrap.carry(true));
   parts.push(catchTab);
 

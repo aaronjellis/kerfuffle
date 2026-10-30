@@ -13,9 +13,9 @@ import {
   hingeShapePath,
   type HingePatternId,
 } from '../../engine/livingHinge';
-import { livingHingeSettings, wrapBendRadiusMm } from '../../engine/fingerJointEngine';
+import { MIN_THUMB_HOLE_MM, livingHingeCatch, livingHingeSettings, wrapBendRadiusMm } from '../../engine/fingerJointEngine';
 import type { BoxParameters } from '../../engine/types';
-import { Field } from '../Field';
+import { Field, Switch } from '../Field';
 import { unitHelpers } from './shared';
 import type { SectionProps } from './types';
 
@@ -56,6 +56,9 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
   const bend = hingeBendRadiusMm(settings, params.materialThicknessMm, params.kerfMm, hingeWidth);
   const lid = wrapBendRadiusMm(model.innerDims.depthMm, model.innerDims.heightMm);
   const [pitchMin, pitchMax] = HINGE_PITCH_RANGE_MM;
+  // The front wall's height under the lid's lip, as the engine works it out.
+  const straightH = Math.max(15, model.innerDims.heightMm - lid);
+  const tongue = livingHingeCatch(params, model.innerDims.widthMm, straightH - Math.min(14, straightH * 0.38));
   /** A length in the display unit: millimetres to `mmDecimals` places, inches to three. */
   const len = (v: number, mmDecimals: number) => (isInch ? (v / 25.4).toFixed(3) : v.toFixed(mmDecimals));
 
@@ -180,18 +183,78 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
         </button>
       )}
 
-      <Field label="Attachment">
+      <Field label="Back attachment">
         <select
-          value={params.livingHingeAttachMode}
+          value={params.livingHingeAttachMode === 'finger-joint-back' ? 'finger-joint-back' : 'one-piece-back'}
           onChange={(e) =>
             updateParam('livingHingeAttachMode', e.target.value as BoxParameters['livingHingeAttachMode'])
           }
         >
-          <option value="one-piece-back">One piece with the back wall, front catch slot</option>
-          <option value="side-arch-tabs">One piece with the back wall, side retainer tabs</option>
-          <option value="finger-joint-back">Finger-jointed to the back wall, front catch</option>
+          <option value="one-piece-back">One piece with the back wall</option>
+          <option value="finger-joint-back">Finger-jointed to the back wall</option>
         </select>
       </Field>
+      <Switch
+        label="Finger hole in the front catch"
+        checked={params.livingHingeThumbHole}
+        onChange={(v) => updateParam('livingHingeThumbHole', v)}
+      />
+      {params.livingHingeThumbHole && (
+        <>
+          <div className="two-col-inputs">
+            <Field label={`Hole width (${uLabel})`}>
+              <NumberField
+                valueMm={params.livingHingeThumbHoleWidthMm}
+                minMm={MIN_THUMB_HOLE_MM}
+                maxMm={40}
+                step={isInch ? 0.05 : 1}
+                displayUnit={displayUnit}
+                inDecimals={2}
+                mmDecimals={1}
+                ariaLabel="Finger hole width"
+                onChangeMm={(mm) => updateParam('livingHingeThumbHoleWidthMm', mm)}
+              />
+            </Field>
+            <Field label={`Hole height (${uLabel})`}>
+              <NumberField
+                valueMm={params.livingHingeThumbHoleHeightMm}
+                minMm={MIN_THUMB_HOLE_MM}
+                maxMm={25}
+                step={isInch ? 0.05 : 0.5}
+                displayUnit={displayUnit}
+                inDecimals={2}
+                mmDecimals={1}
+                ariaLabel="Finger hole height"
+                onChangeMm={(mm) => updateParam('livingHingeThumbHoleHeightMm', mm)}
+              />
+            </Field>
+          </div>
+          <p className={tongue.shrunk ? 'helper-note hinge-web-warning' : 'helper-note'} role="status">
+            {tongue.hole
+              ? `The tongue grows to ${len(tongue.width, 0)} × ${len(tongue.height, 0)} ${uLabel} round the hole: press through it to seat the lid, hook it to pull the lid free.`
+              : 'The front wall is too short for a finger hole, so the catch stays a plain tab.'}
+            {tongue.hole &&
+              tongue.shrunk &&
+              ` Shrunk to ${len(tongue.hole.width, 1)} × ${len(tongue.hole.height, 1)} ${uLabel} to fit this box.`}
+          </p>
+        </>
+      )}
+      <Switch
+        label="Top guides"
+        checked={params.livingHingeTopGuides || params.livingHingeAttachMode === 'side-arch-tabs'}
+        onChange={(v) =>
+          handlers.setParams((prev) => ({
+            ...prev,
+            livingHingeTopGuides: v,
+            // The old attachment that carried the guides becomes the plain one-piece back.
+            livingHingeAttachMode: prev.livingHingeAttachMode === 'side-arch-tabs' ? 'one-piece-back' : prev.livingHingeAttachMode,
+          }))
+        }
+      />
+      <p className="helper-note">
+        A tab rises from each side wall into a notch in the lid's top, cut loose, so the closed lid stays square
+        with the front catch left open.
+      </p>
     </>
   );
 };

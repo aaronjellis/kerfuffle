@@ -46,9 +46,13 @@ describe('Kerfuffle Parametric Geometry & Export Engine', () => {
         if (!outlinePath || outlinePath.id.endsWith('-curved-outline')) continue;
         const segments = svgPathToSegments(outlinePath.d, 0, 0);
         expect(segments.length).toBeGreaterThanOrEqual(4);
+        // The living-hinge lid's catch tongue and the front wall's notch for it have rounded corners:
+        // short arc pieces, never a slash.
+        const roundedCatch = templateId === 'finger-living-hinge' && (panel.id === 'front' || panel.id === 'top');
         for (const seg of segments) {
           const dx = Math.abs(seg.x2 - seg.x1);
           const dy = Math.abs(seg.y2 - seg.y1);
+          if (roundedCatch && Math.hypot(dx, dy) < 1.5) continue;
           // Every segment on a rectangular finger-joint panel must be horizontal (dy ~ 0) or vertical (dx ~ 0)
           expect(Math.min(dx, dy)).toBeLessThan(1e-3);
         }
@@ -315,9 +319,10 @@ describe('Kerfuffle Parametric Geometry & Export Engine', () => {
     // 2-piece finger-jointed back mode outputs 6 panels in both 2D and 3D with interlocking fingers between back and top
     expect(fingerBackModel.panels2D.length).toBe(6);
     expect(fingerBackModel.panels3D.length).toBe(6);
-    // Side-arch-tabs mode adds top-deck retainer slots on the wrap lid
-    const sideTop = sideTabsModel.panels2D.find((p) => p.id === 'top')!;
-    expect(sideTop.paths.some((p) => p.id.includes('lh-top-side-slot'))).toBe(true);
+    // Side-arch-tabs mode adds a guide notch in each side edge of the wrap lid's deck: four corners each
+    const outlineCorners = (m: typeof onePieceModel) =>
+      (m.panels2D.find((p) => p.id === 'top')!.paths.find((p) => p.id === 'living-wrap-outline')!.d.match(/[ML]/g) ?? []).length;
+    expect(outlineCorners(sideTabsModel)).toBe(outlineCorners(onePieceModel) + 8);
     expect(sideTabsModel.panels3D.length).toBe(5);
   });
 

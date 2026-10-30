@@ -13,7 +13,7 @@ import {
   type HingeShape,
 } from '../src/engine/livingHinge';
 import { generateBoxModel } from '../src/engine/boxGenerator';
-import { wrapBendRadiusMm } from '../src/engine/fingerJointEngine';
+import { catchTongueEdge, catchTongueRadii, livingHingeCatch, wrapBendRadiusMm } from '../src/engine/fingerJointEngine';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import { parseProject, serializeProject } from '../src/engine/projectFile';
 
@@ -288,10 +288,156 @@ describe('living-hinge box closing', () => {
       for (const y of steps) expect(frontSteps(sign).has(y)).toBe(true);
     }
 
-    // The tongue's notch is in the middle of the front wall's top edge, one thickness deep.
-    const notch = front.filter((v) => Math.abs(v.y - (lipBottom - T)) < 1e-6 && Math.abs(v.x) < innerW / 2);
+    // The tongue's notch is in the middle of the front wall's top edge, the tongue's height deep.
+    const tongueH = livingHingeCatch(params, innerW, straightH - Math.min(14, straightH * 0.38)).height;
+    const notch = front.filter((v) => Math.abs(v.y - (lipBottom - tongueH)) < 1e-6 && Math.abs(v.x) < innerW / 2);
     expect(notch.length).toBe(2);
   });
+});
+
+describe('living-hinge wrap fit', () => {
+  const params = { ...DEFAULT_BOX_PARAMETERS, templateId: 'finger-living-hinge' as const, kerfMm: 0.2 };
+  const m = generateBoxModel(params);
+  const { widthMm: innerW, depthMm: innerD, heightMm: innerH } = m.innerDims;
+  const T = params.materialThicknessMm;
+  const R = wrapBendRadiusMm(innerD, innerH);
+  const straightH = Math.max(15, innerH - R);
+  const lip = Math.min(14, straightH * 0.38);
+  const tongue = livingHingeCatch(params, innerW, straightH - lip);
+  const catchW = tongue.width;
+  const wrap = m.panels2D.find((p) => p.id === 'top')!;
+  const pts = (d: string) =>
+    [...d.matchAll(/[ML]\s*(-?[\d.]+)\s+(-?[\d.]+)/g)].map((x) => ({ x: Number(x[1]), y: Number(x[2]) }));
+  const outline = pts(wrap.paths.find((p) => p.id === 'living-wrap-outline')!.d);
+
+  it('cuts each shoulder to its length at mid-thickness, so the closed lid reaches the front wall', () => {
+    // Tongue, lip, two shoulders, deck, back wall and its bottom fingers, end to end.
+    const shoulder = (Math.PI * (R + T / 2)) / 2;
+    const deck = Math.max(10, innerD - 2 * R);
+    expect(wrap.heightMm).toBeCloseTo(tongue.height + lip + 2 * shoulder + deck + straightH + T, 3);
+  });
+
+  it('draws the tongue a kerf wider and the notch a kerf narrower, so they press-fit like the fingers', () => {
+    // The wrap lies end for end: the tongue is at the bottom of the piece. Its width is measured
+    // along its straight sides, below the root fillets.
+    const { root } = catchTongueRadii(catchW, tongue.height);
+    const sides = outline.filter((p) => p.y > wrap.heightMm - tongue.height + root + 1e-3);
+    expect(Math.max(...sides.map((p) => p.x)) - Math.min(...sides.map((p) => p.x))).toBeCloseTo(catchW + 0.2, 3);
+    const front = m.panels3D.find((p) => p.id === 'front')!.outlinePoints!;
+    const notchSides = front.filter((p) => p.y > T + root + 0.1 + 1e-3 && p.y < T + tongue.height + 1e-3 && Math.abs(p.x - (T + innerW / 2)) < catchW);
+    expect(Math.max(...notchSides.map((p) => p.x)) - Math.min(...notchSides.map((p) => p.x))).toBeCloseTo(catchW - 0.2, 3);
+  });
+
+  it('lays the wrap back wall up, so deck artwork reads from the front of the box', () => {
+    // The deck sits nearer the tongue (bottom) than the back wall (top) by the lip less the back wall.
+    const deckMid = wrap.safeRect.y + wrap.safeRect.height / 2;
+    const fromTongue = wrap.heightMm - deckMid;
+    expect(fromTongue).toBeCloseTo(tongue.height + lip + (Math.PI * (R + T / 2)) / 2 + wrap.safeRect.height / 2, 3);
+  });
+});
+
+describe('living-hinge catch and guides', () => {
+  const base = { ...DEFAULT_BOX_PARAMETERS, templateId: 'finger-living-hinge' as const, kerfMm: 0.2 };
+  const wrapOf = (p: typeof base) => generateBoxModel(p).panels2D.find((x) => x.id === 'top')!;
+  const outlinePts = (d: string) =>
+    [...d.matchAll(/[ML]\s*(-?[\d.]+)\s+(-?[\d.]+)/g)].map((x) => ({ x: Number(x[1]), y: Number(x[2]) }));
+
+  it('cuts a rounded finger hole through the middle of the tongue, inside it', () => {
+    const wrap = wrapOf(base);
+    const hole = outlinePts(wrap.paths.find((p) => p.id === 'lh-catch-finger-hole')!.d);
+    const outline = outlinePts(wrap.paths.find((p) => p.id === 'living-wrap-outline')!.d);
+    const tip = outline.filter((p) => p.y > wrap.heightMm - 4).map((p) => p.x);
+    const xs = hole.map((p) => p.x);
+    const ys = hole.map((p) => p.y);
+    // 16 × 8 mm, centred across the tongue, with wood all round it.
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(16, 3);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(8, 3);
+    expect(Math.min(...xs)).toBeGreaterThan(Math.min(...tip) + 3);
+    expect(Math.max(...xs)).toBeLessThan(Math.max(...tip) - 3);
+    expect(Math.max(...ys)).toBeLessThan(wrap.heightMm - 2);
+  });
+
+  it('rounds the tongue’s tip corners and its root, symmetric, from the root line round to the root line', () => {
+    const edge = catchTongueEdge(24, 13, 3, 1.5);
+    expect(edge[0]).toEqual({ x: -12 - 1.5, y: 0 });
+    expect(edge[edge.length - 1].x).toBeCloseTo(12 + 1.5, 9);
+    expect(edge[edge.length - 1].y).toBeCloseTo(0, 9);
+    expect(Math.max(...edge.map((p) => p.y))).toBeCloseTo(13, 9);
+    // Mirror image across the middle.
+    edge.forEach((p, i) => {
+      const q = edge[edge.length - 1 - i];
+      expect(p.x).toBeCloseTo(-q.x, 9);
+      expect(p.y).toBeCloseTo(q.y, 9);
+    });
+    // No corner is sharp: every turn between pieces is gentle.
+    for (let i = 1; i + 1 < edge.length; i++) {
+      const a = Math.atan2(edge[i].y - edge[i - 1].y, edge[i].x - edge[i - 1].x);
+      const b = Math.atan2(edge[i + 1].y - edge[i].y, edge[i + 1].x - edge[i].x);
+      const turn = Math.abs(((b - a + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
+      expect(turn).toBeLessThan(Math.PI / 6);
+    }
+  });
+
+  it('shapes the front wall’s notch exactly as the tongue at zero kerf, so the rounded corners mate', () => {
+    const m = generateBoxModel({ ...base, kerfMm: 0 });
+    const wrap = m.panels2D.find((x) => x.id === 'top')!;
+    const outline = outlinePts(wrap.paths.find((p) => p.id === 'living-wrap-outline')!.d);
+    const front = m.panels3D.find((x) => x.id === 'front')!.outlinePoints!;
+    const T = base.materialThicknessMm;
+    const tipY = wrap.heightMm;
+    const innerW = m.innerDims.widthMm;
+    const innerH = m.innerDims.heightMm;
+    const straightH = Math.max(15, innerH - wrapBendRadiusMm(m.innerDims.depthMm, innerH));
+    const { width, height } = livingHingeCatch(base, innerW, straightH - Math.min(14, straightH * 0.38));
+    const key = (x: number) => x.toFixed(3);
+    const tongueTip = outline.filter((p) => p.y > tipY - 0.5).map((p) => key(p.x - wrap.widthMm / 2)).sort();
+    // The notch's floor, in the front wall's frame: its top inner line at y = T.
+    const notchFloor = front
+      .filter((p) => p.y > T + height - 0.5 && p.y < T + height + 1e-6 && Math.abs(p.x - (T + innerW / 2)) < width)
+      .map((p) => key(p.x - (T + innerW / 2)))
+      .sort();
+    expect(notchFloor).toEqual(tongueTip);
+  });
+
+  it('keeps a plain one-thickness tongue with the hole switched off, or where the front wall is too short', () => {
+    expect(wrapOf({ ...base, livingHingeThumbHole: false }).paths.some((p) => p.id === 'lh-catch-finger-hole')).toBe(false);
+    expect(livingHingeCatch({ ...base, livingHingeThumbHole: true }, 110, 14).hole).toBeNull();
+    expect(livingHingeCatch({ ...base, livingHingeThumbHole: false }, 110, 40).height).toBe(base.materialThicknessMm);
+  });
+
+  it('sizes the tongue round the hole set, with wood all round, and shrinks a hole too big for the box', () => {
+    const c = livingHingeCatch({ ...base, livingHingeThumbHoleWidthMm: 20, livingHingeThumbHoleHeightMm: 10 }, 110, 40);
+    expect(c.hole).toEqual({ width: 20, height: 10 });
+    expect(c).toMatchObject({ width: 28, height: 15, shrunk: false });
+    // A 19.8 mm front wall leaves 19.8 − 6 − 5 for the hole's height.
+    const tall = livingHingeCatch({ ...base, livingHingeThumbHoleHeightMm: 30 }, 110, 19.8);
+    expect(tall.hole!.height).toBeCloseTo(8.8, 9);
+    expect(tall.shrunk).toBe(true);
+    // Across a 50 mm front the tongue may take 60%, so the hole 22 mm.
+    expect(livingHingeCatch({ ...base, livingHingeThumbHoleWidthMm: 40 }, 50, 40).hole!.width).toBeCloseTo(22, 9);
+  });
+
+  it.each(['one-piece-back', 'finger-joint-back'] as const)(
+    'adds loose guide notches to the deck and tabs to the side walls with %s',
+    (attach) => {
+      const m = generateBoxModel({ ...base, livingHingeAttachMode: attach, livingHingeTopGuides: true });
+      const wrap = m.panels2D.find((x) => x.id === 'top')!;
+      const outline = outlinePts(wrap.paths.find((p) => p.id === 'living-wrap-outline')!.d);
+      const T = base.materialThicknessMm;
+      // Each notch's floor sits one thickness in from a side edge, as long as the tab, no kerf offset.
+      for (const x of [T, wrap.widthMm - T]) {
+        const { y, height } = wrap.safeRect;
+        const floor = outline.filter((p) => Math.abs(p.x - x) < 1e-3 && p.y > y && p.y < y + height).map((p) => p.y);
+        expect(floor).toHaveLength(2);
+        const topFlatD = Math.max(10, m.innerDims.depthMm - 2 * wrapBendRadiusMm(m.innerDims.depthMm, m.innerDims.heightMm));
+        expect(Math.abs(floor[0] - floor[1])).toBeCloseTo(Math.min(16, Math.max(6, topFlatD * 0.45)), 3);
+      }
+      // The side walls grow their tab: a thickness taller than without guides.
+      const plain = generateBoxModel({ ...base, livingHingeAttachMode: attach, livingHingeTopGuides: false });
+      const left = (mm: typeof m) => mm.panels2D.find((x) => x.id === 'left')!.heightMm;
+      expect(left(m)).toBeCloseTo(left(plain) + T, 6);
+    },
+  );
 });
 
 describe('living-hinge box', () => {

@@ -1,4 +1,5 @@
 import { polygonDifference, polygonUnion, startAtTopRight } from './polygonOps';
+import { buildRoundedRectPoints } from './roundedRect';
 import { hingeCuts, hingePatternInfo, hingeShapePath, type HingePatternSettings, type HingeShape } from './livingHinge';
 import {
   BoxDims,
@@ -1727,6 +1728,75 @@ function generateClamshellBox(
 export const wrapBendRadiusMm = (innerD: number, innerH: number): number =>
   Math.max(10, Math.min(innerH * 0.42, innerD * 0.35, innerH - 15));
 
+/** Wood the tongue keeps beside and above and below its finger hole, and the front wall below the notch. */
+const TONGUE_SIDE_MM = 4;
+const TONGUE_END_MM = 2.5;
+const FRONT_BELOW_NOTCH_MM = 6;
+/** The smallest finger hole worth cutting. */
+export const MIN_THUMB_HOLE_MM = 4;
+
+/**
+ * The catch tongue on the living-hinge lid's front edge, which drops into a notch in the front wall's
+ * top edge. With a finger hole it grows to hold the hole with wood round it; a hole bigger than the
+ * box has room for shrinks to fit (`shrunk`), and below `MIN_THUMB_HOLE_MM` the tongue stays a plain
+ * tab one thickness deep.
+ */
+export function livingHingeCatch(params: BoxParameters, innerW: number, frontH: number) {
+  const T = params.materialThicknessMm;
+  const plain = {
+    width: Math.min(24, Math.max(10, innerW * 0.24)),
+    height: T,
+    hole: null as null | { width: number; height: number },
+    shrunk: false,
+  };
+  if (!params.livingHingeThumbHole) return plain;
+  const wantW = Math.max(MIN_THUMB_HOLE_MM, params.livingHingeThumbHoleWidthMm || 16);
+  const wantH = Math.max(MIN_THUMB_HOLE_MM, params.livingHingeThumbHoleHeightMm || 8);
+  // The tongue may span up to 60% of the front, and reach down to 6 mm above the bottom of the wall.
+  const holeW = Math.min(wantW, innerW * 0.6 - 2 * TONGUE_SIDE_MM);
+  const holeH = Math.min(wantH, frontH - FRONT_BELOW_NOTCH_MM - 2 * TONGUE_END_MM);
+  if (holeW < MIN_THUMB_HOLE_MM || holeH < MIN_THUMB_HOLE_MM) return { ...plain, shrunk: true };
+  return {
+    width: holeW + 2 * TONGUE_SIDE_MM,
+    height: holeH + 2 * TONGUE_END_MM,
+    hole: { width: holeW, height: holeH },
+    shrunk: holeW < wantW || holeH < wantH,
+  };
+}
+
+/**
+ * The catch tongue's edge as a path, origin at its root's middle, y running out toward its tip:
+ * from the left end of the root line, a fillet `rootR` into the tongue's side, down to the tip with
+ * its corners rounded to `tipR`, and back up the other side to the root line. A tongue `width` across
+ * and `height` long; both radii shrink to what fits.
+ */
+export function catchTongueEdge(width: number, height: number, tipR: number, rootR: number, steps = 8): Point2D[] {
+  const r = Math.max(0, Math.min(tipR, width / 2, height / 2));
+  const f = Math.max(0, Math.min(rootR, height - r));
+  const w = width / 2;
+  const arc = (cx: number, cy: number, rad: number, a0: number, a1: number) =>
+    Array.from({ length: steps + 1 }, (_, i) => {
+      const a = a0 + ((a1 - a0) * i) / steps;
+      return { x: cx + rad * Math.cos(a), y: cy + rad * Math.sin(a) };
+    });
+  const pts: Point2D[] = [
+    // Root fillet, left: concave, centred off the tongue's side.
+    ...(f > 0 ? arc(-w - f, f, f, -Math.PI / 2, 0) : [{ x: -w, y: 0 }]),
+    // Tip corners, convex.
+    ...(r > 0 ? arc(-w + r, height - r, r, Math.PI, Math.PI / 2) : [{ x: -w, y: height }]),
+    ...(r > 0 ? arc(w - r, height - r, r, Math.PI / 2, 0) : [{ x: w, y: height }]),
+    // Root fillet, right.
+    ...(f > 0 ? arc(w + f, f, f, Math.PI, Math.PI * 1.5) : [{ x: w, y: 0 }]),
+  ];
+  return pts.filter((p, i) => i === 0 || Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y) > 1e-9);
+}
+
+/** The tongue's tip corners and its root fillets, before kerf, softened for the hand. */
+export const catchTongueRadii = (width: number, height: number) => ({
+  tip: Math.min(3, width / 4, height / 2),
+  root: Math.min(1.5, height / 3),
+});
+
 /** The hinge settings a box's parameters hold. */
 export const livingHingeSettings = (params: BoxParameters): HingePatternSettings => ({
   pattern: params.livingHingePattern,
@@ -1767,14 +1837,17 @@ function generateLivingHingeBox(
   const attachMode = params.livingHingeAttachMode || 'one-piece-back';
   const isOnePieceBack =
     attachMode === 'one-piece-back' || attachMode === 'side-arch-tabs';
-  const hasSideArchTabs = attachMode === 'side-arch-tabs';
+  // Older projects chose the guides through the attachment; now any attachment can have them.
+  const hasSideArchTabs = attachMode === 'side-arch-tabs' || params.livingHingeTopGuides;
 
   const bendRadius = wrapBendRadiusMm(innerD, innerH);
   const straightH = Math.max(15, innerH - bendRadius);
   const topFlatD = Math.max(10, innerD - 2 * bendRadius);
-  const arcLength = (Math.PI * bendRadius) / 2; // 90-degree curved shoulder arc length
+  // Each 90° shoulder's length in the flat wrap. A kerf hinge bends by its strips twisting about
+  // their own middles, so the sheet keeps its length at mid-thickness: the inner face, hugging the
+  // side wall's arch at bendRadius, gets shorter and the outer longer.
+  const arcLength = (Math.PI * (bendRadius + T / 2)) / 2;
   const frontLipH = Math.min(14, straightH * 0.38);
-  const catchW = Math.min(24, Math.max(10, innerW * 0.24));
   const sideTabW = Math.min(16, Math.max(6, topFlatD * 0.45));
 
   const countStraightH = computeOddFingerCount(straightH, params.fingerWidthMm);
@@ -1820,6 +1893,8 @@ function generateLivingHingeBox(
   //    tongue, which locates the lid side to side and front to back.
   //    & LOWER BACK WALL (separate with interlocking top fingers when 'finger-joint-back', or integrated into 1-piece wrap when 'one-piece-back')
   const frontH = straightH - frontLipH;
+  const tongue = livingHingeCatch(params, innerW, frontH);
+  const catchW = tongue.width;
   const countFrontH = computeOddFingerCount(frontH, params.fingerWidthMm);
   const lowerWallYCenter = -innerH / 2 + frontH / 2;
   const frontRes = specToPanel2D({
@@ -1838,12 +1913,19 @@ function generateLivingHingeBox(
     leftEdge: 'even-tabs',
     ownCorners: true,
   });
-  // The notch runs from above the top edge down one thickness, so the tongue seats flush.
+  // The notch runs from above the top edge down the tongue's height, so the tongue seats flush. It's drawn
+  // a kerf narrower than the tongue and the tongue a kerf wider, as the finger joints are, so once the
+  // beam has burned both they meet at catchW and press-fit like the fingers.
+  // Shaped to the tongue: its tip corners rounded inside the notch, its root fillets rounding over
+  // the notch's mouth. The kerf offset moves each radius by half a kerf, as it moves the edges.
+  const radii = catchTongueRadii(catchW, tongue.height);
+  const notchEdge = catchTongueEdge(catchW - kerf, tongue.height, radii.tip - kerf / 2, radii.root + kerf / 2).map(
+    (p) => ({ x: T + innerW / 2 + p.x, y: T + p.y }),
+  );
   const notch: Point2D[] = [
-    { x: T + innerW / 2 - catchW / 2, y: 0 },
-    { x: T + innerW / 2 + catchW / 2, y: 0 },
-    { x: T + innerW / 2 + catchW / 2, y: 2 * T },
-    { x: T + innerW / 2 - catchW / 2, y: 2 * T },
+    { x: notchEdge[0].x, y: 0 },
+    ...notchEdge,
+    { x: notchEdge[notchEdge.length - 1].x, y: 0 },
   ];
   const frontOutline = polygonDifference(frontRes.outlinePoints, notch);
   frontRes.panel2D.paths = frontRes.panel2D.paths.map((path) =>
@@ -2035,7 +2117,7 @@ function generateLivingHingeBox(
   //    - Below zone2End:
   //      * If 'one-piece-back' or 'side-arch-tabs': Continues directly into the Lower Back Spine Wall (straightH + T) with full finger joints!
   //      * If 'finger-joint-back': Rear Attach Skirt (frontLipH) with mating `even-tabs` finger joints along its bottom edge!
-  const zone1Start = T + frontLipH;
+  const zone1Start = tongue.height + frontLipH;
   const zone1End = zone1Start + arcLength;
   const zone2Start = zone1End + topFlatD;
   const zone2End = zone2Start + arcLength;
@@ -2053,35 +2135,28 @@ function generateLivingHingeBox(
   addLivingHingeZone(zone1Start, 'lh-z1');
   addLivingHingeZone(zone2Start, 'lh-z2');
 
-  // If `hasSideArchTabs`, add the two mating retainer slots in the flat top deck (`zone1End .. zone2Start`)
-  // aligned with the Left Wall (x = 0..T) and Right Wall (x = wFull - T .. wFull)
-  if (hasSideArchTabs) {
-    const slotMidY = (zone1End + zone2Start) / 2;
-    const sY0 = slotMidY - sideTabW / 2;
-    const sY1 = slotMidY + sideTabW / 2;
-    extraWrapPaths.push({
-      id: 'lh-top-side-slot-l',
-      layer: 'cut',
-      d: `M ${fmt(0.4)} ${fmt(sY0)} L ${fmt(T)} ${fmt(sY0)} L ${fmt(T)} ${fmt(sY1)} L ${fmt(0.4)} ${fmt(sY1)} Z`,
-      closed: true,
-    });
-    extraWrapPaths.push({
-      id: 'lh-top-side-slot-r',
-      layer: 'cut',
-      d: `M ${fmt(wFull - T)} ${fmt(sY0)} L ${fmt(wFull - 0.4)} ${fmt(sY0)} L ${fmt(wFull - 0.4)} ${fmt(sY1)} L ${fmt(wFull - T)} ${fmt(sY1)} Z`,
-      closed: true,
-    });
+  // The tongue's finger hole: a rounded slot through its middle.
+  if (tongue.hole) {
+    const { width: hw, height: hh } = tongue.hole;
+    const hole = buildRoundedRectPoints(hw, hh, hh / 2).map((p) => ({
+      x: p.x + wFull / 2 - hw / 2,
+      y: p.y + tongue.height / 2 - hh / 2,
+    }));
+    extraWrapPaths.push({ id: 'lh-catch-finger-hole', layer: 'cut', d: pointsToSvgPath(hole, true), closed: true });
   }
 
   // Build the orthogonal outer perimeter of the Living-Hinge Wrap Lid (including its Back-Wall attachment!)
   const topCatchHeaderPts: Point2D[] = [
     { x: 0, y: zone2End },
-    { x: 0, y: T },
-    { x: wFull / 2 - catchW / 2, y: T },
-    { x: wFull / 2 - catchW / 2, y: 0 },
-    { x: wFull / 2 + catchW / 2, y: 0 },
-    { x: wFull / 2 + catchW / 2, y: T },
-    { x: wFull, y: T },
+    { x: 0, y: tongue.height },
+    // The tongue, tip at y = 0, a kerf wider than the notch's and its radii half a kerf rounder.
+    ...catchTongueEdge(
+      catchW + kerf,
+      tongue.height,
+      catchTongueRadii(catchW, tongue.height).tip + kerf / 2,
+      catchTongueRadii(catchW, tongue.height).root - kerf / 2,
+    ).map((p) => ({ x: wFull / 2 + p.x, y: tongue.height - p.y })),
+    { x: wFull, y: tongue.height },
     { x: wFull, y: zone2End },
   ];
 
@@ -2144,6 +2219,31 @@ function generateLivingHingeBox(
     wrapTotalH = zone2End + T;
   }
 
+  // The top guides: each side wall's tab rises into a notch in the deck's edge, the wall's thickness
+  // deep. Drawn at the tab's own size with no kerf offset, so after cutting they're a kerf loose
+  // either side: they hold the closed lid square without gripping it.
+  if (hasSideArchTabs) {
+    const slotMidY = (zone1End + zone2Start) / 2;
+    const sY0 = slotMidY - sideTabW / 2;
+    const sY1 = slotMidY + sideTabW / 2;
+    for (const [x0, x1] of [
+      [-1, T],
+      [wFull - T, wFull + 1],
+    ]) {
+      wrapOutlinePts = polygonDifference(wrapOutlinePts, [
+        { x: x0, y: sY0 },
+        { x: x1, y: sY0 },
+        { x: x1, y: sY1 },
+        { x: x0, y: sY1 },
+      ]);
+    }
+  }
+
+  // The wrap is built tongue first, but laid on the sheet end for end, back wall at the top: artwork
+  // on the deck then reads upright from the box's front, as the 3D view shows it, and its offsets
+  // run the same way as the 3D decal's.
+  const endForEnd = (d: string) =>
+    d.replace(/([ML])\s*(-?[\d.]+)\s+(-?[\d.]+)/g, (_, cmd: string, x: string, y: string) => `${cmd} ${x} ${fmt(wrapTotalH - Number(y))}`);
   panels2D.push({
     id: 'top',
     name: isOnePieceBack
@@ -2152,18 +2252,20 @@ function generateLivingHingeBox(
     faceLabel: isOnePieceBack ? '1-PIECE BACK + LIVING HINGE LID' : 'LIVING HINGE WRAP LID',
     widthMm: wFull,
     heightMm: wrapTotalH,
-    safeRect: { x: T, y: zone1End, width: innerW, height: topFlatD },
+    safeRect: { x: T, y: wrapTotalH - zone1End - topFlatD, width: innerW, height: topFlatD },
     sheetX: 0,
     sheetY: 0,
-    paths: [
-      {
-        id: 'living-wrap-outline',
-        layer: 'cut',
-        d: pointsToSvgPath(wrapOutlinePts, true),
-        closed: true,
-      },
-      ...extraWrapPaths,
-    ],
+    paths: (
+      [
+        {
+          id: 'living-wrap-outline',
+          layer: 'cut',
+          d: pointsToSvgPath(wrapOutlinePts, true),
+          closed: true,
+        },
+        ...extraWrapPaths,
+      ] as DielinePath[]
+    ).map((path) => ({ ...path, d: endForEnd(path.d) })),
   });
 
   // 3D Curved Living-Hinge Wrap Lid (rendered by Viewport3D as a single connected 3D mesh including its Back Wall or Rear Finger Joints!)
