@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import type { BoxPanel2D, BoxParameters, FacePatternSettings, FacePatternStyle, Panel3DTransform, Point2D } from './types';
+import type { BoxPanel2D, BoxParameters, FacePatternSettings, FacePatternStyle, PatternCrop, Panel3DTransform, Point2D } from './types';
 import { pointsToSvgPath } from './fingerJointEngine';
+import { bounds as polyBounds, intersect, translate as movePoly, type Poly as Region } from './geom';
+import { buildShape, clampShape, DEFAULT_SHAPE } from './shapes';
 
 /** Faces a see-through pattern can go on. The floor is left solid. */
 export const PATTERN_FACE_IDS = ['top', 'front', 'back', 'left', 'right', 'bottom'] as const;
@@ -377,6 +379,10 @@ export function generatePatternHoles(spec: FacePatternSettings, width: number, h
   const x1 = Math.max(...window.map((p) => p.x));
   const y1 = Math.max(...window.map((p) => p.y));
   if (x1 - x0 < cell * 0.75 || y1 - y0 < cell * 0.75) return [];
+  // A crop shape fills the window's box; the holes are clipped to it (and the window), which may be
+  // concave, so they're clipped as polygons rather than against a convex edge.
+  const crop = spec.crop && spec.crop !== 'none' ? cropWindow(spec.crop, x0, y0, x1, y1, window) : null;
+  if (crop && crop.length === 0) return [];
   const cx = width / 2;
   const cy = height / 2;
   const reach = Math.max(...window.map((p) => Math.hypot(p.x - cx, p.y - cy)));
@@ -384,13 +390,27 @@ export function generatePatternHoles(spec: FacePatternSettings, width: number, h
   for (const raw of rawHoles(spec.style, cx, cy, reach, cell, bar)) {
     // Cheap reject: holes wholly outside the window's box.
     if (raw.every((p) => p.x < x0) || raw.every((p) => p.x > x1) || raw.every((p) => p.y < y0) || raw.every((p) => p.y > y1)) continue;
-    const clipped = clipConvex(raw, window);
-    if (clipped.length < 3) continue;
-    const area = Math.abs(polyArea(clipped));
-    if (area < 1 || (2 * area) / polyPerimeter(clipped) < 0.5) continue;
-    out.push(clipped);
+    for (const clipped of crop ? intersect([raw], crop) : [clipConvex(raw, window)]) {
+      if (clipped.length < 3) continue;
+      const area = Math.abs(polyArea(clipped));
+      if (area < 1 || (2 * area) / polyPerimeter(clipped) < 0.5) continue;
+      out.push(clipped);
+    }
   }
   return out;
+}
+
+/**
+ * The crop shape filling the box x0..x1 × y0..y1, cut to the window (an arched wall's shape stays).
+ * Its corners and features are sized from the box's short side.
+ */
+function cropWindow(kind: Exclude<PatternCrop, 'none'>, x0: number, y0: number, x1: number, y1: number, window: Poly): Region {
+  const w = x1 - x0;
+  const h = y1 - y0;
+  const short = Math.min(w, h);
+  const shape = clampShape({ ...DEFAULT_SHAPE, kind, widthMm: w, heightMm: h, cornerMm: short * 0.22, scallopMm: short * 0.09, depthMm: short * 0.1 });
+  const centred = movePoly(buildShape(shape, 0.05), (x0 + x1) / 2, (y0 + y1) / 2);
+  return polyBounds(centred) ? intersect(centred, [window]) : [];
 }
 
 /** A face that can take a pattern: where it sits on the sheet, and how to carry a point to its 3D panel. */

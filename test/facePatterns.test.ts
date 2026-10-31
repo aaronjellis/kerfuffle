@@ -206,3 +206,27 @@ describe('patterns on shaped walls', () => {
     }
   });
 });
+
+describe('pattern crop', () => {
+  const base = { style: 'grid' as const, cellMm: 10, barMm: 2, paddingMm: 6 };
+  const inEllipse = (p: { x: number; y: number }, w: number, h: number, pad: number) =>
+    ((p.x - w / 2) / (w / 2 - pad)) ** 2 + ((p.y - h / 2) / (h / 2 - pad)) ** 2 <= 1.01;
+
+  it('keeps every hole inside an oval crop, leaving the corners solid', () => {
+    const holes = generatePatternHoles({ ...base, crop: 'ellipse' }, 100, 160);
+    expect(holes.length).toBeGreaterThan(10);
+    for (const h of holes) for (const p of h) expect(inEllipse(p, 100, 160, 6)).toBe(true);
+    expect(holes.length).toBeLessThan(generatePatternHoles(base, 100, 160).length);
+  });
+
+  it('crops to concave shapes too', () => {
+    for (const crop of ['scallop', 'ticket', 'wave', 'bracket'] as const) {
+      const holes = generatePatternHoles({ ...base, crop }, 100, 160);
+      expect(holes.length).toBeGreaterThan(5);
+    }
+  });
+
+  it('none leaves the pattern as it was', () => {
+    expect(generatePatternHoles({ ...base, crop: 'none' }, 100, 160)).toEqual(generatePatternHoles(base, 100, 160));
+  });
+});

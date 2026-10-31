@@ -45,7 +45,24 @@ export interface FacePatternSettings {
   barMm: number;
   /** Solid border between the face's edge and the pattern */
   paddingMm: number;
+  /** A shape the pattern is cropped to, filling the area inside the border; none keeps it rectangular */
+  crop?: PatternCrop;
 }
+
+/** Shapes a face's pattern can be cropped to: Badgerly's badge outlines. */
+export type PatternCrop =
+  | 'none'
+  | 'rounded'
+  | 'pill'
+  | 'ellipse'
+  | 'chamfer'
+  | 'cornerCut'
+  | 'ticket'
+  | 'doubleRound'
+  | 'scallop'
+  | 'bracket'
+  | 'antique'
+  | 'wave';
 
 export interface TextArtworkConfig {
   text: string;

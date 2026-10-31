@@ -2,7 +2,8 @@ import React from 'react';
 import { NumberField } from '../../components/NumberField';
 import { generatePatternHoles } from '../../engine/facePatterns';
 import { DEFAULT_FACE_PATTERN } from '../../engine/presets';
-import type { FacePatternSettings, FacePatternStyle } from '../../engine/types';
+import { SHAPE_OPTIONS } from '../../engine/shapes';
+import type { FacePatternSettings, FacePatternStyle, PatternCrop } from '../../engine/types';
 import { Field } from '../Field';
 import { unitHelpers } from './shared';
 import type { SectionProps } from './types';
@@ -16,6 +17,12 @@ const STYLES: { value: FacePatternStyle; label: string }[] = [
   { value: 'scallops', label: 'Scallops' },
   { value: 'sunflower', label: 'Radial dots' },
   { value: 'spiral', label: 'Spiral' },
+];
+
+/** Crop shapes: none (the border's rectangle), then Badgerly's outlines that make sense as a window. */
+export const CROP_OPTIONS: { value: PatternCrop; label: string }[] = [
+  { value: 'none', label: 'None (fill inside the padding)' },
+  ...SHAPE_OPTIONS.filter((o) => o.kind !== 'rect' && o.kind !== 'hugText').map((o) => ({ value: o.kind as PatternCrop, label: o.label })),
 ];
 
 const FACE_LABELS: Record<string, string> = {
@@ -174,6 +181,15 @@ export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, di
               ariaLabel="Pattern padding"
               onChangeMm={(mm) => setFace({ paddingMm: mm })}
             />
+          </Field>
+          <Field label="Crop to a shape">
+            <select value={current.crop ?? 'none'} onChange={(e) => setFace({ crop: e.target.value as PatternCrop })}>
+              {CROP_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </Field>
           {available.length > 1 && (
             <button type="button" className="btn btn-sm pattern-apply-all" onClick={applyToAll}>
