@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters } from '../src/engine/types';
-import { WINE_BOTTLES, shoulderProfile, taperHalfGapMm, wineCarrierLayout } from '../src/engine/wineBottles';
+import { WINE_BOTTLES, shoulderProfile, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
 
 const carrier = (p: Partial<BoxParameters> = {}): BoxParameters => ({
   ...DEFAULT_BOX_PARAMETERS,
@@ -52,5 +52,31 @@ describe('wine carrier layout', () => {
   it('never errors on a bottle shorter than its shoulder', () => {
     const l = wineCarrierLayout(carrier({ wineBottleId: 'custom', wineBottleHeightMm: 150, wineBottleShoulderMm: 210 }));
     for (const v of Object.values(l)) if (typeof v === 'number') expect(Number.isFinite(v)).toBe(true);
+  });
+});
+
+describe('wine carrier bend checks', () => {
+  it('passes the defaults with no notes', () => {
+    const c = wineCarrierChecks(carrier());
+    expect(c.shoulderCracks || c.earCracks || c.thinWeb).toBe(false);
+    expect(c.notes).toEqual([]);
+  });
+
+  it('warns that stiff hinges will crack the shoulders and ears', () => {
+    const c = wineCarrierChecks(carrier({ livingHingePitchMm: 6, livingHingeCutMm: 10, livingHingeBridgeMm: 6 }));
+    expect(c.shoulderCracks).toBe(true);
+    expect(c.earCracks).toBe(true);
+    expect(c.notes).toContain('The shoulders open and close each time; at these settings they may crack. Move the hinge rows closer or lengthen the slits.');
+    expect(c.notes).toContain('The ears flex each time you open it; at these settings they may crack. Move the hinge rows closer or lengthen the slits.');
+  });
+
+  it('says when it raised the shoulders to clear the neck', () => {
+    const p = carrier({ wineShoulderHeightMm: 10 });
+    const min = wineCarrierLayout(p).minShoulderHeightMm;
+    expect(wineCarrierChecks(p).notes).toContain(`Shoulders raised to ${min} mm so the taper clears the bottle's neck.`);
+  });
+
+  it('caps the shoulder bend at 40 mm however stiff the hinge', () => {
+    expect(wineCarrierLayout(carrier({ livingHingePitchMm: 6, livingHingeCutMm: 10, livingHingeBridgeMm: 6 })).bendRadiusMm).toBe(40);
   });
 });

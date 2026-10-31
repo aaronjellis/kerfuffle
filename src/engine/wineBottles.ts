@@ -5,7 +5,7 @@
  * meeting face to face. All lengths in mm along the panels' mid-thickness.
  */
 import { livingHingeSettings } from './fingerJointEngine';
-import { hingeBendRadiusMm } from './livingHinge';
+import { hingeBendRadiusMm, hingeMinWebMm, MIN_SAFE_WEB_MM } from './livingHinge';
 import type { BoxParameters } from './types';
 
 export interface WineBottle {
@@ -54,6 +54,10 @@ const HANDLE_HEIGHT_MM = 70;
 const NECK_CLEARANCE_MM = 17;
 /** The shoulder hinges flex at every opening, so they bend half again gentler than they can. */
 const REPEAT_MARGIN = 1.5;
+/** The gentlest shoulder bend drawn: past this a stiff hinge pattern would balloon the shoulders. */
+const MAX_BEND_MM = 40;
+/** The ear's flex: the tightest bend it takes to let the handle tabs past. */
+const EAR_BEND_MM = 25;
 
 /**
  * Two arcs of `radiusMm` turning `angleRad` with a straight slope between, meeting `insetMm` across
@@ -127,7 +131,7 @@ export function wineCarrierLayout(p: BoxParameters): WineCarrierLayout {
   const bodyHeightMm = Math.max(40, p.wineBottleShoulderMm) + clearance;
   const insetMm = innerSideMm / 2;
   const hinge = hingeBendRadiusMm(livingHingeSettings(p), T, p.kerfMm, innerSideMm);
-  const bendRadiusMm = Math.max(10, REPEAT_MARGIN * (Number.isFinite(hinge) ? hinge : 10));
+  const bendRadiusMm = Math.max(10, Math.min(MAX_BEND_MM, REPEAT_MARGIN * (Number.isFinite(hinge) ? hinge : MAX_BEND_MM)));
   const base = {
     innerSideMm,
     bodyHeightMm,
@@ -151,4 +155,39 @@ export function wineCarrierLayout(p: BoxParameters): WineCarrierLayout {
   const h = Math.max(minH, wanted);
   const l = at(h)!;
   return { ...l, minShoulderHeightMm: minH, shoulderClamped: p.wineShoulderHeightMm > 0 && p.wineShoulderHeightMm < minH };
+}
+
+export interface WineCarrierChecks {
+  /** How tight the hinge pattern bends, with the repeat margin, at the shoulders and the ears */
+  shoulderBendMm: number;
+  earBendMm: number;
+  /** The narrowest wood between slits */
+  webMm: number;
+  shoulderCracks: boolean;
+  earCracks: boolean;
+  thinWeb: boolean;
+  notes: string[];
+}
+
+/** Whether the shoulders and ears bend as often as they're asked to without cracking, and what to say. */
+export function wineCarrierChecks(p: BoxParameters): WineCarrierChecks {
+  const l = wineCarrierLayout(p);
+  const T = p.materialThicknessMm;
+  const settings = livingHingeSettings(p);
+  const raw = (width: number) => {
+    const r = hingeBendRadiusMm(settings, T, p.kerfMm, width);
+    return REPEAT_MARGIN * (Number.isFinite(r) ? r : Infinity);
+  };
+  const shoulderBendMm = raw(l.innerSideMm);
+  const earBendMm = raw(2 * T + 16);
+  const webMm = hingeMinWebMm(settings, p.kerfMm);
+  const shoulderCracks = shoulderBendMm > l.bendRadiusMm + 1e-6;
+  const earCracks = earBendMm > EAR_BEND_MM;
+  const thinWeb = webMm < MIN_SAFE_WEB_MM;
+  const notes: string[] = [];
+  if (shoulderCracks) notes.push('The shoulders open and close each time; at these settings they may crack. Move the hinge rows closer or lengthen the slits.');
+  if (earCracks) notes.push('The ears flex each time you open it; at these settings they may crack. Move the hinge rows closer or lengthen the slits.');
+  if (thinWeb) notes.push('Under 1 mm of wood between slits can char through or snap.');
+  if (l.shoulderClamped) notes.push(`Shoulders raised to ${l.minShoulderHeightMm} mm so the taper clears the bottle's neck.`);
+  return { shoulderBendMm, earBendMm, webMm, shoulderCracks, earCracks, thinWeb, notes };
 }
