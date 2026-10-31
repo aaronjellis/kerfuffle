@@ -1588,11 +1588,14 @@ function generateClamshellBox(
   if (hingeType === 'knuckle-pin') {
     // Knuckle plates, cut from the box's own sheet. Drawn in (u, v): u out from the back face, v up
     // from the seam (down for a base plate). The body runs knHk along the wall and out to the round
-    // end around the pin; a glue tab one ply deep goes into the wall's slot.
+    // end around the pin; a glue tab one ply deep goes into the wall's slot. The body's free outer
+    // corner is chamfered, so the plate isn't sharp where a hand meets it.
+    const knChamfer = Math.max(0, Math.min(3, knR, (knHk - knR) / 2));
     const plate = (dir: 1 | -1): Point2D[] => {
       const pts: Point2D[] = [
         { x: 0, y: -dir * knHk },
-        { x: knE + knR, y: -dir * knHk },
+        { x: knE + knR - knChamfer, y: -dir * knHk },
+        { x: knE + knR, y: -dir * (knHk - knChamfer) },
         { x: knE + knR, y: 0 },
       ];
       for (let i = 1; i < 12; i++) {
