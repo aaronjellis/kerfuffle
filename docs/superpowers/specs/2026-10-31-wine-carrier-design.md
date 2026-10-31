@@ -19,12 +19,13 @@ slotted ear on each side piece that holds the handle together.
 
 A tall rectangular box around one bottle. Six kinds of piece:
 
-- **Front and back** (the same shape, mirrored): each rises straight up the body, bends inward
-  over a living hinge into a short sloped shoulder, then bends back to vertical over a second
-  living hinge and stands up as one half of the handle. Each handle half has a rounded handle
-  hole; the two halves meet face to face at the top.
-- **Two side pieces**: straight sides up the body, a gentle slope in at the shoulders matching
-  the front and back's taper, then an **ear** rising between the handle halves.
+- **Front and back** (the same shape, mirrored): **mostly rectangular** (user). Each rises
+  straight up the body, bends inward over a living hinge into a sloped shoulder, then bends back
+  to vertical over a second living hinge and stands up as one half of the handle, with a **rounded
+  top** and a rounded handle cutout (user). The two halves meet face to face at the top.
+- **Two side pieces**: straight sides up the body, then they **taper all the way in** to meet the
+  joined handle halves (user: "the sides should taper more"), carrying the whole slope, and rise
+  into an **ear** beside the handle on each side.
 - **Bottom.**
 
 ### Opening and closing
@@ -41,9 +42,23 @@ on each side their two tabs stack and go into **one slot** in that side's ear, t
 ears hold the handle halves together and the box shut. *(My call, from the photos: one slot per
 ear for both tabs.)*
 
+The tabs **lock in, not just sit in a plain slot** (user), so the box stays shut when carried:
+
+- Each tab is **hooked**: a notch in its lower edge leaves a small hook (user: "notched tabs").
+- The ear's slot is a **keyhole**: a round top the hook passes through, over a narrow slit.
+- Push the tabs through while the ear flexes out; when it springs back, the notch drops onto the
+  slit's bottom edge and catches. A plain pull won't free it; flex the ear out and lift.
+  *(My reading of "a slot that locks in"; the user's "notched tabs" confirms the notch.)*
+
 Each ear flexes like a latch: an **oval patch of living-hinge slits** across the ear's base lets
 it bend outward, away from the box. Pull the ear out and the handle tabs slip free; let go and it springs back and
 holds them. The oval keeps the flex to the ear, not the whole side wall.
+
+### Rounded edges
+
+**Every surface a hand might touch is rounded; nothing sharp** (user): the handle halves' tops and
+corners, the handle cutout, the ears' tops, the keyhole, and the hooked tabs' corners and notch.
+Only the joints' hidden faces (body tabs in their slots) stay square.
 
 ### Joinery
 
@@ -130,6 +145,10 @@ always available.
 - The front and back open as flaps, bending outward at the shoulders, and the bottle goes in and
   out from the top (user).
 - No tabs or slots on the taper; tab-and-slot along the straight body only (user).
+- Front and back mostly rectangular with rounded handle tops; the sides taper fully to meet the
+  handle (user).
+- Hooked, notched handle tabs that lock into keyhole slots in the ears (user).
+- Every touchable edge rounded (user).
 - Handle tabs lock into slots in the side pieces' ears (user).
 - The ears flex on an oval living-hinge patch, like a latch (user, sketch A).
 - Tab-and-slot joinery (user).
@@ -143,8 +162,9 @@ always available.
 - The taper's control and default, and where exactly the shoulders start.
 - Tab count, length and spacing along each edge; slot sizes with the kerf offset.
 - The handle hole's shape and size, and how far the handle stands above the shoulders.
-- The ear's height, its slot, and the oval patch's size and slit pattern, checked so the ear
-  bends without cracking.
+- The ear's height, the keyhole's and hook's sizes (with the kerf offset, so the hook catches
+  firmly), and the oval patch's size and slit pattern, checked so the ear bends without cracking.
+- The rounding radii.
 - The bottom's fit (tabbed into all four walls, or resting on tabs).
 - Whether to offer arched feet cut into the bottom of the front and back, as in all three
   reference photos (builder's call: an option, on by default).
