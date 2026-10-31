@@ -3,7 +3,9 @@
  * contextual forms (the joins in script fonts) come out as the browser draws them.
  */
 import * as hb from 'harfbuzzjs';
-import type { OutlineCommand, TextFont } from './textOutline';
+import type { OutlineCommand, ShapedGlyph, TextFont } from './textOutline';
+
+export type { ShapedGlyph, TextFont } from './textOutline';
 
 /** A TTF or OTF file as a `TextFont`. Throws if HarfBuzz can't read it. */
 export function harfbuzzFont(bytes: ArrayBuffer): TextFont {
@@ -32,21 +34,24 @@ export function harfbuzzFont(bytes: ArrayBuffer): TextFont {
       const infos = buffer.getGlyphInfos();
       const positions = buffer.getGlyphPositions();
       const s = sizePx / upem;
-      const commands: OutlineCommand[] = [];
+      const glyphs: ShapedGlyph[] = [];
       let pen = 0;
       infos.forEach((info, i) => {
         const p = positions[i];
         const ox = pen + p.xOffset;
         const oy = p.yOffset;
+        const commands: OutlineCommand[] = [];
         for (const c of glyphOutline(info.codepoint)) {
           commands.push({
             type: c.type,
             values: c.values.map((v, k) => (k % 2 === 0 ? (ox + v) * s : -(oy + v) * s)),
           });
         }
+        // Each glyph keeps the text index it came from (UTF-16), so layout can space by cluster.
+        glyphs.push({ cluster: info.cluster, advance: p.xAdvance * s, commands });
         pen += p.xAdvance;
       });
-      return { advance: pen * s, commands };
+      return { advance: pen * s, glyphs };
     },
     emTopToBaseline(sizePx) {
       const { ascender, descender } = font.hExtents();

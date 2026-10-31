@@ -35,10 +35,10 @@ import {
   computePieceAlignmentOffset,
   DEFAULT_TEXT_ARTWORK_CONFIG,
   loadGoogleFont,
-  preloadCuratedGoogleFonts,
   renderTextArtworkToDataUrl,
   resolvePieceDimensions,
 } from './engine/googleFonts';
+import { outlineDataUrl, textArtworkOutline } from './engine/textArtwork';
 import { availableStyle, fetchFontMeta, snapWeight } from './engine/fontSource';
 import { partForMesh, partsForTemplate, reconcileSelection, type PartId } from './ui/parts';
 import type { SectionHandlers } from './ui/sections';
@@ -362,18 +362,23 @@ export const App: React.FC = () => {
   };
 
   const [alignMarginMm, setAlignMarginMm] = useState<number>(4);
-  const [customFontInput, setCustomFontInput] = useState<string>('');
 
-  // Preload curated Google Fonts so font dropdown and canvas render immediately
-  useEffect(() => {
-    preloadCuratedGoogleFonts();
-  }, []);
+
+  /**
+   * A text artwork's picture for the sheet and the 3D view: its outline, the same shape the export
+   * cuts or engraves. Offline, or with a character the font hasn't got, the canvas draws it instead.
+   */
+  const renderTextPicture = async (cfg: TextArtworkConfig, mode: 'print' | 'engrave') => {
+    const outline = await textArtworkOutline(cfg);
+    if (!('failed' in outline)) return outlineDataUrl(outline, mode === 'engrave' ? '#111827' : cfg.color || '#111827');
+    await loadGoogleFont(cfg.fontFamily, Number(cfg.fontWeight) || 400, cfg.fontStyle);
+    return renderTextArtworkToDataUrl(cfg, mode);
+  };
 
   // Artwork & Google Font Text management
   const handleAddTextArtwork = async () => {
     const initialConfig: TextArtworkConfig = { ...DEFAULT_TEXT_ARTWORK_CONFIG };
-    await loadGoogleFont(initialConfig.fontFamily);
-    const { dataUrl, aspectRatio } = renderTextArtworkToDataUrl(initialConfig, 'engrave');
+    const { dataUrl, aspectRatio } = await renderTextPicture(initialConfig, 'engrave');
     const pieceDims = resolvePieceDimensions(model, selectedFaceId);
     const targetW = Math.max(18, Math.min(85, Math.round(pieceDims.widthMm * 0.65)));
     const targetH = Math.max(8, Number((targetW / aspectRatio).toFixed(1)));
@@ -411,11 +416,7 @@ export const App: React.FC = () => {
     }
     const modeToUse = nextMode || art.mode;
 
-    if (patch.fontFamily || patch.fontWeight || patch.fontStyle) {
-      await loadGoogleFont(mergedCfg.fontFamily, Number(mergedCfg.fontWeight) || 400, mergedCfg.fontStyle);
-    }
-
-    const { dataUrl, aspectRatio } = renderTextArtworkToDataUrl(mergedCfg, modeToUse);
+    const { dataUrl, aspectRatio } = await renderTextPicture(mergedCfg, modeToUse);
     const firstLine = (mergedCfg.text || 'Text').split(/\r?\n/)[0].trim() || 'Text';
     const nextHeightMm = Math.max(5, Number((art.widthMm / aspectRatio).toFixed(1)));
 
@@ -753,8 +754,6 @@ export const App: React.FC = () => {
     fitArtwork: handleFitToPiece,
     alignMarginMm,
     setAlignMarginMm,
-    customFontInput,
-    setCustomFontInput,
     exportHingeStl: handleDownloadHingeStl,
     downloadStl: handleDownloadStl,
     downloadStlParts: handleDownloadStlParts,

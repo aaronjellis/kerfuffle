@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import {
   AlignCenter,
   AlignLeft,
@@ -14,12 +14,19 @@ import {
 } from 'lucide-react';
 import { NumberField } from '../../components/NumberField';
 import { fetchFontMeta, offeredWeights, type TextWeight } from '../../engine/fontSource';
-import { GOOGLE_FONT_CATALOG, resolvePieceDimensions } from '../../engine/googleFonts';
+import { fetchFontCatalog, type FontFamily } from '../../engine/fontCatalog';
+import { resolvePieceDimensions } from '../../engine/googleFonts';
+import { loadPreviewCss } from '../../engine/previewFonts';
+import { FontPicker } from '../FontPicker';
 import { SAMPLE_ARTWORK_PRESETS } from '../../engine/sampleArtworks';
 import type { FaceArtwork, TextArtworkConfig } from '../../engine/types';
 import { Field, Segmented } from '../Field';
 import { FACE_OPTIONS, unitHelpers } from './shared';
 import type { SectionProps } from './types';
+
+/** One catalog fetch for the session: the section and the picker both need it. */
+let catalogRequest: Promise<FontFamily[]> | null = null;
+const loadCatalog = () => (catalogRequest ??= fetchFontCatalog());
 
 const WEIGHT_LABELS: Record<TextWeight, string> = {
   '400': 'Regular (400)',
@@ -82,9 +89,16 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
     fitArtwork,
     alignMarginMm,
     setAlignMarginMm,
-    customFontInput,
-    setCustomFontInput,
   } = handlers;
+  const [catalog, setCatalog] = useState<FontFamily[] | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void loadCatalog().then((families) => live && setCatalog(families));
+    return () => {
+      live = false;
+    };
+  }, []);
   const rotationId = useId();
   const sizeId = useId();
   const selectedArtwork =
@@ -251,88 +265,9 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
                 />
               </Field>
 
-              <Field label="Font">
-                <select
-                  value={
-                    GOOGLE_FONT_CATALOG.some(
-                      (f) => f.family === selectedArtwork.textConfig?.fontFamily
-                    )
-                      ? selectedArtwork.textConfig.fontFamily
-                      : '__custom__'
-                  }
-                  style={{
-                    fontFamily: `"${selectedArtwork.textConfig.fontFamily}", sans-serif`,
-                  }}
-                  onChange={(e) => {
-                    if (e.target.value !== '__custom__') {
-                      updateTextConfig(selectedArtwork, {
-                        fontFamily: e.target.value,
-                      });
-                    }
-                  }}
-                >
-                  {(
-                    [
-                      'Sans-Serif',
-                      'Serif',
-                      'Display & Stencil',
-                      'Script & Handwritten',
-                      'Monospace',
-                    ] as const
-                  ).map((cat) => (
-                    <optgroup key={cat} label={cat}>
-                      {GOOGLE_FONT_CATALOG.filter((f) => f.category === cat).map((f) => (
-                        <option
-                          key={f.family}
-                          value={f.family}
-                          style={{ fontFamily: `"${f.family}", sans-serif` }}
-                        >
-                          {f.family} — {f.previewTag}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                  {!GOOGLE_FONT_CATALOG.some(
-                    (f) => f.family === selectedArtwork.textConfig?.fontFamily
-                  ) && (
-                    <option value="__custom__">
-                      Custom: {selectedArtwork.textConfig.fontFamily}
-                    </option>
-                  )}
-                </select>
+              <Field label="Font" group>
+                <FontButton config={selectedArtwork.textConfig} onOpen={() => setPickerOpen(true)} />
               </Field>
-
-              <div className="custom-font-row">
-                <input
-                  type="text"
-                  placeholder="Or any Google Font, like Lobster"
-                  value={customFontInput}
-                  onChange={(e) => setCustomFontInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && customFontInput.trim()) {
-                      updateTextConfig(selectedArtwork, {
-                        fontFamily: customFontInput.trim(),
-                      });
-                      setCustomFontInput('');
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={!customFontInput.trim()}
-                  onClick={() => {
-                    if (customFontInput.trim()) {
-                      updateTextConfig(selectedArtwork, {
-                        fontFamily: customFontInput.trim(),
-                      });
-                      setCustomFontInput('');
-                    }
-                  }}
-                >
-                  Load
-                </button>
-              </div>
 
               <div className="two-col-inputs">
                 <Field label="Weight and style" group>
@@ -737,6 +672,33 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
           Nothing on this piece yet. Use <strong>Add text</strong> or <strong>Upload image</strong> above.
         </p>
       )}
+      {pickerOpen && selectedArtwork?.textConfig && (
+        <FontPicker
+          catalog={catalog}
+          value={selectedArtwork.textConfig.fontFamily}
+          sampleText={selectedArtwork.textConfig.text.split(/\r?\n/)[0].slice(0, 24)}
+          weight={Number(selectedArtwork.textConfig.fontWeight) || 400}
+          style={selectedArtwork.textConfig.fontStyle}
+          onPick={(f) => updateTextConfig(selectedArtwork, { fontFamily: f.family })}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </>
+  );
+};
+
+/** The Font button: the family's name in its own face, opening the picker. */
+const FontButton: React.FC<{ config: TextArtworkConfig; onOpen: () => void }> = ({ config, onOpen }) => {
+  const weight = Number(config.fontWeight) || 400;
+  useEffect(() => {
+    void loadPreviewCss([{ family: config.fontFamily, weight, style: config.fontStyle }]);
+  }, [config.fontFamily, weight, config.fontStyle]);
+  const face = useMemo(() => `"${config.fontFamily.replace(/["\\]/g, '')}", sans-serif`, [config.fontFamily]);
+  return (
+    <button type="button" className="btn font-button" aria-haspopup="dialog" onClick={onOpen}>
+      <span className="font-button-name" style={{ fontFamily: face, fontWeight: weight, fontStyle: config.fontStyle }}>
+        {config.fontFamily}
+      </span>
+    </button>
   );
 };

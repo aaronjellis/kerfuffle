@@ -1,16 +1,14 @@
 /**
- * Text artwork as engraveable vector outlines: each letter's own shapes from the font file, laid out
- * as the canvas draws the text, then merged so overlapping pieces (common in variable-font
- * instances, script joins and accents) become one clean outline with no lines inside it.
+ * Badge text as merged vector outlines: each line shaped whole by HarfBuzz (kerning, ligatures,
+ * script joins), spaced by tracking and per-pair adjustments, then merged so overlapping pieces
+ * become one clean outline with no lines inside it. Works in pixels, y down, at
+ * `TEXT_RENDER_SIZE_PX`; the badge scales the result to its cap height in mm.
  */
 import { Clipper, FillRule, Path64, Paths64 } from 'clipper2-js';
-import type { TextArtworkConfig } from './types';
-import type { TextOutline } from './textPlacement';
+import { bounds, fromPaths64, type Poly, type Rect } from './geom';
 
-export type { TextOutline } from './textPlacement';
-
-/** The canvas text render's em size in pixels; the outline is laid out in the same pixels. */
-export const TEXT_RENDER_SIZE_PX = 110;
+/** The em size the outline is laid out at, in pixels. */
+export const TEXT_RENDER_SIZE_PX = 100;
 
 /** Integer units per pixel for the merge. Clipper works on integers; this keeps 1/1000 px. */
 const UNITS_PER_PX = 1000;
@@ -21,24 +19,67 @@ export interface OutlineCommand {
   values: number[];
 }
 
+/** One shaped glyph: the UTF-16 index of the text it came from, its advance, and its outline placed from the run origin. */
+export interface ShapedGlyph {
+  cluster: number;
+  advance: number;
+  commands: OutlineCommand[];
+}
+
 /** A font that can shape text into placed glyph outlines, as the browser would draw it. */
 export interface TextFont {
   hasChar(ch: string): boolean;
-  /**
-   * The text shaped at `sizePx` (kerning, ligatures, contextual forms): its glyphs' outlines placed
-   * from an origin on the baseline, and the advance to the next text.
-   */
-  shape(text: string, sizePx: number): { advance: number; commands: OutlineCommand[] };
-  /** Where Chrome's `textBaseline = 'top'` sits above the baseline: the top of the em box. */
+  /** The text shaped at `sizePx` (kerning, ligatures, contextual forms), glyph by glyph from an origin on the baseline. */
+  shape(text: string, sizePx: number): { advance: number; glyphs: ShapedGlyph[] };
+  /** Where the top of the em box sits above the baseline. */
   emTopToBaseline(sizePx: number): number;
 }
 
-
-/** The text's lines, as the canvas render splits them. */
-export function textLines(config: TextArtworkConfig): string[] {
-  const lines = (config.text || 'TEXT').split(/\r?\n/).filter((l, idx, arr) => l.length > 0 || arr.length === 1);
-  return lines.length > 0 ? lines : ['TEXT'];
+/** A badge's text. `pairAdjustEm` keys are "line:charIndex", the pair starting at that UTF-16 index. */
+export interface TextConfig {
+  text: string;
+  family: string;
+  weight: number;
+  style: 'normal' | 'italic';
+  align: 'left' | 'center' | 'right';
+  letterSpacingEm: number;
+  lineHeight: number;
+  pairAdjustEm: Record<string, number>;
 }
+
+export const DEFAULT_TEXT: TextConfig = {
+  text: 'YOUR NAME',
+  family: 'Cinzel',
+  weight: 700,
+  style: 'normal',
+  align: 'center',
+  letterSpacingEm: 0.04,
+  lineHeight: 1.2,
+  pairAdjustEm: {},
+};
+
+/** The merged text in px, y down, with what the stage needs to size it and draw kerning handles. */
+export interface TextOutline {
+  poly: Poly;
+  capHeightPx: number;
+  ink: Rect;
+  /** The left edge of each cluster's first glyph, one per cluster per line, in order. */
+  clusters: { line: number; index: number; xPx: number }[];
+  lines: number;
+  /** Each line's baseline y, in order. */
+  baselinesPx: number[];
+}
+
+/**
+ * The lines of a text, blank ones included: a blank line is drawn as nothing but still takes its
+ * line height, and empty text is one blank line. The stage splits text the same way, so its line
+ * numbers match the outline's.
+ */
+export function splitLines(text: string): string[] {
+  return text.split(/\r?\n/);
+}
+
+const textLines = (config: TextConfig): string[] => splitLines(config.text);
 
 /** A run of a line drawn from one font file: a subset file only has some characters. */
 interface Run {
@@ -60,7 +101,7 @@ function runsFor(line: string, fonts: TextFont[]): Run[] | null {
 }
 
 /** The first character none of the fonts can draw, or null when they cover the text. */
-export function missingChar(config: TextArtworkConfig, fonts: TextFont[]): string | null {
+export function missingChar(config: TextConfig, fonts: TextFont[]): string | null {
   for (const line of textLines(config)) {
     for (const ch of line) if (!/\s/.test(ch) && !fonts.some((f) => f.hasChar(ch))) return ch;
   }
@@ -70,61 +111,73 @@ export function missingChar(config: TextArtworkConfig, fonts: TextFont[]): strin
 const translate = (commands: OutlineCommand[], dx: number, dy: number): OutlineCommand[] =>
   commands.map((c) => ({ type: c.type, values: c.values.map((v, i) => v + (i % 2 === 0 ? dx : dy)) }));
 
+/** A glyph on a line: its cluster's index in the line, its pen x and its outline from the line origin. */
+interface LineGlyph {
+  cluster: number;
+  x: number;
+  commands: OutlineCommand[];
+}
+
+/** Shapes a line run by run and puts every glyph on one origin, clusters indexed in the whole line. */
+function shapeLine(line: string, fonts: TextFont[], size: number): { advance: number; glyphs: LineGlyph[] } {
+  const runs = runsFor(line, fonts) ?? [{ text: line, font: fonts[0] }];
+  const out: LineGlyph[] = [];
+  let x = 0;
+  let offset = 0;
+  for (const run of runs) {
+    const shaped = run.font.shape(run.text, size);
+    let pen = 0;
+    for (const g of shaped.glyphs) {
+      out.push({ cluster: offset + g.cluster, x: x + pen, commands: translate(g.commands, x, 0) });
+      pen += g.advance;
+    }
+    x += shaped.advance;
+    offset += run.text.length;
+  }
+  return { advance: x, glyphs: out };
+}
+
 /**
- * Every line's glyph outlines, placed exactly where the canvas render draws them. `baselineFromTop`
- * overrides the em-box top, for the browser's own measure of it.
+ * Every line's glyph outlines, placed: each glyph moves right by the tracking for every cluster
+ * before its own and by every pair adjustment below its cluster; lines stack by the line height and
+ * align by their spaced widths.
  */
-export function layoutTextCommands(
-  config: TextArtworkConfig,
-  fonts: TextFont[],
-  baselineFromTop?: number
-): { widthPx: number; heightPx: number; lines: { text: string; commands: OutlineCommand[] }[] } {
+function layoutText(config: TextConfig, fonts: TextFont[]) {
   const size = TEXT_RENDER_SIZE_PX;
-  const lines = textLines(config);
   const tracking = config.letterSpacingEm * size;
-  const tracked = Math.abs(tracking) >= 0.5;
-  const runsByLine = lines.map((l) => runsFor(l, fonts) ?? [{ text: l, font: fonts[0] }]);
-  const shaped = runsByLine.map((runs) => runs.map((r) => r.font.shape(r.text, size)));
-
-  // Widths as the canvas measures them: the whole line, shaped, plus the tracking between letters.
-  const lineWidths = lines.map((line, i) => {
-    if (!line) return size * 0.5;
-    const base = shaped[i].reduce((w, r) => w + r.advance, 0);
-    return Math.max(20, base + Math.max(0, line.length - 1) * tracking);
+  const lines = textLines(config).map((line, i) => {
+    const { advance, glyphs } = shapeLine(line, fonts, size);
+    const starts = [...new Set(glyphs.map((g) => g.cluster))].sort((a, b) => a - b);
+    const pairs = Object.entries(config.pairAdjustEm)
+      .map(([key, em]) => ({ key: key.split(':').map(Number), dx: em * size }))
+      .filter(({ key }) => key.length === 2 && key[0] === i && Number.isFinite(key[1]));
+    const shift = (cluster: number) =>
+      tracking * starts.filter((c) => c < cluster).length +
+      pairs.reduce((sum, p) => (p.key[1] < cluster ? sum + p.dx : sum), 0);
+    const width = glyphs.length > 0 ? advance + shift(glyphs[glyphs.length - 1].cluster) : 0;
+    return { glyphs, shift, width };
   });
-  const maxLineW = Math.max(60, ...lineWidths);
-  const lineStep = size * Math.max(0.85, config.lineHeight);
-  const padX = Math.round(size * 0.28);
-  const padY = Math.round(size * 0.28);
-  const widthPx = Math.ceil(maxLineW + padX * 2);
-  const heightPx = Math.ceil(size + Math.max(0, lines.length - 1) * lineStep + padY * 2);
-  const toBaseline = baselineFromTop ?? fonts[0].emTopToBaseline(size);
+  const maxW = Math.max(0, ...lines.map((l) => l.width));
+  const top = fonts[0].emTopToBaseline(size);
+  const step = config.lineHeight * size;
 
-  const out = lines.map((line, i) => {
-    const lw = lineWidths[i];
-    let x = padX;
-    if (config.textAlign === 'center') x = (widthPx - lw) / 2;
-    else if (config.textAlign === 'right') x = widthPx - padX - lw;
-    const baseline = padY + i * lineStep + toBaseline;
-    const commands: OutlineCommand[] = [];
-    runsByLine[i].forEach((run, r) => {
-      if (!tracked) {
-        // A whole run at once, as `fillText` draws a line.
-        commands.push(...translate(shaped[i][r].commands, x, baseline));
-        x += shaped[i][r].advance;
-      } else {
-        // Letter by letter, each shaped alone plus the tracking, as the canvas render draws it.
-        // (UTF-16 units, as its loop steps.)
-        for (let k = 0; k < run.text.length; k++) {
-          const one = run.font.shape(run.text[k], size);
-          commands.push(...translate(one.commands, x, baseline));
-          x += one.advance + tracking;
-        }
+  const commands: OutlineCommand[] = [];
+  const clusters: TextOutline['clusters'] = [];
+  const baselinesPx = lines.map((_, i) => top + i * step);
+  lines.forEach((l, i) => {
+    const x0 = config.align === 'center' ? (maxW - l.width) / 2 : config.align === 'right' ? maxW - l.width : 0;
+    const baseline = baselinesPx[i];
+    const seen = new Set<number>();
+    for (const g of l.glyphs) {
+      const dx = x0 + l.shift(g.cluster);
+      commands.push(...translate(g.commands, dx, baseline));
+      if (!seen.has(g.cluster)) {
+        seen.add(g.cluster);
+        clusters.push({ line: i, index: g.cluster, xPx: g.x + dx });
       }
-    });
-    return { text: line, commands };
+    }
   });
-  return { widthPx, heightPx, lines: out };
+  return { commands, clusters, lines: lines.length, baselinesPx };
 }
 
 /**
@@ -197,72 +250,27 @@ export function mergeContours(paths: Paths64): Paths64 {
   return merged.map((p) => Clipper.trimCollinear(p)).filter((p) => p.length >= 3) as Paths64;
 }
 
-const toPx = (paths: Paths64) => paths.map((p) => p.map((q) => ({ x: q.x / UNITS_PER_PX, y: q.y / UNITS_PER_PX })));
-
-/** The text's merged outlines in the canvas render's pixels, no edge more than `tolerancePx` off its curve. */
-export function buildTextOutline(
-  config: TextArtworkConfig,
-  fonts: TextFont[],
-  tolerancePx: number,
-  baselineFromTop?: number
-): TextOutline {
-  const { widthPx, heightPx, lines } = layoutTextCommands(config, fonts, baselineFromTop);
-  // Each line merges on its own; lines whose letters reach into each other merge into one group,
-  // so no two groups overlap and laser software can fill them together.
-  const groups: { text: string; paths: Paths64 }[] = [];
-  for (const line of lines) {
-    let paths = mergeContours(flattenCommands(line.commands, tolerancePx));
-    if (paths.length === 0) continue;
-    let text = line.text;
-    const prev = groups[groups.length - 1];
-    if (prev && Clipper.Intersect(prev.paths, paths, FillRule.NonZero).length > 0) {
-      groups.pop();
-      paths = mergeContours(Clipper.Union(prev.paths, paths, FillRule.NonZero));
-      text = `${prev.text}\n${text}`;
-    }
-    groups.push({ text, paths });
+/** The height of the font's 'H' ink at `sizePx` (else 'X'), or 0.7 em when it has neither. */
+export function capHeightPx(font: TextFont, sizePx: number): number {
+  for (const ch of ['H', 'X']) {
+    if (!font.hasChar(ch)) continue;
+    const ink = bounds(fromPaths64(flattenCommands(font.shape(ch, sizePx).glyphs.flatMap((g) => g.commands), 0.01)));
+    if (ink && ink.h > 0) return ink.h;
   }
-  return { widthPx, heightPx, groups: groups.map((g) => ({ text: g.text, contours: toPx(g.paths) })) };
+  return 0.7 * sizePx;
 }
 
-/** The non-zero filled area of a contour set, in square pixels; even-odd and non-zero agree once merged. */
-export function contoursArea(contours: { x: number; y: number }[][]): number {
-  let a = 0;
-  for (const c of contours) {
-    for (let i = 0, j = c.length - 1; i < c.length; j = i++) a += (c[j].x + c[i].x) * (c[j].y - c[i].y);
-  }
-  return Math.abs(a / 2);
-}
-
-/**
- * How much of two ink masks disagrees by more than a pixel, as a share of their combined ink: a
- * pixel counts only when the other mask has no ink within one pixel of it. Antialiasing and the
- * browser's sub-pixel snapping cost nothing; a wrong letter, weight, slant or font costs a lot.
- */
-export function maskMismatch(a: Uint8Array, b: Uint8Array, width: number, height: number): number {
-  const near = (m: Uint8Array) => {
-    const out = new Uint8Array(m.length);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (!m[y * width + x]) continue;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const X = x + dx;
-            const Y = y + dy;
-            if (X >= 0 && Y >= 0 && X < width && Y < height) out[Y * width + X] = 1;
-          }
-        }
-      }
-    }
-    return out;
+/** The text's merged outline in px at `TEXT_RENDER_SIZE_PX`, no edge more than `tolPx` off its curve. */
+export function buildTextOutline(config: TextConfig, fonts: TextFont[], tolPx: number): TextOutline {
+  const { commands, clusters, lines, baselinesPx } = layoutText(config, fonts);
+  // Clipper's units are 1/1000 px here, the same scale `fromPaths64` divides by for mm.
+  const poly = fromPaths64(mergeContours(flattenCommands(commands, tolPx)));
+  return {
+    poly,
+    capHeightPx: capHeightPx(fonts[0], TEXT_RENDER_SIZE_PX),
+    ink: bounds(poly) ?? { x: 0, y: 0, w: 0, h: 0 },
+    clusters,
+    lines,
+    baselinesPx,
   };
-  const nearA = near(a);
-  const nearB = near(b);
-  let bad = 0;
-  let ink = 0;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] || b[i]) ink++;
-    if ((a[i] && !nearB[i]) || (b[i] && !nearA[i])) bad++;
-  }
-  return ink === 0 ? 0 : bad / ink;
 }

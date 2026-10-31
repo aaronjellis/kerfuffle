@@ -40,8 +40,6 @@ export interface SectionHandlers {
   fitArtwork: (art: FaceArtwork, fitAxis: 'width' | 'height', ratio?: number) => void;
   alignMarginMm: number;
   setAlignMarginMm: (mm: number) => void;
-  customFontInput: string;
-  setCustomFontInput: (value: string) => void;
 
   // 3D print and printed-hinge exports
   exportHingeStl: () => void;

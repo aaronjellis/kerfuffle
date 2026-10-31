@@ -59,8 +59,6 @@ const stubHandlers = (artworks: FaceArtwork[]): SectionHandlers => ({
   fitArtwork: noop,
   alignMarginMm: 4,
   setAlignMarginMm: noop,
-  customFontInput: '',
-  setCustomFontInput: noop,
   exportHingeStl: noop,
   downloadStl: noop,
   downloadStlParts: noop,

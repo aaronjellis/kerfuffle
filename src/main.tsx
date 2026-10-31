@@ -6,6 +6,7 @@ import '@fontsource-variable/bricolage-grotesque';
 import './ui/tokens.css';
 import './ui/app.css';
 import './ui/controls.css';
+import './ui/fontPicker.css';
 import './ui/viewport2d.css';
 import './ui/phone.css';
 

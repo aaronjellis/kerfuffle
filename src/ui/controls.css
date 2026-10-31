@@ -934,3 +934,15 @@
 .visually-hidden-input {
   display: none;
 }
+
+/* The Font button shows the family in its own face, and opens the font picker. */
+.font-button {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.font-button-name {
+  overflow: hidden;
+  font-size: 1.0625rem;
+  text-overflow: ellipsis;
+}
