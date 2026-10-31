@@ -354,6 +354,7 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
           fontFamily="monospace"
         >
           {bed.name} {model.fitsOnBed ? '— fits on one sheet' : '— too big for one bed'}
+          {model.stats.sharedCutMm > 0 && ' · shared edges cut once: cut as laid out, don’t move pieces'}
         </text>
 
         {/* Registration Marks for xTool M2 Print-then-Cut */}

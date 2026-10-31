@@ -61,11 +61,14 @@ export const SheetSection: React.FC<SectionProps> = ({ params, updateParam, disp
           <p className="helper-note">
             {params.shareCutLines
               ? model.stats.sharedCutMm > 0
-                ? `Pieces sit edge to edge and ${(model.stats.sharedCutMm / 1000).toFixed(2)} m of shared edge is cut once, about ${Math.round((100 * model.stats.sharedCutMm) / (model.stats.totalCutLengthMm + model.stats.sharedCutMm))}% less cutting. `
-                : 'Pieces sit edge to edge, but none share a straight edge in this layout. '
-              : 'Packs pieces edge to edge and cuts each shared straight edge once. '}
-            A piece that shares an edge loses it from its own outline: it still cuts out whole, but in your laser
-            software it won't move as one closed shape.
+                ? `${(model.stats.sharedCutMm / 1000).toFixed(2)} m of shared edge is cut once, about ${Math.round((100 * model.stats.sharedCutMm) / (model.stats.totalCutLengthMm + model.stats.sharedCutMm))}% less cutting.`
+                : 'No pieces share a straight edge in this layout, so nothing is saved.'
+              : 'Packs pieces edge to edge and cuts each shared straight edge once, for about 10% less cutting.'}
+          </p>
+          <p className={params.shareCutLines ? 'helper-note hinge-web-warning' : 'helper-note'}>
+            <strong>Cut the sheet exactly as laid out.</strong> Each shared edge belongs to only one of its two
+            pieces, so moving or separating pieces in xTool Studio leaves gaps in their outlines. To rearrange
+            pieces, turn this off and export again.
           </p>
         </>
       )}
