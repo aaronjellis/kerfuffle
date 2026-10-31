@@ -14,7 +14,7 @@ const STYLES: { value: FacePatternStyle; label: string }[] = [
   { value: 'diamond', label: 'Diamond' },
   { value: 'honeycomb', label: 'Honeycomb' },
   { value: 'scallops', label: 'Scallops' },
-  { value: 'sunflower', label: 'Sunflower' },
+  { value: 'sunflower', label: 'Radial dots' },
   { value: 'spiral', label: 'Spiral' },
 ];
 
@@ -24,6 +24,7 @@ const FACE_LABELS: Record<string, string> = {
   back: 'Back',
   left: 'Left',
   right: 'Right',
+  bottom: 'Bottom',
 };
 
 const PREVIEW_W = 56;
@@ -84,7 +85,9 @@ export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, di
   };
   const applyToAll = () => {
     if (!current) return;
-    updateParam('facePatterns', { ...patterns, ...Object.fromEntries(available.map((f) => [f, { ...current }])) });
+    // The bottom is left out: holes underneath are a choice of their own, made on its own chip.
+    const sides = available.filter((f) => f !== 'bottom');
+    updateParam('facePatterns', { ...patterns, ...Object.fromEntries(sides.map((f) => [f, { ...current }])) });
   };
 
   return (

@@ -3,7 +3,7 @@ import type { BoxPanel2D, BoxParameters, FacePatternSettings, FacePatternStyle, 
 import { pointsToSvgPath } from './fingerJointEngine';
 
 /** Faces a see-through pattern can go on. The floor is left solid. */
-export const PATTERN_FACE_IDS = ['top', 'front', 'back', 'left', 'right'] as const;
+export const PATTERN_FACE_IDS = ['top', 'front', 'back', 'left', 'right', 'bottom'] as const;
 
 type Poly = Point2D[];
 
@@ -435,6 +435,8 @@ export function resolvePatternFaces(
   const byId = new Map(panels3D.map((p) => [p.id, p]));
   const targets: PatternFaceTarget[] = [];
   for (const faceId of PATTERN_FACE_IDS) {
+    // A folding box's bottom is its lock; only a wood box's bottom is a plain panel.
+    if (faceId === 'bottom' && params.category !== 'wood-finger') continue;
     const ids = [faceId, `base-${faceId}`];
     const p3 = panels3D.find((p) => ids.includes(p.id));
     if (!p3 || (p3.holeContours && p3.holeContours.length > 0)) continue;

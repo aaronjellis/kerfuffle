@@ -58,9 +58,9 @@ const model = (p: Partial<BoxParameters>) => generateBoxModel({ ...DEFAULT_BOX_P
 
 describe('pattern faces', () => {
   it('offers the lid and plain walls, not slotted or missing ones', () => {
-    expect(model({ category: 'wood-finger', templateId: 'finger-basic', woodLidStyle: 'closed' }).patternFaceIds).toEqual(['top', 'front', 'back', 'left', 'right']);
+    expect(model({ category: 'wood-finger', templateId: 'finger-basic', woodLidStyle: 'closed' }).patternFaceIds).toEqual(['top', 'front', 'back', 'left', 'right', 'bottom']);
     expect(model({ category: 'wood-finger', templateId: 'finger-basic', woodLidStyle: 'sliding-lid' }).patternFaceIds).not.toContain('top');
-    expect(model({ category: 'wood-finger', templateId: 'finger-organizer' }).patternFaceIds).toEqual([]);
+    expect(model({ category: 'wood-finger', templateId: 'finger-organizer' }).patternFaceIds).toEqual(['bottom']);
     expect(model({ category: 'cardboard-fold', templateId: 'cardboard-mailer' }).patternFaceIds).toContain('top');
     expect(model({ category: 'cardboard-fold', templateId: 'cardboard-telescope' }).patternFaceIds).toEqual(['top']);
     expect(model({ category: '3d-print', templateId: '3d-snap-box' }).patternFaceIds).toEqual([]);
