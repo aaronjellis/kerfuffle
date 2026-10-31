@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters } from '../src/engine/types';
-import { WINE_BOTTLES, bottlePatch, shoulderProfile, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
+import { WINE_BOTTLES, bottlePatch, carrierFloorMm, shoulderProfile, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
 
 const carrier = (p: Partial<BoxParameters> = {}): BoxParameters => ({
   ...DEFAULT_BOX_PARAMETERS,
@@ -20,7 +20,8 @@ describe('wine carrier layout', () => {
   it('sizes the box from the bottle', () => {
     const l = wineCarrierLayout(carrier());
     expect(l.innerSideMm).toBe(84);
-    expect(l.bodyHeightMm).toBe(214);
+    // The bottom's top (12 mm feet allowance + 3 mm ply) + the shoulder at 210 + 4 mm clearance.
+    expect(l.bodyHeightMm).toBe(229);
   });
 
   it('solves a shoulder profile that meets its inset and height', () => {
@@ -41,11 +42,21 @@ describe('wine carrier layout', () => {
     expect(l.shoulderHeightMm).toBe(l.minShoulderHeightMm);
   });
 
-  it('clears the neck at the bottle top', () => {
+  // The bottle stands on the bottom, which sits above the feet: heights count from there.
+  it('clears the neck where the bottle really stands, with and without feet', () => {
+    for (const wineFeet of [true, false])
+      for (const b of WINE_BOTTLES) {
+        const p = carrier({ wineFeet, wineBottleId: b.id, wineBottleDiameterMm: b.diameterMm, wineBottleHeightMm: b.heightMm, wineBottleShoulderMm: b.shoulderMm });
+        const l = wineCarrierLayout(p);
+        const stand = carrierFloorMm(p) + p.materialThicknessMm;
+        expect(taperHalfGapMm(l, p.materialThicknessMm, stand + b.heightMm - l.bodyHeightMm)).toBeGreaterThanOrEqual(l.neckClearanceMm - 1e-6);
+      }
+  });
+
+  it('starts the taper above the bottle’s shoulder, even with no clearance', () => {
     for (const b of WINE_BOTTLES) {
-      const p = carrier({ wineBottleId: b.id, wineBottleDiameterMm: b.diameterMm, wineBottleHeightMm: b.heightMm, wineBottleShoulderMm: b.shoulderMm });
-      const l = wineCarrierLayout(p);
-      expect(taperHalfGapMm(l, p.materialThicknessMm, b.heightMm - l.bodyHeightMm)).toBeGreaterThanOrEqual(l.neckClearanceMm - 1e-6);
+      const p = carrier({ wineClearanceMm: 0, wineBottleId: b.id, wineBottleDiameterMm: b.diameterMm, wineBottleHeightMm: b.heightMm, wineBottleShoulderMm: b.shoulderMm });
+      expect(wineCarrierLayout(p).bodyHeightMm).toBeGreaterThanOrEqual(carrierFloorMm(p) + p.materialThicknessMm + b.shoulderMm);
     }
   });
 
@@ -88,5 +99,16 @@ describe('picking a bottle', () => {
 
   it('keeps the size when switching to custom', () => {
     expect(bottlePatch('custom')).toEqual({ wineBottleId: 'custom' });
+  });
+});
+
+describe('the ears flex without cracking', () => {
+  it('passes the ears at the defaults and in 6 mm wood', () => {
+    expect(wineCarrierChecks(carrier()).earCracks).toBe(false);
+    expect(wineCarrierChecks(carrier({ materialThicknessMm: 6 })).earCracks).toBe(false);
+  });
+
+  it('asks the ear for a tighter bend the further it must move to free the tabs', () => {
+    expect(wineCarrierChecks(carrier({ materialThicknessMm: 6 })).earNeedMm).toBeLessThan(wineCarrierChecks(carrier()).earNeedMm);
   });
 });

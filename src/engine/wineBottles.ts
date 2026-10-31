@@ -50,14 +50,23 @@ export interface WineCarrierLayout {
 }
 
 const HANDLE_HEIGHT_MM = 70;
+
+/** The handle's hooked tab: its height in the ear's slot, how far the hook rises above it, and how far past the ear it reaches. */
+export const HOOK = { notchMm: 8, hookMm: 3, reachMm: 2 };
+/** Where the tab's notch starts, up the handle half. */
+export const NOTCH_FROM_MM = 37;
+/** The ear's flexing patch: its height, and its centre's distance below the taper's top. */
+export const EAR_PATCH = { heightMm: 24, belowTaperTopMm: 14 };
+/** The arched feet's height, and the bottom's underside above the floor with and without them. */
+export const FOOT_ARCH_MM = 8;
+export const carrierFloorMm = (p: Pick<BoxParameters, 'wineFeet'>): number => (p.wineFeet ? FOOT_ARCH_MM + 4 : 4);
 /** A 30 mm capsule's radius plus 2 mm. */
 const NECK_CLEARANCE_MM = 17;
 /** The shoulder hinges flex at every opening, so they bend half again gentler than they can. */
 const REPEAT_MARGIN = 1.5;
 /** The gentlest shoulder bend drawn: past this a stiff hinge pattern would balloon the shoulders. */
 const MAX_BEND_MM = 40;
-/** The ear's flex: the tightest bend it takes to let the handle tabs past. */
-const EAR_BEND_MM = 25;
+
 
 /**
  * Two arcs of `radiusMm` turning `angleRad` with a straight slope between, meeting `insetMm` across
@@ -128,7 +137,9 @@ export function wineCarrierLayout(p: BoxParameters): WineCarrierLayout {
   const T = p.materialThicknessMm;
   const clearance = Math.max(0, p.wineClearanceMm);
   const innerSideMm = Math.max(20, p.wineBottleDiameterMm) + 2 * clearance;
-  const bodyHeightMm = Math.max(40, p.wineBottleShoulderMm) + clearance;
+  // Heights count from the foot of the box; the bottle stands on the bottom's top face above it.
+  const stand = carrierFloorMm(p) + T;
+  const bodyHeightMm = stand + Math.max(40, p.wineBottleShoulderMm) + clearance;
   const insetMm = innerSideMm / 2;
   const hinge = hingeBendRadiusMm(livingHingeSettings(p), T, p.kerfMm, innerSideMm);
   const bendRadiusMm = Math.max(10, Math.min(MAX_BEND_MM, REPEAT_MARGIN * (Number.isFinite(hinge) ? hinge : MAX_BEND_MM)));
@@ -145,7 +156,7 @@ export function wineCarrierLayout(p: BoxParameters): WineCarrierLayout {
     return prof && { ...base, shoulderHeightMm: h, minShoulderHeightMm: h, shoulderClamped: false, bendAngleRad: prof.angleRad, slopeLengthMm: prof.slopeMm };
   };
   // The least whole-mm height whose profile exists and clears the neck at the bottle's top.
-  const neckUp = p.wineBottleHeightMm - bodyHeightMm;
+  const neckUp = stand + p.wineBottleHeightMm - bodyHeightMm;
   let minH = 1;
   for (; minH < 1000; minH++) {
     const l = at(minH);
@@ -161,6 +172,8 @@ export interface WineCarrierChecks {
   /** How tight the hinge pattern bends, with the repeat margin, at the shoulders and the ears */
   shoulderBendMm: number;
   earBendMm: number;
+  /** The bend the ear's patch must take to swing the slot clear of the hooks */
+  earNeedMm: number;
   /** The narrowest wood between slits */
   webMm: number;
   shoulderCracks: boolean;
@@ -180,16 +193,19 @@ export function wineCarrierChecks(p: BoxParameters): WineCarrierChecks {
   };
   const shoulderBendMm = raw(l.innerSideMm);
   const earBendMm = raw(2 * T + 16);
+  // The slot must swing out the ply and the hook's reach; the patch turns that far over its lever.
+  const lever = EAR_PATCH.belowTaperTopMm + NOTCH_FROM_MM - HOOK.hookMm + (HOOK.notchMm + HOOK.hookMm) / 2;
+  const earNeedMm = (EAR_PATCH.heightMm * lever) / (T + HOOK.reachMm);
   const webMm = hingeMinWebMm(settings, p.kerfMm);
   const shoulderCracks = shoulderBendMm > l.bendRadiusMm + 1e-6;
-  const earCracks = earBendMm > EAR_BEND_MM;
+  const earCracks = earBendMm > earNeedMm;
   const thinWeb = webMm < MIN_SAFE_WEB_MM;
   const notes: string[] = [];
   if (shoulderCracks) notes.push('The shoulders open and close each time; at these settings they may crack. Move the hinge rows closer or lengthen the slits.');
   if (earCracks) notes.push('The ears flex each time you open it; at these settings they may crack. Move the hinge rows closer or lengthen the slits.');
   if (thinWeb) notes.push('Under 1 mm of wood between slits can char through or snap.');
   if (l.shoulderClamped) notes.push(`Shoulders raised to ${l.minShoulderHeightMm} mm so the taper clears the bottle's neck.`);
-  return { shoulderBendMm, earBendMm, webMm, shoulderCracks, earCracks, thinWeb, notes };
+  return { shoulderBendMm, earBendMm, earNeedMm, webMm, shoulderCracks, earCracks, thinWeb, notes };
 }
 
 /** The settings a bottle choice sets: a preset fills in its size; Custom keeps the size as it is. */

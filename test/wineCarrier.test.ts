@@ -92,7 +92,11 @@ describe('wine carrier pieces', () => {
 
   it('rounds every touchable corner', () => {
     const handleFrom = l.bodyHeightMm + 2 * l.bendRadiusMm * l.bendAngleRad + l.slopeLengthMm + 1;
-    expect(sharpestTurn(parts.front.outlineUp, (q) => q.y > handleFrom)).toBeLessThan(30);
+    // The notch's inside corners are square on purpose: they sit inside the ear, where the hook seats.
+    const notchY = handleFrom - 1 + parts.meta.notchHiMm;
+    const { handleLeftMm: hl, handleRightMm: hr } = parts.meta;
+    const inNotch = (q: { x: number; y: number }) => Math.abs(q.y - notchY) < 1e-6 && [hl, hl - T, hr, hr + T].some((x) => Math.abs(q.x - x) < 1e-6);
+    expect(sharpestTurn(parts.front.outlineUp, (q) => q.y > handleFrom && !inNotch(q))).toBeLessThan(30);
     expect(sharpestTurn(parts.left.outlineUp, (q) => q.y > l.bodyHeightMm + 2)).toBeLessThan(30);
   });
 
@@ -117,5 +121,52 @@ describe('wine carrier pieces', () => {
     expect(front.heightMm).toBeGreaterThan(300);
     expect(m.fitsOnBed).toBe(false);
     expect(m.sheets.length > 1 || m.oversizePanelIds.includes('front')).toBe(true);
+  });
+});
+
+describe('wine carrier fit', () => {
+  it('cuts the ear slot square and full width for its whole height, so the stacked hook passes', () => {
+    for (const q of [carrier(), carrier({ materialThicknessMm: 6 }), carrier({ kerfMm: 0 })]) {
+      const T = q.materialThicknessMm;
+      const { earSlot } = wineCarrierPieces(q).meta;
+      expect(earSlot).toHaveLength(4);
+      const b = bounds([earSlot])!;
+      expect(b.w).toBeCloseTo(2 * T - q.kerfMm, 6);
+      expect(b.h).toBeCloseTo(HOOK.notchMm + HOOK.hookMm, 6);
+    }
+  });
+
+  it('keeps the notch’s inside corners square, so the hook seats its full depth', () => {
+    const q = carrier();
+    const l = wineCarrierLayout(q);
+    const T = q.materialThicknessMm;
+    const parts = wineCarrierPieces(q);
+    const handleFrom = l.bodyHeightMm + 2 * l.bendRadiusMm * l.bendAngleRad + l.slopeLengthMm;
+    const y = handleFrom + parts.meta.notchHiMm;
+    const has = (x: number) => parts.front.outlineUp.some((p) => Math.abs(p.x - x) < 1e-6 && Math.abs(p.y - y) < 1e-6);
+    const { handleLeftMm, handleRightMm } = parts.meta;
+    expect(has(handleLeftMm)).toBe(true);
+    expect(has(handleLeftMm - T)).toBe(true);
+    expect(has(handleRightMm)).toBe(true);
+    expect(has(handleRightMm + T)).toBe(true);
+  });
+
+  it('keeps solid wood between every front slot and the front’s edge', () => {
+    const parts = wineCarrierPieces(carrier());
+    const b = bounds([parts.front.outlineUp])!;
+    const bodyLeft = Math.min(...parts.front.outlineUp.filter((p) => p.y < 10).map((p) => p.x));
+    const bodyRight = Math.max(...parts.front.outlineUp.filter((p) => p.y < 10).map((p) => p.x));
+    for (const hole of parts.front.holesUp.slice(1)) {
+      expect(Math.min(...hole.map((p) => p.x)) - bodyLeft).toBeGreaterThanOrEqual(2);
+      expect(bodyRight - Math.max(...hole.map((p) => p.x))).toBeGreaterThanOrEqual(2);
+    }
+    expect(b.w).toBeGreaterThan(0);
+  });
+
+  it('lets the ear’s hinge slits run out to its edges, with no solid border to crack', () => {
+    const { earPatch, ear } = wineCarrierPieces(carrier()).meta;
+    const half = Math.max(...ear.map((p) => p.x));
+    const widest = Math.max(...earPatch.flat().map((p) => Math.abs(p.x)));
+    expect(half - widest).toBeLessThan(0.5);
   });
 });

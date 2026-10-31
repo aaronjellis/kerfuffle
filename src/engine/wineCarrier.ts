@@ -17,15 +17,14 @@
  * frame. Touchable edges are rounded; the joints' hidden faces (body tabs, slots) stay square.
  */
 import { livingHingeSettings, pointsToSvgPath } from './fingerJointEngine';
-import { bounds, type Poly } from './geom';
+import { bounds, union, type Poly } from './geom';
 import { hingeCuts, hingeShapePath } from './livingHinge';
 import { buildShape, DEFAULT_SHAPE } from './shapes';
 import { slotsFor, tabbedEdge, tabCentres, tabCountFor, TAB_MM, type TabRun } from './tabSlot';
 import type { BoxPanel2D, BoxParameters, DielinePath, Panel3DTransform, Point2D } from './types';
-import { taperHalfGapMm, wineCarrierLayout } from './wineBottles';
+import { carrierFloorMm, EAR_PATCH, FOOT_ARCH_MM, HOOK, NOTCH_FROM_MM, taperHalfGapMm, wineCarrierLayout } from './wineBottles';
 
-/** The handle's hooked tab: its height in the ear's slot, how far the hook rises above it, and how far past the ear it reaches. */
-export const HOOK = { notchMm: 8, hookMm: 3, reachMm: 4 };
+export { HOOK };
 
 /** Rounding on every touchable corner (at most 30% of the ply, so the tab's notch survives it), and the curve tolerance. */
 const roundFor = (T: number) => Math.min(1.5, 0.3 * T);
@@ -34,9 +33,7 @@ const HANDLE_CORNER_MM = 10;
 /** The ear's solid wood either side of the stacked tabs, and how far below the handle's top it stops. */
 const EAR_MARGIN_MM = 8;
 const EAR_DROP_MM = 12;
-/** Where the tab's notch starts, up the handle half. */
-const NOTCH_FROM_MM = 37;
-const FOOT_ARCH_MM = 8;
+
 
 interface Rect {
   x: number;
@@ -78,6 +75,10 @@ export interface CarrierParts {
     /** The handle tab beyond the ear, carried: its bottom and the hook's top. */
     tabLo: number;
     tabHi: number;
+    /** The handle half's two side edges across the front, and the notch's top up the handle. */
+    handleLeftMm: number;
+    handleRightMm: number;
+    notchHiMm: number;
   };
 }
 
@@ -160,14 +161,18 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   const T = params.materialThicknessMm;
   const kerf = params.kerfMm;
   const S = l.innerSideMm;
-  const W = S + 2 * T;
+  // The front and back overhang the sides by a ply, so the side tabs' slots sit inside solid wood.
+  const m = T;
+  const W = S + 2 * T + 2 * m;
+  const L = m + T; // the handle half's left edge, between the ears
+  const R = m + T + S; // and its right edge
   const Hb = l.bodyHeightMm;
   const Hs = l.shoulderHeightMm;
   const arc = l.bendRadiusMm * l.bendAngleRad;
   const handleFrom = Hb + 2 * arc + l.slopeLengthMm;
   const Hf = handleFrom + l.handleHeightMm;
   // The bottom's underside: raised clear of the feet.
-  const floor = params.wineFeet ? FOOT_ARCH_MM + 4 : 4;
+  const floor = carrierFloorMm(params);
   const settings = livingHingeSettings(params);
 
   const sideRun: TabRun = { fromMm: floor + T + 4, toMm: Hb - 4, count: tabCountFor(Hb - floor - T - 8), tabMm: TAB_MM };
@@ -194,40 +199,42 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   front.push(
     { x: W, y: 0 },
     { x: W, y: Hb },
-    { x: T + S, y: Hb },
+    { x: R, y: Hb },
     // The right handle edge and its hooked tab: the notch through the ear, the hook rising beyond it.
-    { x: T + S, y: hy(notch.lo) },
-    { x: W + HOOK.reachMm, y: hy(notch.lo) },
-    { x: W + HOOK.reachMm, y: hy(notch.top) },
-    { x: W, y: hy(notch.top) },
-    { x: W, y: hy(notch.hi) },
-    { x: T + S, y: hy(notch.hi) },
+    { x: R, y: hy(notch.lo) },
+    { x: R + T + HOOK.reachMm, y: hy(notch.lo) },
+    { x: R + T + HOOK.reachMm, y: hy(notch.top) },
+    { x: R + T, y: hy(notch.top) },
+    { x: R + T, y: hy(notch.hi) },
+    { x: R, y: hy(notch.hi) },
   );
-  corner(T + S - HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, 0, Math.PI / 2);
-  corner(T + HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, Math.PI / 2, Math.PI);
+  corner(R - HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, 0, Math.PI / 2);
+  corner(L + HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, Math.PI / 2, Math.PI);
   front.push(
-    { x: T, y: hy(notch.hi) },
-    { x: 0, y: hy(notch.hi) },
-    { x: 0, y: hy(notch.top) },
-    { x: -HOOK.reachMm, y: hy(notch.top) },
-    { x: -HOOK.reachMm, y: hy(notch.lo) },
-    { x: T, y: hy(notch.lo) },
-    { x: T, y: Hb },
+    { x: L, y: hy(notch.hi) },
+    { x: L - T, y: hy(notch.hi) },
+    { x: L - T, y: hy(notch.top) },
+    { x: L - T - HOOK.reachMm, y: hy(notch.top) },
+    { x: L - T - HOOK.reachMm, y: hy(notch.lo) },
+    { x: L, y: hy(notch.lo) },
+    { x: L, y: Hb },
     { x: 0, y: Hb },
   );
-  const frontOutline = roundCorners(front, roundFor(T));
+  // The notch's two inside corners stay square: the hook seats its full depth on the ear.
+  const square = [L, L - T, R, R + T].map((x) => ({ x, y: hy(notch.hi) }));
+  const frontOutline = roundCorners(front, roundFor(T), (q) => !square.some((c) => Math.abs(c.x - q.x) < 1e-9 && Math.abs(c.y - q.y) < 1e-9));
   const handleHole = move(centredShape('pill', Math.max(24, Math.min(S - 24, 90)), 28), W / 2, Hf - 30);
   const frontSlots = [
-    ...slotsFor(sideRun, T / 2, T, kerf, false),
-    ...slotsFor(sideRun, W - T / 2, T, kerf, false),
-    ...slotsFor({ ...bottomRun, fromMm: T + bottomRun.fromMm, toMm: T + bottomRun.toMm }, slotLine, T, kerf, true),
+    ...slotsFor(sideRun, m + T / 2, T, kerf, false),
+    ...slotsFor(sideRun, W - m - T / 2, T, kerf, false),
+    ...slotsFor({ ...bottomRun, fromMm: L + bottomRun.fromMm, toMm: L + bottomRun.toMm }, slotLine, T, kerf, true),
   ];
   const bendZones: [number, number][] = [
     [Hb, Hb + arc],
     [Hb + arc + l.slopeLengthMm, handleFrom],
   ];
-  const frontCuts = bendZones.flatMap(([lo, hi]) => hingeCuts(settings, { x: T, y: lo, width: S, height: hi - lo }).flat());
-  const frontSafe: Rect = { x: 6, y: floor + T + 6, width: W - 12, height: Hb - 6 - (floor + T + 6) };
+  const frontCuts = bendZones.flatMap(([lo, hi]) => hingeCuts(settings, { x: L, y: lo, width: S, height: hi - lo }).flat());
+  const frontSafe: Rect = { x: L + 3, y: floor + T + 6, width: S - 6, height: Hb - 6 - (floor + T + 6) };
   const frontPiece = (id: 'front' | 'back'): CarrierPiece => sized({
     id,
     name: id === 'front' ? 'Front and handle half' : 'Back and handle half',
@@ -245,25 +252,39 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   const halfWidth = (h: number) => Math.min(S / 2, taperHalfGapMm(l, T, h) + T);
   const N = 60;
   const mirrored: TabRun = { ...sideRun, fromMm: Hb - sideRun.toMm, toMm: Hb - sideRun.fromMm };
+  // The side follows the closed flaps in to the handle's two plies, then the ear rises from a full-
+  // width base well below the taper's top, so it flexes on its patch, not at a narrow neck.
+  const earBase = Hb + Hs - EAR_PATCH.belowTaperTopMm - EAR_PATCH.heightMm / 2 - 2;
   const side: Point2D[] = [{ x: 0, y: 0 }, ...tabbedEdge({ x: S, y: 0 }, { x: S, y: Hb }, sideRun, T, 1)];
   for (let i = 1; i <= N; i++) side.push({ x: S / 2 + halfWidth((Hs * i) / N), y: Hb + (Hs * i) / N });
-  side.push({ x: S / 2 + e, y: Hb + Hs }, { x: S / 2 + e, y: earTop - e });
-  for (let i = 1; i < 24; i++) {
-    const t = (Math.PI * i) / 24;
-    side.push({ x: S / 2 + e * Math.cos(t), y: earTop - e + e * Math.sin(t) });
-  }
-  side.push({ x: S / 2 - e, y: earTop - e }, { x: S / 2 - e, y: Hb + Hs });
   for (let i = N; i >= 1; i--) side.push({ x: S / 2 - halfWidth((Hs * i) / N), y: Hb + (Hs * i) / N });
   side.push(...tabbedEdge({ x: 0, y: Hb }, { x: 0, y: 0 }, mirrored, T, 1));
+  const earShape: Point2D[] = [{ x: S / 2 - e, y: earBase }, { x: S / 2 + e, y: earBase }];
+  for (let i = 0; i <= 24; i++) {
+    const t = (Math.PI * i) / 24;
+    earShape.push({ x: S / 2 + e * Math.cos(t), y: earTop - e + e * Math.sin(t) });
+  }
+  const joined = largest(union([[side], [earShape]]));
   // Round the part above the body only; the body's tabs are hidden in the front and back.
-  const sideOutline = roundCorners(side, roundFor(T), (q) => q.y > Hb + 1e-6);
+  const sideOutline = roundCorners(joined, roundFor(T), (q) => q.y > Hb + 1e-6);
   const slotLo = Hb + Hs + notch.lo - HOOK.hookMm;
-  const earSlot = move(centredShape('rounded', 2 * T - kerf, HOOK.notchMm + HOOK.hookMm, 1), S / 2, slotLo + (HOOK.notchMm + HOOK.hookMm) / 2);
-  const patch = { cx: S / 2, cy: Hb + Hs + 10, rx: e - 2, ry: 10 };
+  // Square, and the stacked plies' full width all the way up, so the hook passes.
+  const slotW = 2 * T - kerf;
+  const earSlot = [
+    { x: S / 2 - slotW / 2, y: slotLo },
+    { x: S / 2 + slotW / 2, y: slotLo },
+    { x: S / 2 + slotW / 2, y: slotLo + HOOK.notchMm + HOOK.hookMm },
+    { x: S / 2 - slotW / 2, y: slotLo + HOOK.notchMm + HOOK.hookMm },
+  ];
+  // An oval wider than the ear, so its middle slits run out to the ear's edges: no solid border.
+  const patch = { cx: S / 2, cy: Hb + Hs - EAR_PATCH.belowTaperTopMm, rx: e + 4, ry: EAR_PATCH.heightMm / 2 };
   const earPatch: Point2D[][] = hingeCuts(settings, { x: patch.cx - patch.rx, y: patch.cy - patch.ry, width: 2 * patch.rx, height: 2 * patch.ry })
     .flat()
     .flatMap((line) => line.slice(1).map((b, i) => clipToEllipse(line[i], b, patch.cx, patch.cy, patch.rx, patch.ry)))
-    .filter((seg): seg is [Point2D, Point2D] => seg !== null && Math.hypot(seg[1].x - seg[0].x, seg[1].y - seg[0].y) > 1);
+    .filter((seg): seg is [Point2D, Point2D] => seg !== null)
+    // Within the ear's width, a hair inside its edges.
+    .map(([a, b]) => [a, b].map((q) => ({ x: Math.max(S / 2 - e + 0.01, Math.min(S / 2 + e - 0.01, q.x)), y: q.y })) as [Point2D, Point2D])
+    .filter(([a, b]) => Math.hypot(b.x - a.x, b.y - a.y) > 1);
   const sideSlots = slotsFor(bottomRun, slotLine, T, kerf, true);
   const sidePiece = (id: 'left' | 'right'): CarrierPiece => sized({
     id,
@@ -284,8 +305,8 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   ];
 
   const earRing: Point2D[] = [
-    { x: -e, y: Hb + Hs },
-    { x: e, y: Hb + Hs },
+    { x: -e, y: earBase },
+    { x: e, y: earBase },
     ...Array.from({ length: 25 }, (_, i) => ({ x: e * Math.cos((Math.PI * i) / 24), y: earTop - e + e * Math.sin((Math.PI * i) / 24) })),
   ];
   return {
@@ -303,6 +324,9 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
       earPatch: earPatch.map((seg) => move(seg, -S / 2, 0)),
       tabLo: Hb + Hs + notch.lo,
       tabHi: Hb + Hs + notch.top,
+      handleLeftMm: L,
+      handleRightMm: R,
+      notchHiMm: notch.hi,
     },
   };
 }
@@ -320,7 +344,7 @@ export function generateWineCarrier(params: BoxParameters): { panels2D: BoxPanel
   const T = params.materialThicknessMm;
   const S = l.innerSideMm;
   const totalH = l.bodyHeightMm + l.shoulderHeightMm + l.handleHeightMm;
-  const floor = params.wineFeet ? FOOT_ARCH_MM + 4 : 4;
+  const floor = carrierFloorMm(params);
   const panels2D: BoxPanel2D[] = [];
   const panels3D: Panel3DTransform[] = [];
 
