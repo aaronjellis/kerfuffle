@@ -20,6 +20,7 @@ const CATEGORIES: { value: CategoryFilter; label: string }[] = [
   { value: 'display', label: 'Display' },
   { value: 'handwriting', label: 'Handwriting' },
   { value: 'monospace', label: 'Monospace' },
+  { value: 'stencil', label: 'Stencil' },
 ];
 
 /** A family's CSS `font-family` value, with a generic to fall back on until its stylesheet arrives. */

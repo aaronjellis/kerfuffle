@@ -65,3 +65,12 @@ describe('previewFace', () => {
     expect(previewFace({ weights: [], styles: [] }, 600, 'normal')).toEqual({ weight: 600, style: 'normal' });
   });
 });
+
+describe('stencil filter', () => {
+  it('lists only the stencil families', async () => {
+    const { filterFamilies } = await import('../src/ui/fontList');
+    const { STENCIL_FAMILIES } = await import('../src/engine/fontCatalog');
+    const catalog = [...STENCIL_FAMILIES, 'Bungee', 'Inter'].map((family) => ({ id: family.toLowerCase(), family, category: 'display' as const, weights: [400], styles: ['normal' as const] }));
+    expect(filterFamilies(catalog, '', 'stencil').map((f) => f.family)).toEqual([...STENCIL_FAMILIES]);
+  });
+});

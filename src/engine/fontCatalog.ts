@@ -28,6 +28,12 @@ export const FALLBACK_FAMILIES: FontFamily[] = [
   { id: 'merriweather', family: 'Merriweather', category: 'serif', weights: [300, 400, 500, 600, 700, 800, 900], styles: ['normal', 'italic'] },
   { id: 'abril-fatface', family: 'Abril Fatface', category: 'serif', weights: [400], styles: ['normal'] },
   { id: 'stardos-stencil', family: 'Stardos Stencil', category: 'display', weights: [400, 700], styles: ['normal'] },
+  { id: 'allerta-stencil', family: 'Allerta Stencil', category: 'sans-serif', weights: [400], styles: ['normal'] },
+  { id: 'big-shoulders-stencil', family: 'Big Shoulders Stencil', category: 'display', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], styles: ['normal'] },
+  { id: 'saira-stencil', family: 'Saira Stencil', category: 'display', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], styles: ['normal', 'italic'] },
+  { id: 'sirin-stencil', family: 'Sirin Stencil', category: 'display', weights: [400], styles: ['normal'] },
+  { id: 'stick-no-bills', family: 'Stick No Bills', category: 'sans-serif', weights: [200, 300, 400, 500, 600, 700, 800], styles: ['normal'] },
+  { id: 'wallpoet', family: 'Wallpoet', category: 'display', weights: [400], styles: ['normal'] },
   { id: 'black-ops-one', family: 'Black Ops One', category: 'display', weights: [400], styles: ['normal'] },
   { id: 'alfa-slab-one', family: 'Alfa Slab One', category: 'display', weights: [400], styles: ['normal'] },
   { id: 'righteous', family: 'Righteous', category: 'display', weights: [400], styles: ['normal'] },
@@ -41,6 +47,22 @@ export const FALLBACK_FAMILIES: FontFamily[] = [
   { id: 'jetbrains-mono', family: 'JetBrains Mono', category: 'monospace', weights: [100, 200, 300, 400, 500, 600, 700, 800], styles: ['normal', 'italic'] },
   { id: 'space-mono', family: 'Space Mono', category: 'monospace', weights: [400, 700], styles: ['normal', 'italic'] },
 ];
+
+/**
+ * Google families that are true stencils: every letter's island is bridged to the rest, so cut-out
+ * text keeps the middles of O, A, B and 8. Checked by outlining "OAB8DPRQ0469" in each at 400 and
+ * 700 and finding no holes. (Bungee, for one, has 13.)
+ */
+export const STENCIL_FAMILIES = [
+  'Allerta Stencil',
+  'Big Shoulders Stencil',
+  'Black Ops One',
+  'Saira Stencil',
+  'Sirin Stencil',
+  'Stardos Stencil',
+  'Stick No Bills',
+  'Wallpoet',
+] as const;
 
 export const CATALOG_URL = 'https://api.fontsource.org/v1/fonts?type=google&subsets=latin';
 

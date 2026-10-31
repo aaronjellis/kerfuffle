@@ -1,8 +1,11 @@
 /** What the font picker lists: the catalog narrowed by a search and a category, and the recently picked families. */
-import type { FontCategory, FontFamily } from '../engine/fontCatalog';
+import { STENCIL_FAMILIES, type FontCategory, type FontFamily } from '../engine/fontCatalog';
 import { availableStyle, nearestWeight } from '../engine/fontSource';
 
-export type CategoryFilter = FontCategory | 'all';
+/** A catalog category, every family, or the stencils (which cut out without losing letters' middles). */
+export type CategoryFilter = FontCategory | 'all' | 'stencil';
+
+const STENCILS = new Set<string>(STENCIL_FAMILIES);
 
 /** Where the last families picked are kept. */
 export const RECENT_FONTS_KEY = 'kerfuffle.recentFonts';
@@ -11,7 +14,8 @@ const RECENT_LIMIT = 8;
 /** The families whose name contains the query (any case) in the category, in catalog order. */
 export function filterFamilies(catalog: FontFamily[], query: string, category: CategoryFilter): FontFamily[] {
   const q = query.trim().toLowerCase();
-  return catalog.filter((f) => (category === 'all' || f.category === category) && (q === '' || f.family.toLowerCase().includes(q)));
+  const inCategory = (f: FontFamily) => category === 'all' || (category === 'stencil' ? STENCILS.has(f.family) : f.category === category);
+  return catalog.filter((f) => inCategory(f) && (q === '' || f.family.toLowerCase().includes(q)));
 }
 
 function defaultStorage(): Storage | undefined {

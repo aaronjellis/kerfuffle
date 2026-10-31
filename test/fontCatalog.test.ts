@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CATALOG_URL, FALLBACK_FAMILIES, fetchFontCatalog, parseCatalog } from '../src/engine/fontCatalog';
+import { CATALOG_URL, FALLBACK_FAMILIES, STENCIL_FAMILIES, fetchFontCatalog, parseCatalog } from '../src/engine/fontCatalog';
 import { createFontProvider } from '../src/engine/fontProvider';
 import { loadPreviewCss } from '../src/engine/previewFonts';
 import { DEFAULT_TEXT, type TextConfig } from '../src/engine/textOutline';
@@ -109,8 +109,9 @@ describe('fetchFontCatalog', () => {
 });
 
 describe('FALLBACK_FAMILIES', () => {
-  it('lists the 25 curated families', () => {
-    expect(FALLBACK_FAMILIES).toHaveLength(25);
+  it('lists the 25 curated families and every stencil', () => {
+    expect(FALLBACK_FAMILIES).toHaveLength(31);
+    for (const family of STENCIL_FAMILIES) expect(FALLBACK_FAMILIES.some((f) => f.family === family)).toBe(true);
     expect(FALLBACK_FAMILIES.every((f) => f.weights.length > 0 && f.styles.includes('normal'))).toBe(true);
   });
 });
