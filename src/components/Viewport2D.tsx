@@ -254,10 +254,12 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
               </span>
             )}
             <span className="hud-chip">
-              Sheet{' '}
-              {displayUnit === 'in'
-                ? `${(sheetWidthMm / 25.4).toFixed(2)} × ${(sheetHeightMm / 25.4).toFixed(2)} in`
-                : `${Math.round(sheetWidthMm)} × ${Math.round(sheetHeightMm)} mm`}
+              {(() => {
+                const w = model.sheetSize?.widthMm ?? sheetWidthMm;
+                const h = model.sheetSize?.heightMm ?? sheetHeightMm;
+                const size = displayUnit === 'in' ? `${(w / 25.4).toFixed(2)} × ${(h / 25.4).toFixed(2)} in` : `${Math.round(w)} × ${Math.round(h)} mm`;
+                return model.sheets.length > 1 ? `${model.sheets.length} sheets of ${size}` : `Sheet ${size}`;
+              })()}
             </span>
           </div>
 
