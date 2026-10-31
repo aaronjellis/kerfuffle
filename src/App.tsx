@@ -29,6 +29,7 @@ import {
   exportBoxSvg,
   exportXcsProject,
 } from './engine/exporters';
+import { sheetModel } from './engine/sheets';
 import { createSampleArtworkDataUrl, SampleArtworkPreset } from './engine/sampleArtworks';
 import {
   computePieceAlignmentOffset,
@@ -650,15 +651,26 @@ export const App: React.FC = () => {
     }
   };
 
+  /**
+   * Each material sheet as a model of its own with its file-name suffix: the whole sheet when the
+   * pieces fit one, else one per sheet, so each file is the material's size.
+   */
+  const exportSheets = () =>
+    activeModel.sheets.length <= 1
+      ? [{ model: activeModel, suffix: '' }]
+      : activeModel.sheets.map((_, i) => ({ model: sheetModel(activeModel, i), suffix: `-sheet-${i + 1}-of-${activeModel.sheets.length}` }));
+
   const handleDownloadSvg = async (layerFilter: 'all' | 'score-only' | 'cut-only' = 'all') => {
     // The score-only file carries no artwork.
     const outlines = layerFilter === 'score-only' ? undefined : await textOutlinesForExport();
-    const svg = exportBoxSvg(activeModel, activeArtworks, layerFilter, outlines);
     const suffix = layerFilter === 'score-only' ? '-score' : layerFilter === 'cut-only' ? '-cut' : '';
-    triggerDownload(
-      new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }),
-      `${slugBase}-${params.exportProfile}${suffix}.svg`
-    );
+    for (const sheet of exportSheets()) {
+      const svg = exportBoxSvg(sheet.model, activeArtworks, layerFilter, outlines);
+      triggerDownload(
+        new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }),
+        `${slugBase}-${params.exportProfile}${sheet.suffix}${suffix}.svg`
+      );
+    }
   };
 
   // A 3D-print box has no laser settings (its preset is all zeros), so it gets no .xcs.
@@ -668,10 +680,8 @@ export const App: React.FC = () => {
     import.meta.env.VITE_XCS_EXPORT === '1';
 
   const handleDownloadXcs = () => {
-    triggerDownload(
-      new Blob([exportXcsProject(activeModel)], { type: 'application/json' }),
-      `${slugBase}.xcs`
-    );
+    for (const sheet of exportSheets())
+      triggerDownload(new Blob([exportXcsProject(sheet.model)], { type: 'application/json' }), `${slugBase}${sheet.suffix}.xcs`);
   };
 
   const handleDownloadSplitSvg = async () => {
@@ -684,22 +694,22 @@ export const App: React.FC = () => {
   const handleDownloadPdf = async () => {
     setIsExportingPdf(true);
     try {
-      const pdfBytes = await exportBoxPdf(activeModel, activeArtworks, await textOutlinesForExport());
-      triggerDownload(
-        new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }),
-        `${slugBase}-${params.exportProfile}.pdf`
-      );
+      const outlines = await textOutlinesForExport();
+      for (const sheet of exportSheets()) {
+        const pdfBytes = await exportBoxPdf(sheet.model, activeArtworks, outlines);
+        triggerDownload(
+          new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }),
+          `${slugBase}-${params.exportProfile}${sheet.suffix}.pdf`
+        );
+      }
     } finally {
       setIsExportingPdf(false);
     }
   };
 
   const handleDownloadDxf = () => {
-    const dxf = exportBoxDxf(activeModel);
-    triggerDownload(
-      new Blob([dxf], { type: 'application/dxf' }),
-      `${slugBase}.dxf`
-    );
+    for (const sheet of exportSheets())
+      triggerDownload(new Blob([exportBoxDxf(sheet.model)], { type: 'application/dxf' }), `${slugBase}${sheet.suffix}.dxf`);
   };
 
   const handleDownloadStl = () => {

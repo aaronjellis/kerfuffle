@@ -22,6 +22,47 @@ export const SheetSection: React.FC<SectionProps> = ({ params, updateParam, disp
         </select>
       </Field>
 
+      {params.category !== '3d-print' && (
+        <>
+          <Switch
+            label="Smaller material sheet"
+            checked={params.materialSheet}
+            onChange={(v) => updateParam('materialSheet', v)}
+          />
+          {params.materialSheet && (
+            <div className="two-col-inputs">
+              <Field label={`Sheet width (${uLabel})`}>
+                <NumberField
+                  valueMm={params.materialWidthMm}
+                  minMm={50}
+                  maxMm={1500}
+                  step={isInch ? 0.1 : 1}
+                  displayUnit={displayUnit}
+                  inDecimals={2}
+                  mmDecimals={0}
+                  ariaLabel="Material sheet width"
+                  onChangeMm={(mm) => updateParam('materialWidthMm', mm)}
+                />
+              </Field>
+              <Field label={`Sheet height (${uLabel})`}>
+                <NumberField
+                  valueMm={params.materialHeightMm}
+                  minMm={50}
+                  maxMm={1500}
+                  step={isInch ? 0.1 : 1}
+                  displayUnit={displayUnit}
+                  inDecimals={2}
+                  mmDecimals={0}
+                  ariaLabel="Material sheet height"
+                  onChangeMm={(mm) => updateParam('materialHeightMm', mm)}
+                />
+              </Field>
+            </div>
+          )}
+          <SheetNote model={model} fmtDim={fmtDim} unit={uLabel} />
+        </>
+      )}
+
       <div className="two-col-inputs">
         <Field label={`Part gap (${uLabel})`}>
           <NumberField
@@ -146,4 +187,24 @@ export const SheetSection: React.FC<SectionProps> = ({ params, updateParam, disp
       </div>
     </>
   );
+};
+
+/** How many sheets the pieces take, and anything that doesn't fit. */
+const SheetNote: React.FC<{ model: SectionProps['model']; fmtDim: (mm: number) => string; unit: string }> = ({ model, fmtDim, unit }) => {
+  const size = model.sheetSize;
+  if (!size) return <p className="helper-note">Fits on one bed.</p>;
+  const n = model.sheets.length;
+  const dims = `${fmtDim(size.widthMm)} × ${fmtDim(size.heightMm)} ${unit}`;
+  const tooBig = model.panels2D.filter((p) => model.oversizePanelIds.includes(p.id)).map((p) => p.name);
+  const parts = [
+    model.params.materialSheet
+      ? n === 1
+        ? `Fits on one ${dims} sheet.`
+        : `Cuts from ${n} sheets of ${dims}; each exports as its own file.`
+      : `Too big for one bed: split onto ${n} bed-sized sheets, each exported as its own file.`,
+  ];
+  if (size.trimmed) parts.push('The material is bigger than the bed, so each sheet is trimmed to the bed.');
+  if (tooBig.length) parts.push(`Bigger than the sheet: ${tooBig.join(', ')}. Use a bigger sheet or a smaller box.`);
+  const warn = size.trimmed || tooBig.length > 0;
+  return <p className={warn ? 'helper-note hinge-web-warning' : 'helper-note'}>{parts.join(' ')}</p>;
 };

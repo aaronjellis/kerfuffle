@@ -334,7 +334,18 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
           </pattern>
         </defs>
 
-        {/* Machine Bed Work Area */}
+        {/* Material sheets, when the pieces are split onto them; otherwise the machine bed */}
+        {model.sheetSize &&
+          model.sheets.map((sh, i) => (
+            <g key={`sheet-${i}`}>
+              <rect x={sh.x} y={sh.y} width={sh.widthMm} height={sh.heightMm} fill="#0b1017" stroke="#334155" strokeWidth={0.8} strokeDasharray="4 2" />
+              <rect x={sh.x} y={sh.y} width={sh.widthMm} height={sh.heightMm} fill="url(#mm-grid-50)" />
+              <text x={sh.x + 4} y={sh.y - 4} fill="#94a3b8" fontSize="4.2" fontFamily="monospace">
+                Sheet {i + 1} of {model.sheets.length} · {sh.panelIds.length} piece{sh.panelIds.length === 1 ? '' : 's'}
+              </text>
+            </g>
+          ))}
+        {!model.sheetSize && (<>
         <rect
           x={0}
           y={0}
@@ -356,6 +367,7 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
           {bed.name} {model.fitsOnBed ? '— fits on one sheet' : '— too big for one bed'}
           {model.stats.sharedCutMm > 0 && ' · shared edges cut once: cut as laid out, don’t move pieces'}
         </text>
+        </>)}
 
         {/* Registration Marks for xTool M2 Print-then-Cut */}
         {params.includeRegistrationMarks &&

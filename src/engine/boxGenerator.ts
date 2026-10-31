@@ -1,10 +1,12 @@
 import { shareCutEdges } from './sharedCuts';
+import { arrangeSheets, packSheets } from './sheets';
 import {
   BoxDims,
   BoxPanel2D,
   BoxParameters,
   GeneratedBoxModel,
   Panel3DTransform,
+  SheetRegion,
 } from './types';
 import { DEFAULT_FACE_LABELS, MACHINE_BED_PRESETS } from './presets';
 import { fmt, generateWoodFingerBox } from './fingerJointEngine';
@@ -230,10 +232,33 @@ export function assembleModel(
     nested.sheetWidthMm <= bedPreset.widthMm + 0.01 &&
     nested.sheetHeightMm <= bedPreset.heightMm + 0.01;
 
+  // On a smaller material sheet, or too big for the bed: as many sheets as the pieces need, each
+  // the material's size (or the bed's), laid out together. Shared edges aren't cut once across
+  // separate sheets, so each piece keeps its own outline there.
+  let layout = { panels: nested.panels, widthMm: nested.sheetWidthMm, heightMm: nested.sheetHeightMm, sharedCutMm: nested.sharedCutMm };
+  let sheets: SheetRegion[] = [{ x: 0, y: 0, widthMm: nested.sheetWidthMm, heightMm: nested.sheetHeightMm, panelIds: nested.panels.map((p) => p.id) }];
+  let sheetSize: GeneratedBoxModel['sheetSize'];
+  let oversizePanelIds: string[] = [];
+  if (params.category !== '3d-print' && (params.materialSheet || !fitsOnBed)) {
+    let w = params.materialSheet ? params.materialWidthMm : bedPreset.widthMm;
+    let h = params.materialSheet ? params.materialHeightMm : bedPreset.heightMm;
+    const fits = (w <= bedPreset.widthMm && h <= bedPreset.heightMm) || (w <= bedPreset.heightMm && h <= bedPreset.widthMm);
+    if (!fits) {
+      w = Math.min(w, bedPreset.widthMm);
+      h = Math.min(h, bedPreset.heightMm);
+    }
+    const packed = packSheets(panels2D, w, h, params.sheetMarginMm, params.partSpacingMm);
+    const arranged = arrangeSheets(packed.sheets);
+    layout = { panels: arranged.panels, widthMm: arranged.widthMm, heightMm: arranged.heightMm, sharedCutMm: 0 };
+    sheets = arranged.regions;
+    sheetSize = { widthMm: w, heightMm: h, trimmed: !fits };
+    oversizePanelIds = packed.tooBig.map((p) => p.id);
+  }
+
   // Approximate path lengths for laser cut / score estimation
   let totalCutLengthMm = 0;
   let totalScoreLengthMm = 0;
-  for (const p of nested.panels) {
+  for (const p of layout.panels) {
     for (const path of p.paths) {
       const approxLen = estimateSvgPathLength(path.d);
       if (path.layer === 'cut') totalCutLengthMm += approxLen;
@@ -245,17 +270,20 @@ export function assembleModel(
     params,
     innerDims: inner,
     outerDims,
-    panels2D: nested.panels,
+    panels2D: layout.panels,
     panels3D,
     patternFaceIds,
-    sheetWidthMm: nested.sheetWidthMm,
-    sheetHeightMm: nested.sheetHeightMm,
+    sheetWidthMm: layout.widthMm,
+    sheetHeightMm: layout.heightMm,
     fitsOnBed,
+    sheets,
+    sheetSize,
+    oversizePanelIds,
     stats: {
       totalCutLengthMm: Math.round(totalCutLengthMm),
       totalScoreLengthMm: Math.round(totalScoreLengthMm),
-      sharedCutMm: Math.round(nested.sharedCutMm),
-      panelCount: nested.panels.length,
+      sharedCutMm: Math.round(layout.sharedCutMm),
+      panelCount: layout.panels.length,
       fingerCountSummary: summary,
     },
   };

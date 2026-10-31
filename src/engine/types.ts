@@ -80,6 +80,15 @@ export interface FaceArtwork {
   textConfig?: TextArtworkConfig;
 }
 
+/** One material sheet's place in the laid-out sheets, and the pieces on it. */
+export interface SheetRegion {
+  x: number;
+  y: number;
+  widthMm: number;
+  heightMm: number;
+  panelIds: string[];
+}
+
 export interface MachineBedPreset {
   id: string;
   name: string;
@@ -176,6 +185,10 @@ export interface BoxParameters {
   partSpacingMm: number;
   /** Pack wood pieces edge to edge and cut each shared straight edge once */
   shareCutLines: boolean;
+  /** Cut on sheets of material smaller than the bed, as many as the pieces need */
+  materialSheet: boolean;
+  materialWidthMm: number;
+  materialHeightMm: number;
   showDimensions: boolean;
   includeRegistrationMarks: boolean;
 }
@@ -285,7 +298,17 @@ export interface GeneratedBoxModel {
   patternFaceIds: string[];
   sheetWidthMm: number;
   sheetHeightMm: number;
+  /** Whether the pieces fit one bed as Kerfuffle packs them, before any split onto sheets */
   fitsOnBed: boolean;
+  /**
+   * The sheets the pieces are cut from, laid out together in a grid on the sheet: one covering the
+   * whole layout, or several when the material is smaller than the bed or the pieces outgrow it.
+   */
+  sheets: SheetRegion[];
+  /** The material size the pieces are split onto, when they are; trimmed to the bed if bigger */
+  sheetSize?: { widthMm: number; heightMm: number; trimmed: boolean };
+  /** Pieces too big for the material sheet, each on a grown sheet of its own */
+  oversizePanelIds: string[];
   stats: {
     totalCutLengthMm: number;
     totalScoreLengthMm: number;
