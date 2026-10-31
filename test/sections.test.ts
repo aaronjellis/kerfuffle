@@ -13,6 +13,7 @@ const TEMPLATES: BoxTemplateId[] = [
   'finger-clamshell',
   'finger-living-hinge',
   'finger-organizer',
+  'finger-wine-carrier',
   'cardboard-mailer',
   'cardboard-tuck-carton',
   'cardboard-telescope',
@@ -20,7 +21,7 @@ const TEMPLATES: BoxTemplateId[] = [
 ];
 
 describe('SECTION_COMPONENTS', () => {
-  it('lists all eight templates', () => {
+  it('lists all nine templates', () => {
     expect([...TEMPLATES].sort()).toEqual(BOX_TEMPLATES.map((t) => t.id).sort());
   });
 

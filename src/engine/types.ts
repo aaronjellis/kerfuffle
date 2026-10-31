@@ -7,6 +7,7 @@ export type BoxTemplateId =
   | 'finger-clamshell'
   | 'finger-living-hinge'
   | 'finger-organizer'
+  | 'finger-wine-carrier'
   | 'cardboard-mailer'
   | 'cardboard-tuck-carton'
   | 'cardboard-telescope'
@@ -206,6 +207,18 @@ export interface BoxParameters {
   materialSheet: boolean;
   materialWidthMm: number;
   materialHeightMm: number;
+  /** Wine carrier: the bottle it's sized from, a preset id or 'custom' */
+  wineBottleId: string;
+  wineBottleDiameterMm: number;
+  wineBottleHeightMm: number;
+  /** Height where the bottle's shoulder starts */
+  wineBottleShoulderMm: number;
+  /** Room around and above the bottle */
+  wineClearanceMm: number;
+  /** Height of the tapered shoulders; 0 sizes them to clear the bottle's neck */
+  wineShoulderHeightMm: number;
+  /** Arched feet cut into the bottom of the front and back */
+  wineFeet: boolean;
   showDimensions: boolean;
   includeRegistrationMarks: boolean;
 }

@@ -5,3 +5,6 @@ dist
 .env.local
 *.tsbuildinfo
 _bmad
+
+# Brainstorming sketches and plan ledgers
+.superpowers/

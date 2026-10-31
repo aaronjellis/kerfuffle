@@ -158,6 +158,7 @@ const PART_IDS: Record<BoxTemplateId, PartId[]> = {
   'finger-clamshell': ['size', 'material', 'lid', 'hinge', 'joints', ...PATTERN_TAIL],
   'finger-living-hinge': ['size', 'material', 'living-hinge', 'joints', ...PATTERN_TAIL],
   'finger-organizer': ['size', 'material', 'joints', 'dividers', ...COMMON_TAIL],
+  'finger-wine-carrier': ['size', 'material', 'living-hinge', ...PATTERN_TAIL],
   'cardboard-mailer': ['size', 'material', 'closure', 'side-locks', 'flaps', 'score-lines', ...PATTERN_TAIL],
   'cardboard-tuck-carton': ['size', 'material', 'score-lines', ...PATTERN_TAIL],
   'cardboard-telescope': ['size', 'material', 'score-lines', ...PATTERN_TAIL],
