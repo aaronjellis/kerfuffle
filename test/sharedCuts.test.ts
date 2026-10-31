@@ -57,7 +57,11 @@ describe('cutting shared edges once', () => {
     expect(panels[1].paths[0].d).toBe('M 0 0 L 10 0 L 10 20 L 0 20');
   });
 
-  for (const template of BOX_TEMPLATES.filter((t) => t.category === 'wood-finger')) {
+  // Shared edges are cut once on one sheet only; a box split onto sheets (the wine carrier is taller
+  // than the default bed) keeps every outline whole, which the split's own tests cover.
+  const fitsOneBed = (id: (typeof BOX_TEMPLATES)[number]['id']) =>
+    generateBoxModel({ ...DEFAULT_BOX_PARAMETERS, category: 'wood-finger', templateId: id }).fitsOnBed;
+  for (const template of BOX_TEMPLATES.filter((t) => t.category === 'wood-finger' && fitsOneBed(t.id))) {
     it(`cuts every edge of the ${template.id} exactly once`, () => {
       const base = { ...DEFAULT_BOX_PARAMETERS, category: template.category, templateId: template.id };
       const shared = generateBoxModel({ ...base, shareCutLines: true });

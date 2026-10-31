@@ -10,6 +10,7 @@ import {
 } from './types';
 import { DEFAULT_FACE_LABELS, MACHINE_BED_PRESETS } from './presets';
 import { fmt, generateWoodFingerBox } from './fingerJointEngine';
+import { wineCarrierInnerDims } from './wineCarrier';
 import { generateCardboardBox } from './cardboardEngine';
 import { generate3DPrintBox } from './print3dEngine';
 import { buildSingleStrokeTextPath } from './vectorFont';
@@ -182,8 +183,10 @@ export function generateBoxModel(params: BoxParameters): GeneratedBoxModel {
   };
 
   let inner = typed;
-  let res = generateForInner(params, typed);
-  if (params.dimensionReference !== 'inner') {
+  // The wine carrier is sized from its bottle, so the typed size and inside/outside don't apply.
+  if (params.templateId === 'finger-wine-carrier') inner = wineCarrierInnerDims(params);
+  let res = generateForInner(params, inner);
+  if (params.dimensionReference !== 'inner' && params.templateId !== 'finger-wine-carrier') {
     // Each template's outside size is its inner size plus a fixed allowance, so one run with the
     // typed size as inner gives the allowance, and a second run cuts the box that has that outside size.
     const allowance = (k: keyof BoxDims) => res.outerDims[k] - typed[k];

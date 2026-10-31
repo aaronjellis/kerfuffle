@@ -294,6 +294,8 @@ export interface Panel3DTransform {
   /** Open cuts drawn as lines on both faces, in the outline's frame: slits too thin to model as holes */
   surfaceLines?: Point2D[][];
   /** For hinged lids or folding cardboard flaps: hierarchical parent & fold axis */
+  /** Its holes all lie outside its safe area, so a pattern there can't run into them */
+  patternSafe?: boolean;
   foldRig?: {
     parentId?: string;
     pivotOffset: [number, number, number];

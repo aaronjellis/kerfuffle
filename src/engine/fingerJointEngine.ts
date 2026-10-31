@@ -1,5 +1,6 @@
 import { polygonDifference, polygonUnion, startAtTopRight } from './polygonOps';
 import { buildRoundedRectPoints } from './roundedRect';
+import { generateWineCarrier } from './wineCarrier';
 import { hingeCuts, hingePatternInfo, hingeShapePath, type HingePatternSettings, type HingeShape } from './livingHinge';
 import {
   BoxDims,
@@ -508,6 +509,11 @@ export function generateWoodFingerBox(
 
   if (params.templateId === 'finger-living-hinge') {
     return { ...generateLivingHingeBox(params, innerW, innerD, innerH, countW, countD, countH), outerDims };
+  }
+
+  if (params.templateId === 'finger-wine-carrier') {
+    // Tab-and-slot: the front and back lie over the sides, one ply each way; the handle sets the height.
+    return { ...generateWineCarrier(params), outerDims: { widthMm: innerW + 2 * T, depthMm: innerD + 2 * T, heightMm: innerH } };
   }
 
   const isOrganizer = params.templateId === 'finger-organizer';

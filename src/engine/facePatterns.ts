@@ -461,7 +461,7 @@ export function resolvePatternFaces(
     if (params.templateId === 'finger-organizer' && faceId !== 'bottom') continue;
     const ids = [faceId, `base-${faceId}`];
     const p3 = panels3D.find((p) => ids.includes(p.id));
-    if (!p3 || (p3.holeContours && p3.holeContours.length > 0)) continue;
+    if (!p3 || (p3.holeContours && p3.holeContours.length > 0 && !p3.patternSafe)) continue;
     let panel2DId: string | undefined;
     let region: PatternFaceTarget['region'] | undefined;
     const direct = panels2D.find((p) => p.id === p3.id);
