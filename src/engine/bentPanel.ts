@@ -153,3 +153,44 @@ export function buildBentLines(spec: Panel3DTransform, paths: Point2D[][]): THRE
 
 /** A panel's bent geometry when it bends, or null for a viewer to build its flat panel as before. */
 export const panelGeometryFor = (spec: Panel3DTransform): THREE.BufferGeometry | null => (spec.bend ? buildBentPanelGeometry(spec) : null);
+
+/**
+ * A panel's edges drawn from its own outline and holes, on both faces, with a line through the
+ * ply at each real corner; bent along its profile when it has one. The edge finder three.js offers
+ * joins holes that sit level with each other by lines across the face (the triangulation's bridges),
+ * which a tabbed wall's slots would show as stripes.
+ */
+export function panelEdgesGeometry(spec: Panel3DTransform): THREE.BufferGeometry {
+  const segments = spec.bend?.segments ?? [{ kind: 'straight' as const, lengthMm: spec.heightMm }];
+  const h = spec.heightMm;
+  const half = spec.thicknessMm / 2;
+  const verts: number[] = [];
+  const put = (p: Point2D, d: number) => {
+    const q = bentPoint(segments, h - p.y, d);
+    verts.push(p.x - spec.widthMm / 2, q.y - h / 2, q.z);
+  };
+  for (const ring of [spec.outlinePoints ?? [], ...(spec.holeContours ?? [])]) {
+    const n = ring.length;
+    for (let i = 0; i < n; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % n];
+      for (const d of [half, -half]) {
+        put(a, d);
+        put(b, d);
+      }
+      // A line through the ply where the outline turns a real corner, not along a curve's steps.
+      const prev = ring[(i - 1 + n) % n];
+      const t1 = Math.atan2(a.y - prev.y, a.x - prev.x);
+      const t2 = Math.atan2(b.y - a.y, b.x - a.x);
+      let turn = Math.abs(t2 - t1);
+      turn = Math.min(turn, 2 * Math.PI - turn);
+      if (turn > Math.PI / 6) {
+        put(a, half);
+        put(a, -half);
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  return geometry;
+}

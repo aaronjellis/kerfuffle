@@ -15,7 +15,7 @@ const EXPECTED: Record<BoxTemplateId, PartId[]> = {
   'finger-clamshell': ['size', 'material', 'lid', 'hinge', 'joints', 'pattern', 'labels', 'artwork', 'sheet'],
   'finger-living-hinge': ['size', 'material', 'living-hinge', 'joints', 'pattern', 'labels', 'artwork', 'sheet'],
   'finger-organizer': ['size', 'material', 'joints', 'dividers', 'labels', 'artwork', 'sheet'],
-  'finger-wine-carrier': ['size', 'material', 'living-hinge', 'pattern', 'labels', 'artwork', 'sheet'],
+  'finger-wine-carrier': ['wine', 'material', 'living-hinge', 'pattern', 'labels', 'artwork', 'sheet'],
   'cardboard-mailer': ['size', 'material', 'closure', 'side-locks', 'flaps', 'score-lines', 'pattern', 'labels', 'artwork', 'sheet'],
   'cardboard-tuck-carton': ['size', 'material', 'score-lines', 'pattern', 'labels', 'artwork', 'sheet'],
   'cardboard-telescope': ['size', 'material', 'score-lines', 'pattern', 'labels', 'artwork', 'sheet'],
@@ -46,9 +46,9 @@ describe('partsForTemplate', () => {
     expect(ids('3d-snap-box')).not.toContain('material');
   });
 
-  it('every template starts with size and has labels and artwork', () => {
+  it('every template starts with its sizing part and has labels and artwork', () => {
     for (const t of TEMPLATES) {
-      expect(ids(t)[0]).toBe('size');
+      expect(['size', 'wine']).toContain(ids(t)[0]);
       expect(ids(t)).toEqual(expect.arrayContaining(['labels', 'artwork']));
     }
   });

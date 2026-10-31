@@ -16,6 +16,7 @@ import {
   Square,
   Tag,
   Waves,
+  Wine,
   type LucideIcon
 } from 'lucide-react';
 import type { BoxParameters, BoxTemplateId } from '../engine/types';
@@ -29,6 +30,7 @@ export type PartId =
   | 'joints'
   | 'dividers'
   | 'living-hinge'
+  | 'wine'
   | 'closure'
   | 'side-locks'
   | 'flaps'
@@ -78,6 +80,12 @@ const DEFS: Record<PartId, PartDef> = {
     icon: Grid3x3
   },
   dividers: { id: 'dividers', label: 'Dividers', keywords: 'divider columns rows', icon: LayoutGrid },
+  wine: {
+    id: 'wine',
+    label: 'Bottle',
+    keywords: 'wine bottle carrier size diameter height clearance shoulder taper feet bordeaux burgundy champagne magnum',
+    icon: Wine
+  },
   'living-hinge': {
     id: 'living-hinge',
     label: 'Living hinge',
@@ -158,7 +166,7 @@ const PART_IDS: Record<BoxTemplateId, PartId[]> = {
   'finger-clamshell': ['size', 'material', 'lid', 'hinge', 'joints', ...PATTERN_TAIL],
   'finger-living-hinge': ['size', 'material', 'living-hinge', 'joints', ...PATTERN_TAIL],
   'finger-organizer': ['size', 'material', 'joints', 'dividers', ...COMMON_TAIL],
-  'finger-wine-carrier': ['size', 'material', 'living-hinge', ...PATTERN_TAIL],
+  'finger-wine-carrier': ['wine', 'material', 'living-hinge', ...PATTERN_TAIL],
   'cardboard-mailer': ['size', 'material', 'closure', 'side-locks', 'flaps', 'score-lines', ...PATTERN_TAIL],
   'cardboard-tuck-carton': ['size', 'material', 'score-lines', ...PATTERN_TAIL],
   'cardboard-telescope': ['size', 'material', 'score-lines', ...PATTERN_TAIL],
@@ -219,5 +227,6 @@ export function reconcileSelection(
   templateId: BoxTemplateId,
   _params: ParamsSlice
 ): PartId {
-  return selected && PART_IDS[templateId].includes(selected) ? selected : 'size';
+  // Otherwise the template's first part, its sizing one (Bottle for the wine carrier).
+  return selected && PART_IDS[templateId].includes(selected) ? selected : PART_IDS[templateId][0];
 }

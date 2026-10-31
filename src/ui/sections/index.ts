@@ -19,6 +19,7 @@ import { SheetSection } from './SheetSection';
 import { ShellSection } from './ShellSection';
 import { SideLocksSection } from './SideLocksSection';
 import { SizeSection } from './SizeSection';
+import { WineCarrierSection } from './WineCarrierSection';
 
 export type { SectionHandlers, SectionProps } from './types';
 
@@ -32,6 +33,7 @@ export const SECTION_COMPONENTS: Record<PartId, React.FC<SectionProps>> = {
   joints: JointsSection,
   dividers: DividersSection,
   'living-hinge': LivingHingeSection,
+  wine: WineCarrierSection,
   closure: ClosureSection,
   'side-locks': SideLocksSection,
   flaps: FlapsSection,

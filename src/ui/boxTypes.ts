@@ -2,6 +2,7 @@ import type { BoxCategory, BoxParameters, BoxTemplateId, Panel3DTransform } from
 import { BOX_TEMPLATES, DEFAULT_BOX_PARAMETERS, MATERIAL_PRESETS } from '../engine/presets';
 import { generateBoxModel } from '../engine/boxGenerator';
 import * as THREE from 'three';
+import { bentPoint } from '../engine/bentPanel';
 
 /**
  * A box someone would ask for by name: a template plus the settings that make the variant. Some
@@ -24,6 +25,7 @@ export const BOX_TYPES: BoxType[] = [
   { id: 'finger-tray', templateId: 'finger-basic', name: 'Open tray', blurb: 'Five sides, no lid', params: { woodLidStyle: 'open' } },
   { id: 'finger-clamshell', templateId: 'finger-clamshell', name: 'Clamshell chest', blurb: 'Hinged lid on the back', params: {} },
   { id: 'finger-living-hinge', templateId: 'finger-living-hinge', name: 'Living-hinge box', blurb: 'Curved lid that flexes open', params: {} },
+  { id: 'finger-wine-carrier', templateId: 'finger-wine-carrier', name: 'Wine carrier', blurb: 'A bottle carrier with a locking handle', params: {} },
   { id: 'finger-organizer', templateId: 'finger-organizer', name: 'Organizer', blurb: 'Tray with slotted dividers', params: {} },
   { id: 'mailer-tuck', templateId: 'cardboard-mailer', name: 'Mailer, tuck lid', blurb: 'Lid tucks inside the front', params: { cardboardLockStyle: 'tuck' } },
   { id: 'mailer-fold', templateId: 'cardboard-mailer', name: 'Mailer, fold-over lid', blurb: 'Flap over the front, ears into the sides', params: { cardboardLockStyle: 'fold-over' } },
@@ -99,7 +101,12 @@ function posedOutlines(panels: Panel3DTransform[], t: number): { id: string; pts
           { x: spec.widthMm, y: spec.heightMm },
           { x: 0, y: spec.heightMm },
         ];
-    const local = outline.map((q) => new THREE.Vector3(q.x - spec.widthMm / 2, -(q.y - spec.heightMm / 2), 0));
+    // A panel that bends (the wine carrier's front and back) is drawn bent, along its profile.
+    const local = outline.map((q) => {
+      if (!spec.bend) return new THREE.Vector3(q.x - spec.widthMm / 2, -(q.y - spec.heightMm / 2), 0);
+      const b = bentPoint(spec.bend.segments, spec.heightMm - q.y, 0);
+      return new THREE.Vector3(q.x - spec.widthMm / 2, b.y - spec.heightMm / 2, b.z);
+    });
     const pos = new THREE.Vector3(...spec.closedPos);
     const quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(...spec.rotation));
     if (spec.foldRig) {

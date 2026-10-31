@@ -1,3 +1,4 @@
+import { buildBentLines, panelEdgesGeometry, panelGeometryFor } from '../engine/bentPanel';
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { containRect, imageAspect } from '../engine/artworkImage';
@@ -68,6 +69,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  /** The box type the camera was last framed for. */
+  const framedTemplateRef = useRef<string | null>(null);
   const boxGroupRef = useRef<THREE.Group | null>(null);
   const panelMeshesRef = useRef<Map<string, PanelEntry>>(new Map());
   const cubeBodyRef = useRef<HTMLDivElement>(null);
@@ -290,6 +293,21 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     const scene = sceneRef.current;
     if (!boxGroup || !scene) return;
 
+    // A new box type that wouldn't fit the view (the wine carrier is twice a box's height) pulls the
+    // camera back along its line of sight; changing a size afterwards leaves the camera be.
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (camera && controls && framedTemplateRef.current !== model.params.templateId) {
+      framedTemplateRef.current = model.params.templateId;
+      const tallest = Math.max(model.outerDims.widthMm, model.outerDims.depthMm, model.outerDims.heightMm);
+      const offset = camera.position.clone().sub(controls.target);
+      const fit = (0.75 * tallest) / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+      if (offset.length() < fit) {
+        camera.position.copy(controls.target).add(offset.setLength(fit));
+        controls.update();
+      }
+    }
+
     // Position grid right under the bottom of the box
     const grid = scene.getObjectByName('studio-grid');
     if (grid) {
@@ -358,7 +376,10 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       }
 
       let geometry: THREE.BufferGeometry;
-      if (spec.id === 'living-hinge-lid') {
+      const bent = panelGeometryFor(spec);
+      if (bent) {
+        geometry = bent;
+      } else if (spec.id === 'living-hinge-lid') {
         geometry = buildLivingHingeLidGeometry(model, spec);
       } else if (spec.outlinePoints && spec.outlinePoints.length >= 3) {
         const shape = new THREE.Shape(
@@ -398,8 +419,10 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       };
 
       // Dark laser-charred edge highlight for wood & cardboard panels
+      // The wine carrier's tabbed walls draw their own edges (see panelEdgesGeometry).
+      const ownEdges = spec.bend || model.params.templateId === 'finger-wine-carrier';
       const edgeLines = new THREE.LineSegments(
-        new THREE.EdgesGeometry(geometry, 20),
+        ownEdges ? panelEdgesGeometry(spec) : new THREE.EdgesGeometry(geometry, 20),
         new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.65 })
       );
       edgeLines.name = EDGES_NAME;
@@ -422,6 +445,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       }
 
       if (spec.id === 'living-hinge-lid') mesh.add(buildLivingHingeCutLines(model, spec));
+      if (spec.bend?.lines?.length) mesh.add(buildBentLines(spec, spec.bend.lines));
       if (spec.surfaceLines?.length) mesh.add(buildSurfaceLines(spec));
 
       wrapper.add(mesh);

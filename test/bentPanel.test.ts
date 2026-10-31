@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { generateBoxModel } from '../src/engine/boxGenerator';
-import { bentPoint, buildBentPanelGeometry, type BendSegment } from '../src/engine/bentPanel';
+import { bentPoint, buildBentPanelGeometry, panelEdgesGeometry, type BendSegment } from '../src/engine/bentPanel';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { Panel3DTransform } from '../src/engine/types';
 import { wineCarrierLayout } from '../src/engine/wineBottles';
@@ -71,5 +71,21 @@ describe('bent panels', () => {
     expect(size.y).toBeCloseTo(100 + T / 2, 0);
     // In by the radius and the top run, plus half a ply on the body's outside.
     expect(size.z).toBeCloseTo(20 + (200 - 80 - 10 * Math.PI) + T / 2, 0);
+  });
+});
+
+describe('panel edges', () => {
+  it('draws only the outline and holes, no lines across the face between holes', () => {
+    const p = { ...DEFAULT_BOX_PARAMETERS, category: 'wood-finger' as const, templateId: 'finger-wine-carrier' as const };
+    const spec = generateBoxModel(p).panels3D.find((q) => q.id === 'front')!;
+    const pos = panelEdgesGeometry(spec).getAttribute('position');
+    const bodyTop = -spec.heightMm / 2 + wineCarrierLayout(p).bodyHeightMm;
+    let across = 0;
+    for (let i = 0; i < pos.count; i += 2) {
+      const flat = Math.abs(pos.getY(i) - pos.getY(i + 1)) < 0.01;
+      // The body's only full-width edges are its foot; nothing joins the slots across it.
+      if (flat && pos.getY(i) > -spec.heightMm / 2 + 20 && pos.getY(i) < bodyTop - 1 && Math.abs(pos.getX(i + 1) - pos.getX(i)) > 20) across++;
+    }
+    expect(across).toBe(0);
   });
 });

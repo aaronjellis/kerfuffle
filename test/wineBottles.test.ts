@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters } from '../src/engine/types';
-import { WINE_BOTTLES, shoulderProfile, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
+import { WINE_BOTTLES, bottlePatch, shoulderProfile, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
 
 const carrier = (p: Partial<BoxParameters> = {}): BoxParameters => ({
   ...DEFAULT_BOX_PARAMETERS,
@@ -78,5 +78,15 @@ describe('wine carrier bend checks', () => {
 
   it('caps the shoulder bend at 40 mm however stiff the hinge', () => {
     expect(wineCarrierLayout(carrier({ livingHingePitchMm: 6, livingHingeCutMm: 10, livingHingeBridgeMm: 6 })).bendRadiusMm).toBe(40);
+  });
+});
+
+describe('picking a bottle', () => {
+  it('fills in the magnum’s size', () => {
+    expect(bottlePatch('magnum-1500')).toEqual({ wineBottleId: 'magnum-1500', wineBottleDiameterMm: 100, wineBottleHeightMm: 350, wineBottleShoulderMm: 245 });
+  });
+
+  it('keeps the size when switching to custom', () => {
+    expect(bottlePatch('custom')).toEqual({ wineBottleId: 'custom' });
   });
 });

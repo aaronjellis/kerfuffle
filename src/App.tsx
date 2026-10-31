@@ -357,7 +357,7 @@ export const App: React.FC = () => {
   const handleSelectBoxType = (t: BoxType) => {
     handleSelectTemplate(t.templateId);
     setParams((prev) => withPrintedPinClamp({ ...prev, ...t.params }));
-    handleSelectPart('size');
+    handleSelectPart(reconcileSelection(null, t.templateId, params));
     window.posthog?.capture('box_type_selected', { box_type: t.id, project: ANALYTICS_PROJECT });
   };
 

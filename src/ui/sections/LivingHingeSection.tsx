@@ -15,6 +15,7 @@ import {
 } from '../../engine/livingHinge';
 import { MIN_THUMB_HOLE_MM, livingHingeCatch, livingHingeSettings, wrapBendRadiusMm } from '../../engine/fingerJointEngine';
 import type { BoxParameters } from '../../engine/types';
+import { wineCarrierLayout } from '../../engine/wineBottles';
 import { Field, Switch } from '../Field';
 import { unitHelpers } from './shared';
 import type { SectionProps } from './types';
@@ -54,7 +55,9 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
   // The lid's hinge runs the box's outer width; a serpentine's links span it.
   const hingeWidth = model.innerDims.widthMm + 2 * params.materialThicknessMm;
   const bend = hingeBendRadiusMm(settings, params.materialThicknessMm, params.kerfMm, hingeWidth);
-  const lid = wrapBendRadiusMm(model.innerDims.depthMm, model.innerDims.heightMm);
+  // The wine carrier's hinges are its shoulders; the living-hinge box's is its lid.
+  const isCarrier = params.templateId === 'finger-wine-carrier';
+  const lid = isCarrier ? wineCarrierLayout(params).bendRadiusMm : wrapBendRadiusMm(model.innerDims.depthMm, model.innerDims.heightMm);
   const [pitchMin, pitchMax] = HINGE_PITCH_RANGE_MM;
   // The front wall's height under the lid's lip, as the engine works it out.
   const straightH = Math.max(15, model.innerDims.heightMm - lid);
@@ -163,7 +166,7 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
         <p className={bend > lid ? 'helper-note hinge-web-warning' : 'helper-note'}>
           {Number.isFinite(bend) ? (
             <>
-              Bends to about a <strong>{len(bend, 0)} {uLabel}</strong> radius; the lid curves at {len(lid, 0)} {uLabel}.
+              Bends to about a <strong>{len(bend, 0)} {uLabel}</strong> radius; the {isCarrier ? 'shoulders curve' : 'lid curves'} at {len(lid, 0)} {uLabel}.
             </>
           ) : (
             'The cuts leave no wood between the rows.'
@@ -183,6 +186,7 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
         </button>
       )}
 
+      {!isCarrier && (<>
       <Field label="Back attachment">
         <select
           value={params.livingHingeAttachMode === 'finger-joint-back' ? 'finger-joint-back' : 'one-piece-back'}
@@ -255,6 +259,7 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
         A tab rises from each side wall into a notch in the lid's top, cut loose, so the closed lid stays square
         with the front catch left open.
       </p>
+      </>)}
     </>
   );
 };

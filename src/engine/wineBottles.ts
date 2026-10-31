@@ -191,3 +191,10 @@ export function wineCarrierChecks(p: BoxParameters): WineCarrierChecks {
   if (l.shoulderClamped) notes.push(`Shoulders raised to ${l.minShoulderHeightMm} mm so the taper clears the bottle's neck.`);
   return { shoulderBendMm, earBendMm, webMm, shoulderCracks, earCracks, thinWeb, notes };
 }
+
+/** The settings a bottle choice sets: a preset fills in its size; Custom keeps the size as it is. */
+export function bottlePatch(id: string): Partial<BoxParameters> {
+  const b = WINE_BOTTLES.find((x) => x.id === id);
+  if (!b) return { wineBottleId: 'custom' };
+  return { wineBottleId: b.id, wineBottleDiameterMm: b.diameterMm, wineBottleHeightMm: b.heightMm, wineBottleShoulderMm: b.shoulderMm };
+}
