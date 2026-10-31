@@ -371,6 +371,21 @@ export function generateWineCarrier(params: BoxParameters): { panels2D: BoxPanel
       outlinePoints: outline,
       holeContours: holes,
       patternSafe: true,
+      ...(piece.id === 'front' || piece.id === 'back'
+        ? {
+            bend: {
+              // Up the body, in over the first hinge, up the slope, back out over the second, up the handle.
+              segments: [
+                { kind: 'straight' as const, lengthMm: l.bodyHeightMm },
+                { kind: 'arc' as const, radiusMm: l.bendRadiusMm, angleRad: l.bendAngleRad },
+                { kind: 'straight' as const, lengthMm: l.slopeLengthMm },
+                { kind: 'arc' as const, radiusMm: l.bendRadiusMm, angleRad: -l.bendAngleRad },
+                { kind: 'straight' as const, lengthMm: l.handleHeightMm },
+              ],
+              lines: piece.cutsUp.map(down),
+            },
+          }
+        : {}),
     });
   }
   return { panels2D, panels3D, fingerCountSummary: 'Tab-and-slot wine carrier' };

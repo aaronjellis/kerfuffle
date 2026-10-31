@@ -294,6 +294,11 @@ export interface Panel3DTransform {
   /** Open cuts drawn as lines on both faces, in the outline's frame: slits too thin to model as holes */
   surfaceLines?: Point2D[][];
   /** For hinged lids or folding cardboard flaps: hierarchical parent & fold axis */
+  /**
+   * A panel that bends along its length in 3D (the wine carrier's front and back): its profile up
+   * the sheet's y, and the hinge slits to draw on it, in the sheet's y-down frame
+   */
+  bend?: { segments: import('./bentPanel').BendSegment[]; lines?: Point2D[][] };
   /** Its holes all lie outside its safe area, so a pattern there can't run into them */
   patternSafe?: boolean;
   foldRig?: {

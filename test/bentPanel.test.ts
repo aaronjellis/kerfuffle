@@ -1,0 +1,75 @@
+import * as THREE from 'three';
+import { describe, expect, it } from 'vitest';
+import { generateBoxModel } from '../src/engine/boxGenerator';
+import { bentPoint, buildBentPanelGeometry, type BendSegment } from '../src/engine/bentPanel';
+import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
+import type { Panel3DTransform } from '../src/engine/types';
+import { wineCarrierLayout } from '../src/engine/wineBottles';
+
+const T = 3;
+
+describe('bent panels', () => {
+  it('keeps lengths along the mid-surface', () => {
+    const segs: BendSegment[] = [
+      { kind: 'straight', lengthMm: 50 },
+      { kind: 'arc', radiusMm: 20, angleRad: Math.PI / 3 },
+      { kind: 'straight', lengthMm: 40 },
+    ];
+    const total = 50 + (20 * Math.PI) / 3 + 40;
+    let walked = 0;
+    let prev = bentPoint(segs, 0, 0);
+    for (let i = 1; i <= 2000; i++) {
+      const q = bentPoint(segs, (total * i) / 2000, 0);
+      walked += Math.hypot(q.y - prev.y, q.z - prev.z);
+      prev = q;
+    }
+    expect(Math.abs(walked - total) / total).toBeLessThan(0.005);
+  });
+
+  it('lands a carrier half where the layout says', () => {
+    const p = { ...DEFAULT_BOX_PARAMETERS, category: 'wood-finger' as const, templateId: 'finger-wine-carrier' as const };
+    const l = wineCarrierLayout(p);
+    const front = generateBoxModel(p).panels3D.find((q) => q.id === 'front')!;
+    const segs = front.bend!.segments;
+    const total = segs.reduce((s, g) => s + (g.kind === 'straight' ? g.lengthMm : g.radiusMm * Math.abs(g.angleRad)), 0);
+    const end = bentPoint(segs, total, 0);
+    // Bending toward the inside is local −z: the handle's mid-surface ends `inset` in from the body's.
+    expect(end.z).toBeCloseTo(-l.insetMm, 1);
+    expect(end.y).toBeCloseTo(l.bodyHeightMm + l.shoulderHeightMm + l.handleHeightMm, 1);
+  });
+
+  it('bends a flat panel with no seams', () => {
+    const spec: Panel3DTransform = {
+      id: 'strip',
+      name: 'Strip',
+      faceId: 'strip',
+      widthMm: 50,
+      heightMm: 200,
+      thicknessMm: T,
+      color: '#ccc',
+      closedPos: [0, 0, 0],
+      explodedPos: [0, 0, 0],
+      rotation: [0, 0, 0],
+      outlinePoints: [
+        { x: 0, y: 0 },
+        { x: 50, y: 0 },
+        { x: 50, y: 200 },
+        { x: 0, y: 200 },
+      ],
+      bend: {
+        segments: [
+          { kind: 'straight', lengthMm: 80 },
+          { kind: 'arc', radiusMm: 20, angleRad: Math.PI / 2 },
+          { kind: 'straight', lengthMm: 200 - 80 - 10 * Math.PI },
+        ],
+      },
+    };
+    const box = new THREE.Box3().setFromBufferAttribute(buildBentPanelGeometry(spec).getAttribute('position') as THREE.BufferAttribute);
+    const size = box.getSize(new THREE.Vector3());
+    expect(size.x).toBeCloseTo(50, 1);
+    // Up 80 and the bend's radius, plus half a ply on the outside of the top run.
+    expect(size.y).toBeCloseTo(100 + T / 2, 0);
+    // In by the radius and the top run, plus half a ply on the body's outside.
+    expect(size.z).toBeCloseTo(20 + (200 - 80 - 10 * Math.PI) + T / 2, 0);
+  });
+});
