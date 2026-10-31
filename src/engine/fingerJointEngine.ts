@@ -49,6 +49,36 @@ export interface FingerPanelSpec {
   ownCorners: boolean;
   extraPaths?: DielinePath[];
   holeContours?: Point2D[][];
+  /**
+   * Open notches cut down from a plain ('flat-inner') top edge, in the panel's spec frame: a
+   * divider drops into each one from above.
+   */
+  topNotches?: { x0: number; x1: number; depth: number }[];
+}
+
+/**
+ * Cuts open notches into a panel's plain top edge: wherever the outline runs along the top, each
+ * notch in that stretch dips `depth` down and back, in the order the outline travels.
+ */
+function notchTopEdge(points: Point2D[], topY: number, notches: { x0: number; x1: number; depth: number }[]): Point2D[] {
+  if (notches.length === 0) return points;
+  const out: Point2D[] = [];
+  points.forEach((a, i) => {
+    out.push(a);
+    const b = points[(i + 1) % points.length];
+    if (Math.abs(a.y - topY) > 1e-6 || Math.abs(b.y - topY) > 1e-6) return;
+    const dir = Math.sign(b.x - a.x);
+    const lo = Math.min(a.x, b.x);
+    const hi = Math.max(a.x, b.x);
+    notches
+      .filter((n) => n.x0 > lo + 1e-6 && n.x1 < hi - 1e-6)
+      .sort((m, n) => dir * (m.x0 - n.x0))
+      .forEach((n) => {
+        const [enter, exit] = dir > 0 ? [n.x0, n.x1] : [n.x1, n.x0];
+        out.push({ x: enter, y: topY }, { x: enter, y: topY + n.depth }, { x: exit, y: topY + n.depth }, { x: exit, y: topY });
+      });
+  });
+  return out;
 }
 
 export function fmt(n: number): string {
@@ -374,7 +404,8 @@ export function buildFingerPanelPolygon(spec: FingerPanelSpec): Point2D[] {
 
 function specToPanel2D(spec: FingerPanelSpec): { panel2D: BoxPanel2D; outlinePoints: Point2D[] } {
   const T = spec.thickness;
-  const outlinePoints = buildFingerPanelPolygon(spec);
+  const plainTop = spec.topEdge === 'flat-inner' ? T : 0;
+  const outlinePoints = notchTopEdge(buildFingerPanelPolygon(spec), plainTop, spec.topNotches ?? []);
 
   // Compute true physical bounding box of the panel (e.g. when topEdge or bottomEdge is 'flat-inner',
   // there are no protruding tabs on that edge, so the physical height is innerH + T instead of innerH + 2T!)
@@ -486,44 +517,21 @@ export function generateWoodFingerBox(
     (params.woodLidStyle === 'flat-lid' || params.woodLidStyle === 'inset-lid');
   const topWallEdge: EdgeJointMode = isClosedTop ? 'even-tabs' : 'flat-inner';
 
-  const makeSlotCutouts = (
-    spanMm: number,
-    heightMm: number,
-    numDividers: number,
-    idPrefix: string
-  ): { paths: DielinePath[]; holes: Point2D[][] } => {
-    const paths: DielinePath[] = [];
-    const holes: Point2D[][] = [];
-    if (params.templateId !== 'finger-organizer' || numDividers <= 1) {
-      return { paths, holes };
-    }
+  /**
+   * An organizer's walls: an open notch down from the top edge for each divider, as deep as the
+   * divider's end tab (its top half), so the dividers drop in from above.
+   */
+  const dividerNotches = (spanMm: number, numDividers: number): { x0: number; x1: number; depth: number }[] => {
+    if (params.templateId !== 'finger-organizer' || numDividers <= 1) return [];
     const slotW = Math.max(0.5, T - kerf * 0.5);
-    const slotH = heightMm * 0.65;
-    for (let i = 1; i < numDividers; i++) {
-      const cx = T + (spanMm * i) / numDividers;
-      const x0 = cx - slotW / 2;
-      const x1 = cx + slotW / 2;
-      const y0 = T;
-      const y1 = T + slotH;
-      const pts: Point2D[] = [
-        { x: x0, y: y0 },
-        { x: x1, y: y0 },
-        { x: x1, y: y1 },
-        { x: x0, y: y1 },
-      ];
-      holes.push(pts);
-      paths.push({
-        id: `${idPrefix}-slot-${i}`,
-        layer: 'cut',
-        d: pointsToSvgPath(pts, true),
-        closed: true,
-      });
-    }
-    return { paths, holes };
+    return Array.from({ length: numDividers - 1 }, (_, k) => {
+      const cx = T + (spanMm * (k + 1)) / numDividers;
+      return { x0: cx - slotW / 2, x1: cx + slotW / 2, depth: innerH / 2 };
+    });
   };
 
-  const fbSlots = makeSlotCutouts(innerW, innerH, params.dividerCols, 'fb');
-  const lrSlots = makeSlotCutouts(innerD, innerH, params.dividerRows, 'lr');
+  const fbNotches = dividerNotches(innerW, params.dividerCols);
+  const lrNotches = dividerNotches(innerD, params.dividerRows);
 
   // 1. BOTTOM PANEL
   const bottomRes = specToPanel2D({
@@ -578,8 +586,7 @@ export function generateWoodFingerBox(
       bottomEdge: 'even-tabs',
       leftEdge: 'even-tabs',
       ownCorners: true,
-      extraPaths: fbSlots.paths,
-      holeContours: fbSlots.holes,
+      topNotches: fbNotches,
     });
     panels2D.push(res.panel2D);
 
@@ -596,7 +603,6 @@ export function generateWoodFingerBox(
       explodedPos: [0, 0, zSign * (innerD / 2 + T / 2 + explodeDist)],
       rotation: [0, isFront ? 0 : Math.PI, 0],
       outlinePoints: res.outlinePoints,
-      holeContours: fbSlots.holes,
     });
   }
 
@@ -618,8 +624,7 @@ export function generateWoodFingerBox(
       bottomEdge: 'even-tabs',
       leftEdge: 'odd-tabs',
       ownCorners: false,
-      extraPaths: lrSlots.paths,
-      holeContours: lrSlots.holes,
+      topNotches: lrNotches,
     });
     panels2D.push(res.panel2D);
 
@@ -636,7 +641,6 @@ export function generateWoodFingerBox(
       explodedPos: [xSign * (innerW / 2 + T / 2 + explodeDist), 0, 0],
       rotation: [0, isRight ? Math.PI / 2 : -Math.PI / 2, 0],
       outlinePoints: res.outlinePoints,
-      holeContours: lrSlots.holes,
     });
   }
 
@@ -883,29 +887,46 @@ export function generateWoodFingerBox(
     }
   }
 
-  // 5. ORGANIZER DIVIDERS (with interlocking half-lap notches in both 2D and 3D!)
+  // 5. ORGANIZER DIVIDERS: full height, flush with the walls' tops. Each end's top half is a tab
+  // that drops into a wall's notch and comes out flush with its outside; below it the divider stops
+  // at the wall's inside face. Crossing dividers meet in half-lap notches, the depth dividers' cut
+  // down from the top and the width dividers' up from the bottom.
   if (params.templateId === 'finger-organizer') {
-    const divH = innerH * 0.85;
+    const divH = innerH;
+    const tabH = innerH / 2;
     const slotW = Math.max(0.5, T - kerf * 0.5);
+    /** A divider's outline: its body between the walls, a tab at each end, and its half-lap notches. */
+    const divider = (innerLen: number, notchXs: number[], fromTop: boolean): Point2D[] => {
+      const L = innerLen + 2 * T;
+      const halfLaps = (xs: number[], y: number): Point2D[] =>
+        xs.flatMap((cx) => {
+          const [a, b] = fromTop ? [cx - slotW / 2, cx + slotW / 2] : [cx + slotW / 2, cx - slotW / 2];
+          return [
+            { x: a, y },
+            { x: a, y: divH / 2 },
+            { x: b, y: divH / 2 },
+            { x: b, y },
+          ];
+        });
+      const ordered = [...notchXs].sort((p, q) => p - q);
+      return [
+        { x: 0, y: 0 },
+        ...(fromTop ? halfLaps(ordered, 0) : []),
+        { x: L, y: 0 },
+        { x: L, y: tabH },
+        { x: L - T, y: tabH },
+        { x: L - T, y: divH },
+        ...(fromTop ? [] : halfLaps(ordered.reverse(), divH)),
+        { x: T, y: divH },
+        { x: T, y: tabH },
+        { x: 0, y: tabH },
+      ];
+    };
 
     for (let c = 1; c < params.dividerCols; c++) {
-      const totalLen = innerD + 2 * T * 0.6;
-      // Top edge has half-lap notches going from y = 0 down to y = divH / 2
-      const notchedPts: Point2D[] = [{ x: 0, y: 0 }];
-      for (let r = 1; r < params.dividerRows; r++) {
-        const cx = (totalLen * r) / params.dividerRows;
-        notchedPts.push(
-          { x: cx - slotW / 2, y: 0 },
-          { x: cx - slotW / 2, y: divH / 2 },
-          { x: cx + slotW / 2, y: divH / 2 },
-          { x: cx + slotW / 2, y: 0 }
-        );
-      }
-      notchedPts.push(
-        { x: totalLen, y: 0 },
-        { x: totalLen, y: divH },
-        { x: 0, y: divH }
-      );
+      const xs = Array.from({ length: params.dividerRows - 1 }, (_, k) => T + (innerD * (k + 1)) / params.dividerRows);
+      const notchedPts = divider(innerD, xs, true);
+      const totalLen = innerD + 2 * T;
 
       panels2D.push({
         id: `divider-x-${c}`,
@@ -943,23 +964,9 @@ export function generateWoodFingerBox(
     }
 
     for (let r = 1; r < params.dividerRows; r++) {
-      const totalLen = innerW + 2 * T * 0.6;
-      // Bottom edge has half-lap notches going from y = divH up to y = divH / 2
-      const notchedPts: Point2D[] = [
-        { x: 0, y: 0 },
-        { x: totalLen, y: 0 },
-        { x: totalLen, y: divH },
-      ];
-      for (let c = params.dividerCols - 1; c >= 1; c--) {
-        const cx = (totalLen * c) / params.dividerCols;
-        notchedPts.push(
-          { x: cx + slotW / 2, y: divH },
-          { x: cx + slotW / 2, y: divH / 2 },
-          { x: cx - slotW / 2, y: divH / 2 },
-          { x: cx - slotW / 2, y: divH }
-        );
-      }
-      notchedPts.push({ x: 0, y: divH });
+      const xs = Array.from({ length: params.dividerCols - 1 }, (_, k) => T + (innerW * (k + 1)) / params.dividerCols);
+      const notchedPts = divider(innerW, xs, false);
+      const totalLen = innerW + 2 * T;
 
       panels2D.push({
         id: `divider-y-${r}`,

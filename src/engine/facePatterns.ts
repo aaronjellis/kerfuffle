@@ -437,6 +437,8 @@ export function resolvePatternFaces(
   for (const faceId of PATTERN_FACE_IDS) {
     // A folding box's bottom is its lock; only a wood box's bottom is a plain panel.
     if (faceId === 'bottom' && params.category !== 'wood-finger') continue;
+    // An organizer's walls carry the dividers' notches; a pattern would run into them.
+    if (params.templateId === 'finger-organizer' && faceId !== 'bottom') continue;
     const ids = [faceId, `base-${faceId}`];
     const p3 = panels3D.find((p) => ids.includes(p.id));
     if (!p3 || (p3.holeContours && p3.holeContours.length > 0)) continue;
