@@ -75,7 +75,7 @@ export const MaterialSection: React.FC<SectionProps> = ({ params, updateParam, d
             }
           />
         </Field>
-        <Field label={`Laser kerf (${uLabel})`}>
+        <Field label={`Kerf offset (${uLabel})`}>
           <NumberField
             valueMm={params.kerfMm}
             minMm={0}
@@ -84,11 +84,16 @@ export const MaterialSection: React.FC<SectionProps> = ({ params, updateParam, d
             displayUnit={displayUnit}
             inDecimals={4}
             mmDecimals={2}
-            ariaLabel="Laser kerf"
+            ariaLabel="Kerf offset"
             onChangeMm={(mm) => updateParam('kerfMm', mm)}
           />
         </Field>
       </div>
+
+      <p className="helper-note">
+        The width the laser burns away, added back to every edge. Raise it if joints come out loose; lower it if
+        they're too tight to press together.
+      </p>
 
       {params.category === 'wood-finger' && handlers.openKerfTest && (
         <button type="button" className="btn btn-sm kerf-test-open" onClick={handlers.openKerfTest}>

@@ -694,7 +694,8 @@ export function generateWoodFingerBox(
       },
       {
         id: 'lid-alignment-guide',
-        layer: 'guide',
+        // Scored where the inner lip glues, when asked; otherwise a guide on screen only.
+        layer: params.woodLidStyle === 'inset-lid' && params.lidLipGuide ? 'score' : 'guide',
         d: `M ${fmt(T + insetClearance)} ${fmt(T + insetClearance)} L ${fmt(T + insetClearance + lipW)} ${fmt(T + insetClearance)} L ${fmt(T + insetClearance + lipW)} ${fmt(T + insetClearance + lipD)} L ${fmt(T + insetClearance)} ${fmt(T + insetClearance + lipD)} Z`,
         closed: true,
       },
@@ -1463,30 +1464,6 @@ function generateClamshellBox(
     });
   }
 
-  // Front Brass Clasp Plate on Clamshell Lid so the split seam and chest clasp are clearly visible in 3D!
-  const claspW = Math.min(22, Math.max(12, innerW * 0.18));
-  const claspH = Math.min(16, Math.max(10, lidH * 0.6));
-  panels3D.push({
-    id: 'clamshell-front-clasp',
-    name: 'Front Chest Clasp',
-    faceId: 'lid-front',
-    widthMm: claspW,
-    heightMm: claspH,
-    thicknessMm: Math.max(1.2, T * 0.45),
-    color: '#d49b3b',
-    // Its inner face stands 1 mm off the base front: swinging up about the hinge, the clasp's lower
-    // half drifts back a fraction of a millimetre before it clears the seam.
-    closedPos: [0, seamY, innerD / 2 + T + 1 + Math.max(1.2, T * 0.45) / 2],
-    explodedPos: [0, seamY + explodeDist * 0.75, innerD / 2 + T + explodeDist * 0.65],
-    rotation: [0, 0, 0],
-    foldRig: {
-      pivotOffset: hingePivot,
-      axis: 'x',
-      flatAngleRad: -Math.PI * 0.55,
-      foldedAngleRad: 0,
-      stage: [0.45, 1.0],
-    },
-  });
 
   // Every part that turns with the lid shares the lid's fold.
   const lidRig: Panel3DTransform['foldRig'] = {

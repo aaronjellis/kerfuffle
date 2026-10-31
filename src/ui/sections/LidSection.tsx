@@ -1,7 +1,7 @@
 import React from 'react';
 import { NumberField } from '../../components/NumberField';
 import type { BoxParameters } from '../../engine/types';
-import { Field } from '../Field';
+import { Field, Switch } from '../Field';
 import { unitHelpers } from './shared';
 import type { SectionProps } from './types';
 
@@ -23,6 +23,21 @@ export const LidSection: React.FC<SectionProps> = ({ params, updateParam, displa
             <option value="open">Open-top tray, five sides</option>
           </select>
         </Field>
+      )}
+
+      {params.templateId === 'finger-basic' && params.woodLidStyle === 'inset-lid' && (
+        <>
+          <Switch
+            label="Score where the lip goes"
+            checked={params.lidLipGuide}
+            onChange={(v) => updateParam('lidLipGuide', v)}
+          />
+          <p className="helper-note">
+            {params.lidLipGuide
+              ? 'A ring glues under the lid, inside the score line. Cut with the line facing up, then turn the lid over so the line is on the inside.'
+              : 'A ring glues under the lid to hold it in place: centre it by eye.'}
+          </p>
+        </>
       )}
 
       {params.templateId === 'finger-basic' && params.woodLidStyle === 'telescope-lid' && (

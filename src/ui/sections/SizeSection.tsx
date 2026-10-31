@@ -29,6 +29,11 @@ export const SizeSection: React.FC<SectionProps> = ({ params, updateParam, displ
           ]}
         />
       </div>
+      <p className="helper-note">
+        {params.dimensionReference === 'outer'
+          ? 'Best when the box itself has to fit a space, like a shelf, drawer or gap.'
+          : 'Best when you know the exact size of what needs to fit inside the box.'}
+      </p>
 
       <div className="param-row">
         <div className="param-label-row">

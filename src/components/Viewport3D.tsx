@@ -311,11 +311,14 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       const faceArts = artworks.filter(
         (a) => a.faceId === spec.faceId || a.faceId === spec.id
       );
+      // Bought brass butt hinges look like brass, not like a cut part.
+      const brass = spec.id.startsWith('butt-hinge-');
       const makeMaterial = () =>
         new THREE.MeshStandardMaterial({
-          color: spec.color,
-          roughness: isPrint ? 0.35 : 0.72,
-          metalness: isPrint ? 0.12 : 0.04,
+          color: brass ? '#c9a24e' : spec.color,
+          roughness: brass ? 0.38 : isPrint ? 0.35 : 0.72,
+          metalness: brass ? 0.65 : isPrint ? 0.12 : 0.04,
+          envMapIntensity: brass ? 2.5 : 1,
           // Wireframe mode draws feature edges only (below); the surface then writes depth
           // but no colour, so hidden edges stay hidden instead of every triangle showing.
           colorWrite: !showWireframe,

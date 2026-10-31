@@ -359,6 +359,7 @@ export const DEFAULT_BOX_PARAMETERS: BoxParameters = {
   woodLidStyle: 'flat-lid',
   lidHeightMm: 18,
   woodLidClearanceMm: 0.5,
+  lidLipGuide: true,
   clamshellHingeType: 'butt-hardware',
   hingeFingerWidthMm: 8,
   includeHingeScrewHoles: true,

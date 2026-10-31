@@ -107,6 +107,8 @@ export interface BoxParameters {
   lidHeightMm: number;
   /** Telescoping wood lid: the slip-fit gap between the lid's skirt and the base, per side */
   woodLidClearanceMm: number;
+  /** Inner lip: score its outline under the lid, as a guide for gluing it */
+  lidLipGuide: boolean;
   clamshellHingeType: ClamshellHingeType;
   hingeFingerWidthMm: number;
   includeHingeScrewHoles: boolean;

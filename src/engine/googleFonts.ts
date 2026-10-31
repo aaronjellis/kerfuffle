@@ -41,7 +41,7 @@ export const GOOGLE_FONT_CATALOG: GoogleFontOption[] = [
 
 export const DEFAULT_TEXT_ARTWORK_CONFIG: TextArtworkConfig = {
   text: 'HANDCRAFTED\nGOODS CO.',
-  fontFamily: 'Cinzel',
+  fontFamily: 'Bungee',
   fontWeight: '700',
   fontStyle: 'normal',
   textAlign: 'center',
