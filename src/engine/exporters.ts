@@ -200,6 +200,9 @@ export function exportBoxSvg(
     (artwork.mode === 'engrave' ? engraveNodes : artworkNodes).push(`    ${node}`);
   });
 
+  // xTool Studio reads a path's process from data-processing-type: cut, or a scored line engraved.
+  const processTag = (layer: 'cut' | 'score') =>
+    profile.processingTags ? ` data-processing-type="${layer === 'cut' ? 'VECTOR_CUTTING' : 'VECTOR_ENGRAVING'}"` : '';
   const scoreNodes: string[] = [];
   const cutNodes: string[] = [];
   const pieceGroups: string[] = [];
@@ -225,12 +228,12 @@ export function exportBoxSvg(
 
     const scorePathTag =
       panelScoreSubpaths.length > 0
-        ? `    <path id="${panel.id}-score" d="${panelScoreSubpaths.join(' ')}" fill="none" stroke="${profile.scoreColor}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" />`
+        ? `    <path id="${panel.id}-score" d="${panelScoreSubpaths.join(' ')}" fill="none" stroke="${profile.scoreColor}"${processTag('score')} stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" />`
         : '';
 
     const cutPathTag =
       panelCutSubpaths.length > 0
-        ? `    <path id="${panel.id}-cut" d="${panelCutSubpaths.join(' ')}" fill="none" stroke="${profile.cutColor}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" />`
+        ? `    <path id="${panel.id}-cut" d="${panelCutSubpaths.join(' ')}" fill="none" stroke="${profile.cutColor}"${processTag('cut')} stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" />`
         : '';
 
     if (scorePathTag) scoreNodes.push(scorePathTag);
@@ -254,12 +257,12 @@ export function exportBoxSvg(
     const flatNodes: string[] = [];
     if (allScoreSubpaths.length > 0) {
       flatNodes.push(
-        `  <path id="Score_Lines" d="${allScoreSubpaths.join(' ')}" fill="none" stroke="${profile.scoreColor}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" />`
+        `  <path id="Score_Lines" d="${allScoreSubpaths.join(' ')}" fill="none" stroke="${profile.scoreColor}"${processTag('score')} stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" />`
       );
     }
     if (allCutSubpaths.length > 0) {
       flatNodes.push(
-        `  <path id="Cut_Lines" d="${allCutSubpaths.join(' ')}" fill="none" stroke="${profile.cutColor}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" />`
+        `  <path id="Cut_Lines" d="${allCutSubpaths.join(' ')}" fill="none" stroke="${profile.cutColor}"${processTag('cut')} stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" />`
       );
     }
     vectorBody = flatNodes.join('\n');

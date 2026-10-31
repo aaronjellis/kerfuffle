@@ -279,6 +279,11 @@ export interface ExportProfileConfig {
   strokeWidthMm: number;
   dpi: number;
   notes: string;
+  /**
+   * Writes each cut and score path's process into the SVG as `data-processing-type`, as Atomm's
+   * export does for xTool Studio, so Studio can set cut and line-engrave without asking.
+   */
+  processingTags?: boolean;
 }
 
 export const EXPORT_PROFILES: Record<ExportProfileId, ExportProfileConfig> = {
@@ -292,6 +297,7 @@ export const EXPORT_PROFILES: Record<ExportProfileId, ExportProfileConfig> = {
     strokeWidthMm: 0.1,
     dpi: 72,
     notes: 'Red (#FF0000) cuts, blue (#0000FF) scores, and artwork is embedded at 1:1 mm for xTool M2 print and cut.',
+    processingTags: true,
   },
   lightburn: {
     id: 'lightburn',
