@@ -229,10 +229,8 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
     ...slotsFor(sideRun, W - m - T / 2, T, kerf, false),
     ...slotsFor({ ...bottomRun, fromMm: L + bottomRun.fromMm, toMm: L + bottomRun.toMm }, slotLine, T, kerf, true),
   ];
-  const bendZones: [number, number][] = [
-    [Hb, Hb + arc],
-    [Hb + arc + l.slopeLengthMm, handleFrom],
-  ];
+  // One hinge the whole shoulder: the S bends in and back out with no flat between.
+  const bendZones: [number, number][] = [[Hb, handleFrom]];
   const frontCuts = bendZones.flatMap(([lo, hi]) => hingeCuts(settings, { x: L, y: lo, width: S, height: hi - lo }).flat());
   const frontSafe: Rect = { x: L + 3, y: floor + T + 6, width: S - 6, height: Hb - 6 - (floor + T + 6) };
   const frontPiece = (id: 'front' | 'back'): CarrierPiece => sized({
@@ -246,10 +244,11 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   });
 
   // ── Side pieces ──────────────────────────────────────────────────────────────
-  const e = T + EAR_MARGIN_MM;
+  // The ear: at least half the box's depth, so the side frames the handle instead of pinching in.
+  const e = Math.max(T + EAR_MARGIN_MM, S / 4);
   const earTop = Hb + Hs + l.handleHeightMm - EAR_DROP_MM;
   // Above the body the side follows the closed flaps' outside face, in to the handle's two plies.
-  const halfWidth = (h: number) => Math.min(S / 2, taperHalfGapMm(l, T, h) + T);
+  const halfWidth = (h: number) => Math.max(e, Math.min(S / 2, taperHalfGapMm(l, T, h) + T));
   const N = 60;
   const mirrored: TabRun = { ...sideRun, fromMm: Hb - sideRun.toMm, toMm: Hb - sideRun.fromMm };
   // The side follows the closed flaps in to the handle's two plies, then the ear rises from a full-
@@ -395,6 +394,8 @@ export function generateWineCarrier(params: BoxParameters): { panels2D: BoxPanel
       outlinePoints: outline,
       holeContours: holes,
       patternSafe: true,
+      // The ears' hinge slits, drawn on the flat side pieces.
+      ...(piece.id === 'left' || piece.id === 'right' ? { surfaceLines: piece.cutsUp.map(down) } : {}),
       ...(piece.id === 'front' || piece.id === 'back'
         ? {
             bend: {

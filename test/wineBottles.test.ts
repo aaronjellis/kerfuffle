@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters } from '../src/engine/types';
-import { WINE_BOTTLES, bottlePatch, carrierFloorMm, shoulderProfile, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
+import { WINE_BOTTLES, bottlePatch, carrierFloorMm, shoulderCurve, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
 
 const carrier = (p: Partial<BoxParameters> = {}): BoxParameters => ({
   ...DEFAULT_BOX_PARAMETERS,
@@ -24,16 +24,14 @@ describe('wine carrier layout', () => {
     expect(l.bodyHeightMm).toBe(229);
   });
 
-  it('solves a shoulder profile that meets its inset and height', () => {
-    const r = shoulderProfile(42, 90, 12)!;
-    const inset = 2 * 12 * (1 - Math.cos(r.angleRad)) + r.slopeMm * Math.sin(r.angleRad);
-    const height = 2 * 12 * Math.sin(r.angleRad) + r.slopeMm * Math.cos(r.angleRad);
-    expect(inset).toBeCloseTo(42, 2);
-    expect(height).toBeCloseTo(90, 2);
+  it('curves each shoulder in one S, in and back out, meeting its inset and height', () => {
+    const { angleRad: a, radiusMm: r } = shoulderCurve(42, 90);
+    expect(2 * r * (1 - Math.cos(a))).toBeCloseTo(42, 6);
+    expect(2 * r * Math.sin(a)).toBeCloseTo(90, 6);
   });
 
-  it('returns no profile when the shoulder is too short', () => {
-    expect(shoulderProfile(42, 20, 12)).toBeNull();
+  it('leaves no flat slope: the hinge runs the whole shoulder', () => {
+    expect(wineCarrierLayout(carrier()).slopeLengthMm).toBe(0);
   });
 
   it('clamps a shoulder below the minimum and says so', () => {
@@ -87,8 +85,9 @@ describe('wine carrier bend checks', () => {
     expect(wineCarrierChecks(p).notes).toContain(`Shoulders raised to ${min} mm so the taper clears the bottle's neck.`);
   });
 
-  it('caps the shoulder bend at 40 mm however stiff the hinge', () => {
-    expect(wineCarrierLayout(carrier({ livingHingePitchMm: 6, livingHingeCutMm: 10, livingHingeBridgeMm: 6 })).bendRadiusMm).toBe(40);
+  it('bends the shoulders gently enough for the default hinge, with its margin', () => {
+    const c = wineCarrierChecks(carrier());
+    expect(wineCarrierLayout(carrier()).bendRadiusMm).toBeGreaterThan(c.shoulderBendMm);
   });
 });
 

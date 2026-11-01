@@ -55,6 +55,13 @@ describe('wine carrier pieces', () => {
     expect(front.heightMm).toBeCloseTo(l.bodyHeightMm + 2 * l.bendRadiusMm * l.bendAngleRad + l.slopeLengthMm + l.handleHeightMm, 2);
   });
 
+  it('runs the hinge the whole shoulder, from the body to the handle', () => {
+    expect(parts.meta.bendZones).toEqual([[l.bodyHeightMm, l.bodyHeightMm + 2 * l.bendRadiusMm * l.bendAngleRad]]);
+    const ys = parts.front.cutsUp.flat().map((q) => q.y);
+    const zone = 2 * l.bendRadiusMm * l.bendAngleRad;
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.9 * zone);
+  });
+
   it('puts hinge slits only in the bend zones', () => {
     const zones = parts.meta.bendZones;
     expect(parts.front.cutsUp.length).toBeGreaterThan(10);
@@ -168,5 +175,33 @@ describe('wine carrier fit', () => {
     const half = Math.max(...ear.map((p) => p.x));
     const widest = Math.max(...earPatch.flat().map((p) => Math.abs(p.x)));
     expect(half - widest).toBeLessThan(0.5);
+  });
+});
+
+describe('wine carrier sides', () => {
+  const p = carrier();
+  const l = wineCarrierLayout(p);
+  const parts = wineCarrierPieces(p);
+
+  it('never narrows a side below its ear', () => {
+    const ear = Math.max(...parts.meta.ear.map((q) => q.x)) * 2;
+    // At least half the box's depth: the ears frame the handle rather than pinching to a sliver.
+    expect(ear).toBeGreaterThanOrEqual(l.innerSideMm / 2 - 1e-6);
+    const ring = parts.left.outlineUp;
+    const top = Math.max(...ring.map((q) => q.y));
+    for (let y = l.bodyHeightMm + 1; y < top - ear; y += 5) {
+      // The outline's width at height y: where its edges cross that height.
+      const xs: number[] = [];
+      ring.forEach((a, i) => {
+        const b = ring[(i + 1) % ring.length];
+        if ((a.y - y) * (b.y - y) < 0) xs.push(a.x + ((b.x - a.x) * (y - a.y)) / (b.y - a.y));
+      });
+      expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThanOrEqual(ear - 0.5);
+    }
+  });
+
+  it('draws the ears’ hinge slits in 3D', () => {
+    const m = generateBoxModel(p);
+    for (const id of ['left', 'right']) expect(m.panels3D.find((q) => q.id === id)!.surfaceLines!.length).toBe(parts.left.cutsUp.length);
   });
 });
