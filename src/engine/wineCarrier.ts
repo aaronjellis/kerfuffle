@@ -254,8 +254,13 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   const e = Math.max(T + EAR_MARGIN_MM, S / 4);
   const earTop = Hb + Hs + l.handleHeightMm - EAR_DROP_MM;
   // Above the body the side follows the closed flaps' outside face, in to the handle's two plies.
-  // The side sweeps in along the shoulder's own curve, scaled to land on the ear's width at the top.
-  const halfWidth = (h: number) => e + ((S / 2 - e) * taperHalfGapMm(l, T, h)) / (S / 2);
+  // The side sweeps in as the shoulder closes, eased so it turns gently everywhere: flat where it
+  // leaves the body and where it meets the ear, not copying the short top bend's tight turn.
+  const halfWidth = (h: number) => {
+    const eased = e + ((S / 2 - e) * (1 + Math.cos((Math.PI * Math.min(Math.max(h, 0), Hs)) / Hs))) / 2;
+    // Never inside the closed flaps' inside faces, which would leave a gap.
+    return Math.max(eased, taperHalfGapMm(l, T, h));
+  };
   const N = 60;
   const mirrored: TabRun = { ...sideRun, fromMm: Hb - sideRun.toMm, toMm: Hb - sideRun.fromMm };
   // The side follows the closed flaps in to the handle's two plies, then the ear rises from a full-

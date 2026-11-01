@@ -174,9 +174,16 @@ export function panelEdgesGeometry(spec: Panel3DTransform): THREE.BufferGeometry
     for (let i = 0; i < n; i++) {
       const a = ring[i];
       const b = ring[(i + 1) % n];
-      for (const d of [half, -half]) {
-        put(a, d);
-        put(b, d);
+      // On a bent panel a long edge follows the bend in short steps; one straight line would cut
+      // across it through the air.
+      const steps = spec.bend ? Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / BAND_MM)) : 1;
+      for (let k = 0; k < steps; k++) {
+        const p0 = { x: a.x + ((b.x - a.x) * k) / steps, y: a.y + ((b.y - a.y) * k) / steps };
+        const p1 = { x: a.x + ((b.x - a.x) * (k + 1)) / steps, y: a.y + ((b.y - a.y) * (k + 1)) / steps };
+        for (const d of [half, -half]) {
+          put(p0, d);
+          put(p1, d);
+        }
       }
       // A line through the ply where the outline turns a real corner, not along a curve's steps.
       const prev = ring[(i - 1 + n) % n];

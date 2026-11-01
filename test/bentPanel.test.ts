@@ -89,3 +89,18 @@ describe('panel edges', () => {
     expect(across).toBe(0);
   });
 });
+
+describe('bent panel edge lines', () => {
+  it('follows the bend instead of cutting straight across it', () => {
+    const p = { ...DEFAULT_BOX_PARAMETERS, category: 'wood-finger' as const, templateId: 'finger-wine-carrier' as const };
+    const spec = generateBoxModel(p).panels3D.find((q) => q.id === 'front')!;
+    const pos = panelEdgesGeometry(spec).getAttribute('position');
+    // No edge line longer than a few mm runs through a bend: long ones would be chords through the air.
+    let longest = 0;
+    for (let i = 0; i < pos.count; i += 2) {
+      const dz = Math.abs(pos.getZ(i) - pos.getZ(i + 1));
+      if (dz > 0.5) longest = Math.max(longest, Math.hypot(pos.getX(i) - pos.getX(i + 1), pos.getY(i) - pos.getY(i + 1), pos.getZ(i) - pos.getZ(i + 1)));
+    }
+    expect(longest).toBeLessThan(4);
+  });
+});

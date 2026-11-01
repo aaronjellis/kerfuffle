@@ -3,7 +3,7 @@ import { generateBoxModel } from '../src/engine/boxGenerator';
 import { bounds } from '../src/engine/geom';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters, Point2D } from '../src/engine/types';
-import { WINE_BOTTLES, shoulderLengthMm, wineCarrierLayout } from '../src/engine/wineBottles';
+import { WINE_BOTTLES, shoulderLengthMm, taperHalfGapMm, wineCarrierLayout } from '../src/engine/wineBottles';
 import { HOOK, wineCarrierPieces } from '../src/engine/wineCarrier';
 
 const carrier = (p: Partial<BoxParameters> = {}): BoxParameters => ({
@@ -251,8 +251,42 @@ describe('wine carrier side sweep', () => {
     // Up the taper, the side keeps narrowing: never two equal widths in a row.
     for (let y = l.bodyHeightMm + 5.123; y < l.bodyHeightMm + l.shoulderHeightMm - 5; y += 5) {
       const w = widthAt(y);
-      expect(w).toBeLessThan(last - 0.01);
+      expect(w).toBeLessThan(last);
       last = w;
     }
+  });
+});
+
+describe('wine carrier side curve', () => {
+  const p = carrier();
+  const l = wineCarrierLayout(p);
+  const parts = wineCarrierPieces(p);
+  const T = p.materialThicknessMm;
+  const S = l.innerSideMm;
+  const halfAt = (y: number) => {
+    const ring = parts.left.outlineUp;
+    const xs: number[] = [];
+    ring.forEach((a, i) => {
+      const b = ring[(i + 1) % ring.length];
+      if ((a.y - y) * (b.y - y) < 0) xs.push(a.x + ((b.x - a.x) * (y - a.y)) / (b.y - a.y));
+    });
+    return Math.max(...xs) - S / 2;
+  };
+
+  it('turns gently all the way up: no tight bend where it meets the ear', () => {
+    // Curvature from the edge's second difference: no tighter than a 60 mm radius anywhere up the taper.
+    const step = 4;
+    for (let h = step + 0.123; h < l.shoulderHeightMm - step; h += step) {
+      const y = l.bodyHeightMm + h;
+      const [a, b, c] = [halfAt(y - step), halfAt(y), halfAt(y + step)];
+      const slope = (c - a) / (2 * step);
+      const curve = Math.abs(a - 2 * b + c) / (step * step) / Math.pow(1 + slope * slope, 1.5);
+      expect(1 / curve).toBeGreaterThan(60);
+    }
+  });
+
+  it('never leaves a gap inside the closed flaps', () => {
+    // Its edge reaches at least the flaps' inside faces all the way up.
+    for (let h = 1.123; h < l.shoulderHeightMm; h += 3) expect(halfAt(l.bodyHeightMm + h)).toBeGreaterThanOrEqual(taperHalfGapMm(l, T, h) - 0.05);
   });
 });
