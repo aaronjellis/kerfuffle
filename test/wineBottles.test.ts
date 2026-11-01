@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters } from '../src/engine/types';
-import { WINE_BOTTLES, bottlePatch, carrierFloorMm, shoulderProfile, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
+import { WINE_BOTTLES, bottlePatch, carrierFloorMm, shoulderLengthMm, shoulderProfile, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
 
 const carrier = (p: Partial<BoxParameters> = {}): BoxParameters => ({
   ...DEFAULT_BOX_PARAMETERS,
@@ -31,10 +31,11 @@ describe('wine carrier layout', () => {
     expect(sum * Math.sin(r.angleRad) + r.slopeMm * Math.cos(r.angleRad)).toBeCloseTo(140, 4);
   });
 
-  it('softens the lower bend, keeps the top one short, and runs a straight slope between', () => {
+  it('bends most of the shoulder in one long soft curve, then a short one into the handle', () => {
     const l = wineCarrierLayout(carrier());
     expect(l.bendRadiusMm).toBeGreaterThan(2 * l.topBendRadiusMm);
-    expect(l.slopeLengthMm).toBeGreaterThan(0);
+    // The long bend is most of the shoulder's length: the hinge runs nearly all of it.
+    expect(l.bendRadiusMm * l.bendAngleRad).toBeGreaterThan(0.6 * shoulderLengthMm(l));
   });
 
   it('clamps a shoulder below the minimum and says so', () => {

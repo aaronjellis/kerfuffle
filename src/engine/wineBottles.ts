@@ -154,12 +154,16 @@ export function wineCarrierLayout(p: BoxParameters): WineCarrierLayout {
     insetMm,
     neckClearanceMm: NECK_CLEARANCE_MM,
   };
-  // The top bend as tight as the hinge takes repeatedly; the lower one soft, near half the shoulder.
+  // The top bend as tight as the hinge takes repeatedly; the lower one soft and long, all the rest of
+  // the shoulder, so its hinge runs nearly the whole way up. Two bends with no slope between meet the
+  // inset and height when their radii add to height / sin α, α = 2·atan(inset / height).
   const hinge = hingeBendRadiusMm(livingHingeSettings(p), T, p.kerfMm, innerSideMm);
   // Capped: a stiff pattern would otherwise balloon the top bend; the checks warn instead.
   const topBendRadiusMm = Math.max(10, Math.min(MAX_TOP_BEND_MM, REPEAT_MARGIN * (Number.isFinite(hinge) ? hinge : MAX_TOP_BEND_MM)));
   const at = (h: number): WineCarrierLayout | null => {
-    const bendRadiusMm = Math.max(topBendRadiusMm, 0.45 * h);
+    const angle = 2 * Math.atan(insetMm / Math.max(1e-6, h));
+    // Too short a shoulder for that: equal bends with a slope between.
+    const bendRadiusMm = Math.max(topBendRadiusMm, h / Math.sin(angle) - topBendRadiusMm);
     const prof = shoulderProfile(insetMm, h, bendRadiusMm, topBendRadiusMm);
     return (
       prof && { ...base, shoulderHeightMm: h, minShoulderHeightMm: h, shoulderClamped: false, bendRadiusMm, topBendRadiusMm, bendAngleRad: prof.angleRad, slopeLengthMm: prof.slopeMm }

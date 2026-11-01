@@ -231,3 +231,28 @@ describe('wine carrier ear and base', () => {
     for (const piece of [parts.front, parts.back, parts.left, parts.right]) expect(bottomSlots(piece)).toBe(bottomTabs);
   });
 });
+
+describe('wine carrier side sweep', () => {
+  const p = carrier();
+  const l = wineCarrierLayout(p);
+  const parts = wineCarrierPieces(p);
+  const widthAt = (y: number) => {
+    const ring = parts.left.outlineUp;
+    const xs: number[] = [];
+    ring.forEach((a, i) => {
+      const b = ring[(i + 1) % ring.length];
+      if ((a.y - y) * (b.y - y) < 0) xs.push(a.x + ((b.x - a.x) * (y - a.y)) / (b.y - a.y));
+    });
+    return Math.max(...xs) - Math.min(...xs);
+  };
+
+  it('sweeps in all the way up the shoulder, with no straight-sided strip', () => {
+    let last = Infinity;
+    // Up the taper, the side keeps narrowing: never two equal widths in a row.
+    for (let y = l.bodyHeightMm + 5.123; y < l.bodyHeightMm + l.shoulderHeightMm - 5; y += 5) {
+      const w = widthAt(y);
+      expect(w).toBeLessThan(last - 0.01);
+      last = w;
+    }
+  });
+});
