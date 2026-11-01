@@ -21,6 +21,7 @@ import { bounds, union, type Poly } from './geom';
 import { hingeCuts, hingeShapePath } from './livingHinge';
 import { buildShape, DEFAULT_SHAPE } from './shapes';
 import { slotsFor, tabbedEdge, tabCentres, tabCountFor, TAB_MM, type TabRun } from './tabSlot';
+import { bentPoint, type BendSegment } from './bentPanel';
 import type { BoxPanel2D, BoxParameters, DielinePath, Panel3DTransform, Point2D } from './types';
 import { carrierFloorMm, EAR_PATCH, FOOT_ARCH_MM, HOOK, NOTCH_FROM_MM, shoulderLengthMm, taperHalfGapMm, wineCarrierLayout } from './wineBottles';
 
@@ -75,6 +76,9 @@ export interface CarrierParts {
     /** The handle tab beyond the ear, carried: its bottom and the hook's top. */
     tabLo: number;
     tabHi: number;
+    /** How far the sides lean in on their hinge patch, and their bend from the foot up a side of a given height. */
+    sideLean: number;
+    sideSegments: (sideHeight: number) => BendSegment[];
     /** How many tabs the bottom has along each edge. */
     bottomTabCount: number;
     /** The handle half's two side edges across the front, and the notch's top up the handle. */
@@ -216,31 +220,31 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
     { x: W, y: 0 },
     { x: W, y: Hb },
     { x: R, y: Hb },
-    // The flap's edge slants in to the handle; the handle's edge and its hooked tab: the notch across
-    // the gap and through the ear, the hook rising beyond it.
+    // The flap's edge slants in to the handle; the handle's edge and its hooked tab: the notch through
+    // the ear (which leans in to meet it), the hook rising beyond it.
     { x: hR, y: handleFrom },
     { x: hR, y: hy(notch.lo) },
-    { x: R + T + HOOK.reachMm, y: hy(notch.lo) },
-    { x: R + T + HOOK.reachMm, y: hy(notch.top) },
-    { x: R + T, y: hy(notch.top) },
-    { x: R + T, y: hy(notch.hi) },
+    { x: hR + T + HOOK.reachMm, y: hy(notch.lo) },
+    { x: hR + T + HOOK.reachMm, y: hy(notch.top) },
+    { x: hR + T, y: hy(notch.top) },
+    { x: hR + T, y: hy(notch.hi) },
     { x: hR, y: hy(notch.hi) },
   );
   corner(hR - HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, 0, Math.PI / 2);
   corner(hL + HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, Math.PI / 2, Math.PI);
   front.push(
     { x: hL, y: hy(notch.hi) },
-    { x: L - T, y: hy(notch.hi) },
-    { x: L - T, y: hy(notch.top) },
-    { x: L - T - HOOK.reachMm, y: hy(notch.top) },
-    { x: L - T - HOOK.reachMm, y: hy(notch.lo) },
+    { x: hL - T, y: hy(notch.hi) },
+    { x: hL - T, y: hy(notch.top) },
+    { x: hL - T - HOOK.reachMm, y: hy(notch.top) },
+    { x: hL - T - HOOK.reachMm, y: hy(notch.lo) },
     { x: hL, y: hy(notch.lo) },
     { x: hL, y: handleFrom },
     { x: L, y: Hb },
     { x: 0, y: Hb },
   );
   // The notch's inside corners stay square: the hook seats its full depth on the ear.
-  const square = [hL, L - T, hR, R + T].map((x) => ({ x, y: hy(notch.hi) }));
+  const square = [hL, hL - T, hR, hR + T].map((x) => ({ x, y: hy(notch.hi) }));
   const frontOutline = roundCorners(front, roundFor(T), (q) => !square.some((c) => Math.abs(c.x - q.x) < 1e-9 && Math.abs(c.y - q.y) < 1e-9));
   const handleHole = move(centredShape('pill', Math.max(24, Math.min(hR - hL - 24, 90)), 28), W / 2, Hf - 30);
   const frontSlots = [
@@ -307,7 +311,29 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   const joined = largest(union([[side], [earShape]]));
   // Round the part above the body only; the body's tabs are hidden in the front and back.
   const sideOutline = roundCorners(joined, roundFor(T), (q) => q.y > Hb + 1e-6);
-  const slotLo = Hb + Hs + notch.lo - HOOK.hookMm;
+  // The side leans in on its hinge patch by the flaps' taper, so its ear meets the narrowed handle:
+  // straight up to the patch, a gentle bend across it, straight on up.
+  const patchFrom = Hb + EAR_PATCH.aboveBodyMm - EAR_PATCH.heightMm / 2;
+  const lean = Math.atan(taper / Math.max(1, Hs - EAR_PATCH.aboveBodyMm));
+  const sideSegments = (sideHeight: number): BendSegment[] => [
+    { kind: 'straight', lengthMm: patchFrom },
+    { kind: 'arc', radiusMm: EAR_PATCH.heightMm / lean, angleRad: lean },
+    { kind: 'straight', lengthMm: Math.max(0, sideHeight - patchFrom - EAR_PATCH.heightMm) },
+  ];
+  /** Where up the flat side a height lands once it leans: a touch further, as the lean shortens it. */
+  const flatFor = (height: number) => {
+    const segs = sideSegments(height + 100);
+    let lo = 0;
+    let hi = height + 50;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (bentPoint(segs, mid, 0).y < height) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+  const slotSpan = HOOK.notchMm + HOOK.hookMm;
+  const slotLo = flatFor(Hb + Hs + notch.lo - HOOK.hookMm + slotSpan / 2) - slotSpan / 2;
   // Square, and the stacked plies' full width all the way up, so the hook passes.
   const slotW = 2 * T - kerf;
   const earSlot = [
@@ -369,6 +395,8 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
       ear: earRing,
       earSlot: move(earSlot, -S / 2, 0),
       earPatch: earPatch.map((seg) => move(seg, -S / 2, 0)),
+      sideLean: lean,
+      sideSegments,
       tabLo: Hb + Hs + notch.lo,
       tabHi: Hb + Hs + notch.top,
       bottomTabCount: bottomRun.count,
@@ -445,8 +473,8 @@ export function generateWineCarrier(params: BoxParameters): { panels2D: BoxPanel
       outlinePoints: outline,
       holeContours: holes,
       patternSafe: true,
-      // The ears' hinge slits, drawn on the flat side pieces.
-      ...(piece.id === 'left' || piece.id === 'right' ? { surfaceLines: piece.cutsUp.map(down) } : {}),
+      // The sides lean in on their hinge patch; its slits are drawn along the bend.
+      ...(piece.id === 'left' || piece.id === 'right' ? { bend: { segments: parts.meta.sideSegments(b.h), lines: piece.cutsUp.map(down) } } : {}),
       ...(piece.id === 'front' || piece.id === 'back'
         ? {
             bend: {

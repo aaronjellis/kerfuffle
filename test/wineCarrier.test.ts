@@ -5,6 +5,7 @@ import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters, Point2D } from '../src/engine/types';
 import { WINE_BOTTLES, shoulderLengthMm, taperHalfGapMm, wineCarrierLayout } from '../src/engine/wineBottles';
 import { HOOK, wineCarrierPieces } from '../src/engine/wineCarrier';
+import { bentPoint } from '../src/engine/bentPanel';
 
 const carrier = (p: Partial<BoxParameters> = {}): BoxParameters => ({
   ...DEFAULT_BOX_PARAMETERS,
@@ -112,8 +113,8 @@ describe('wine carrier pieces', () => {
     const handleFrom = l.bodyHeightMm + shoulderLengthMm(l) + 1;
     // The notch's inside corners are square on purpose: they sit inside the ear, where the hook seats.
     const notchY = handleFrom - 1 + parts.meta.notchHiMm;
-    const { handleLeftMm: hl, handleRightMm: hr, earLeftMm: el, earRightMm: er } = parts.meta;
-    const inNotch = (q: { x: number; y: number }) => Math.abs(q.y - notchY) < 1e-6 && [hl, el - T, hr, er + T].some((x) => Math.abs(q.x - x) < 1e-6);
+    const { handleLeftMm: hl, handleRightMm: hr } = parts.meta;
+    const inNotch = (q: { x: number; y: number }) => Math.abs(q.y - notchY) < 1e-6 && [hl, hl - T, hr, hr + T].some((x) => Math.abs(q.x - x) < 1e-6);
     expect(sharpestTurn(parts.front.outlineUp, (q) => q.y > handleFrom && !inNotch(q))).toBeLessThan(30);
     expect(sharpestTurn(parts.left.outlineUp, (q) => q.y > l.bodyHeightMm + 2)).toBeLessThan(30);
   });
@@ -165,12 +166,12 @@ describe('wine carrier fit', () => {
     const handleFrom = l.bodyHeightMm + shoulderLengthMm(l);
     const y = handleFrom + parts.meta.notchHiMm;
     const has = (x: number) => parts.front.outlineUp.some((p) => Math.abs(p.x - x) < 1e-6 && Math.abs(p.y - y) < 1e-6);
-    // At the handle's edge, and at the ear's outer face where the hook rises.
-    const { handleLeftMm, handleRightMm, earLeftMm, earRightMm } = parts.meta;
+    // At the handle's edge, and at the leaned ear's outer face where the hook rises.
+    const { handleLeftMm, handleRightMm } = parts.meta;
     expect(has(handleLeftMm)).toBe(true);
-    expect(has(earLeftMm - T)).toBe(true);
+    expect(has(handleLeftMm - T)).toBe(true);
     expect(has(handleRightMm)).toBe(true);
-    expect(has(earRightMm + T)).toBe(true);
+    expect(has(handleRightMm + T)).toBe(true);
   });
 
   it('keeps solid wood between every front slot and the front’s edge', () => {
@@ -216,9 +217,9 @@ describe('wine carrier sides', () => {
     }
   });
 
-  it('draws the ears’ hinge slits in 3D', () => {
+  it('draws the ears’ hinge slits in 3D, along the side’s lean', () => {
     const m = generateBoxModel(p);
-    for (const id of ['left', 'right']) expect(m.panels3D.find((q) => q.id === id)!.surfaceLines!.length).toBe(parts.left.cutsUp.length);
+    for (const id of ['left', 'right']) expect(m.panels3D.find((q) => q.id === id)!.bend!.lines!.length).toBe(parts.left.cutsUp.length);
   });
 });
 
@@ -331,10 +332,39 @@ describe('wine carrier handle taper', () => {
     expect(leftAt(handleFrom - 1)).toBeCloseTo(hl, 0);
   });
 
-  it('still reaches each tab through its ear, the hook beyond the ear’s outer face', () => {
-    // The hook's tip, up in the handle: past the ear's outer face by its reach.
+  it('reaches each tab just through its ear, now the ear leans in to meet the handle', () => {
+    // The hook's tip, up in the handle: the ply of the ear past the handle's edge, then its reach.
     const handleFrom = l.bodyHeightMm + shoulderLengthMm(l);
     const tipX = Math.min(...parts.front.outlineUp.filter((q) => q.y > handleFrom).map((q) => q.x));
-    expect(tipX).toBeCloseTo(el - T - HOOK.reachMm, 0);
+    expect(tipX).toBeCloseTo(hl - T - HOOK.reachMm, 6);
+  });
+
+  it('leans each side in on its hinge patch so its ear meets the narrowed handle', () => {
+    const m = generateBoxModel(p);
+    for (const id of ['left', 'right']) {
+      const spec = m.panels3D.find((q) => q.id === id)!;
+      const segs = spec.bend!.segments;
+      const arc = segs.find((g) => g.kind === 'arc')!;
+      expect(arc.kind === 'arc' && arc.angleRad).toBeGreaterThan(0);
+      // Where the handle starts, the side has moved in by the taper.
+      const total = segs.reduce((a, g) => a + (g.kind === 'straight' ? g.lengthMm : g.radiusMm * Math.abs(g.angleRad)), 0);
+      const atHandle = (() => {
+        let s0 = 0;
+        for (let s = 0; s <= total; s += 0.25) if (bentPoint(segs, s, 0).y <= l.bodyHeightMm + l.shoulderHeightMm) s0 = s;
+        return bentPoint(segs, s0, 0);
+      })();
+      expect(-atHandle.z).toBeCloseTo(hl - el, 0);
+    }
+  });
+
+  it('places the ear’s slot where the tabs are once the side leans', () => {
+    const m = generateBoxModel(p);
+    const spec = m.panels3D.find((q) => q.id === 'left')!;
+    const slotDown = spec.holeContours![0];
+    const slotMidFromFoot = spec.heightMm - (Math.min(...slotDown.map((q) => q.y)) + Math.max(...slotDown.map((q) => q.y))) / 2;
+    const world = bentPoint(spec.bend!.segments, slotMidFromFoot, 0).y;
+    // The slot runs from a hook's height below the tabs' notch to the hook's top.
+    const slotMidWorld = parts.meta.tabLo - HOOK.hookMm + (HOOK.notchMm + HOOK.hookMm) / 2;
+    expect(world).toBeCloseTo(slotMidWorld, 1);
   });
 });
