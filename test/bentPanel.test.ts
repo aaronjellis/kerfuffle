@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { generateBoxModel } from '../src/engine/boxGenerator';
-import { bentPoint, buildBentPanelGeometry, panelEdgesGeometry, type BendSegment } from '../src/engine/bentPanel';
+import { bentPoint, buildBentLines, buildBentPanelGeometry, panelEdgesGeometry, type BendSegment } from '../src/engine/bentPanel';
+import { applyAssemblyTransform, EDGES_NAME, type PanelEntry } from '../src/engine/scene3d';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { Panel3DTransform } from '../src/engine/types';
 import { wineCarrierLayout } from '../src/engine/wineBottles';
@@ -102,5 +103,43 @@ describe('bent panel edge lines', () => {
       if (dz > 0.5) longest = Math.max(longest, Math.hypot(pos.getX(i) - pos.getX(i + 1), pos.getY(i) - pos.getY(i + 1), pos.getZ(i) - pos.getZ(i + 1)));
     }
     expect(longest).toBeLessThan(4);
+  });
+});
+
+describe('bent panels in the assembly animation', () => {
+  const p = { ...DEFAULT_BOX_PARAMETERS, category: 'wood-finger' as const, templateId: 'finger-wine-carrier' as const };
+  const model = generateBoxModel(p);
+  const entries = () => {
+    const map = new Map<string, PanelEntry>();
+    for (const spec of model.panels3D.filter((q) => q.bend)) {
+      const mesh = new THREE.Mesh(buildBentPanelGeometry(spec));
+      const edges = new THREE.LineSegments(panelEdgesGeometry(spec));
+      edges.name = EDGES_NAME;
+      mesh.add(edges);
+      mesh.add(buildBentLines(spec, spec.bend!.lines ?? []));
+      map.set(spec.id, { wrapper: new THREE.Group(), meshes: [mesh], spec });
+    }
+    return map;
+  };
+  const size = (g: THREE.BufferGeometry) => new THREE.Box3().setFromBufferAttribute(g.getAttribute('position') as THREE.BufferAttribute).getSize(new THREE.Vector3());
+
+  it('lays the hinged pieces out flat when the box is fully open', () => {
+    const map = entries();
+    applyAssemblyTransform(map, 0, model);
+    for (const { meshes, spec } of map.values()) {
+      const [mesh] = meshes;
+      expect(size(mesh.geometry).z).toBeCloseTo(T, 1);
+      expect(size(mesh.geometry).y).toBeCloseTo(spec.heightMm, 1);
+      // The edges and the hinge slits lie flat with it.
+      for (const child of mesh.children) expect(size((child as THREE.LineSegments).geometry).z).toBeLessThan(T + 0.2);
+    }
+  });
+
+  it('bends them back as it closes', () => {
+    const map = entries();
+    applyAssemblyTransform(map, 0, model);
+    applyAssemblyTransform(map, 1, model);
+    const front = map.get('front')!;
+    expect(size(front.meshes[0].geometry).z).toBeCloseTo(size(buildBentPanelGeometry(front.spec)).z, 3);
   });
 });

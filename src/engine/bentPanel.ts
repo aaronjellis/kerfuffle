@@ -11,10 +11,13 @@
 import * as THREE from 'three';
 import { Clipper, FillRule } from 'clipper2-js';
 import { fromPaths64, toPaths64, type Poly } from './geom';
-import { EDGE_COLOR, mergeBufferGeometries } from './scene3d';
+import { EDGE_COLOR, EDGES_NAME, mergeBufferGeometries } from './scene3d';
 import type { Panel3DTransform, Point2D } from './types';
 
 export type BendSegment = { kind: 'straight'; lengthMm: number } | { kind: 'arc'; radiusMm: number; angleRad: number };
+
+/** The hinge slits drawn on a bent panel, found by name to redraw them as it bends. */
+export const BENT_LINES_NAME = 'bent-lines';
 
 /** The arcs are cut into bands this long along the mid-thickness. */
 const BAND_MM = 2;
@@ -148,7 +151,9 @@ export function buildBentLines(spec: Panel3DTransform, paths: Point2D[][]): THRE
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-  return new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: EDGE_COLOR }));
+  const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: EDGE_COLOR }));
+  lines.name = BENT_LINES_NAME;
+  return lines;
 }
 
 /** A panel's bent geometry when it bends, or null for a viewer to build its flat panel as before. */
@@ -200,4 +205,41 @@ export function panelEdgesGeometry(spec: Panel3DTransform): THREE.BufferGeometry
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
   return geometry;
+}
+
+/**
+ * The panel's profile a share of the way bent: 0 flat, 1 as closed. Each arc keeps its length, as
+ * the hinge does, turning less on a wider radius.
+ */
+export function partlyBent(segments: BendSegment[], share: number): BendSegment[] {
+  return segments.map((g) =>
+    g.kind === 'straight' || share >= 1
+      ? g
+      : share < 1e-3
+        ? { kind: 'straight', lengthMm: segLength(g) }
+        : { kind: 'arc', radiusMm: g.radiusMm / share, angleRad: g.angleRad * share },
+  );
+}
+
+/** Rebends a bent panel's mesh, its edges and its hinge slits a share of the way (0 flat, 1 closed). */
+export function bendBentPanel(mesh: THREE.Mesh, spec: Panel3DTransform, share: number) {
+  if (!spec.bend) return;
+  const last = mesh.userData.bentShare as number | undefined;
+  if (last === undefined ? share >= 1 : Math.abs(last - share) < 0.01) return;
+  mesh.userData.bentShare = share;
+  const posed: Panel3DTransform = { ...spec, bend: { ...spec.bend, segments: partlyBent(spec.bend.segments, share) } };
+  mesh.geometry.dispose();
+  mesh.geometry = buildBentPanelGeometry(posed);
+  const edges = mesh.getObjectByName(EDGES_NAME) as THREE.LineSegments | undefined;
+  if (edges) {
+    edges.geometry.dispose();
+    edges.geometry = panelEdgesGeometry(posed);
+  }
+  const slits = mesh.getObjectByName(BENT_LINES_NAME) as THREE.LineSegments | undefined;
+  if (slits) {
+    const fresh = buildBentLines(posed, posed.bend?.lines ?? []);
+    slits.geometry.dispose();
+    slits.geometry = fresh.geometry;
+    (fresh.material as THREE.Material).dispose();
+  }
 }

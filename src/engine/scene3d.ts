@@ -4,6 +4,7 @@
  * Kerfuffle's viewport and the Atomm generator, so both draw the box the same way from one model.
  */
 import * as THREE from 'three';
+import { bendBentPanel } from './bentPanel';
 import { catchTongueEdge, catchTongueRadii, livingHingeCatch, livingHingeZoneCuts, wrapBendRadiusMm } from './fingerJointEngine';
 import { buildRoundedRectPoints } from './roundedRect';
 import type { GeneratedBoxModel, Panel3DTransform } from './types';
@@ -30,6 +31,10 @@ export function applyAssemblyTransform(
   // The living-hinge lid straightens out flat as it lifts away, and curls back over as it closes.
   const lid = map.get('living-hinge-lid');
   if (lid?.meshes[0]) bendLivingHingeLid(lid.meshes[0], model, lid.spec, (Math.PI / 2) * t * t * (3 - 2 * t));
+  // Bent panels (the wine carrier's front, back and sides) straighten as they part, and bend back as they close.
+  map.forEach(({ meshes, spec }) => {
+    if (spec.bend && meshes[0]) bendBentPanel(meshes[0], spec, t * t * (3 - 2 * t));
+  });
   const isClamshell =
     templateId === 'finger-clamshell' ||
     templateId === '3d-snap-box';
