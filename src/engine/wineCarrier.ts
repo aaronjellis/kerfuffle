@@ -78,6 +78,8 @@ export interface CarrierParts {
     tabHi: number;
     /** How far the sides lean in on their hinge patch, and their bend from the foot up a side of a given height. */
     sideLean: number;
+    /** The front's two side edges at a height up the flat front, leaning with the ears. */
+    handleEdgesAt: (y: number) => [number, number];
     sideSegments: (sideHeight: number) => BendSegment[];
     /** How many tabs the bottom has along each edge. */
     bottomTabCount: number;
@@ -209,44 +211,83 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   // The front and back narrow a little up the shoulder, a few mm a side, so the handle sits in from
   // the ears and its tabs have room to find their slots.
   const taper = Math.min(6, Math.max(3, 0.05 * S));
-  const hL = L + taper;
-  const hR = R - taper;
-  /** The flap's edges at height y: the ears' inside faces at the body's top, the handle's at the bend's top. */
-  const flapEdges = (y: number): [number, number] => {
-    const t = Math.min(1, Math.max(0, (y - Hb) / (handleFrom - Hb)));
-    return [L + taper * t, R - taper * t];
+  // The side leans in on its hinge patch by the flaps' taper, so its ear meets the narrowed handle:
+  // straight up to the patch, a gentle bend across it, straight on up.
+  const patchFrom = Hb + EAR_PATCH.aboveBodyMm - EAR_PATCH.heightMm / 2;
+  const lean = Math.atan(taper / Math.max(1, Hs - EAR_PATCH.aboveBodyMm));
+  const sideSegments = (sideHeight: number): BendSegment[] => [
+    { kind: 'straight', lengthMm: patchFrom },
+    { kind: 'arc', radiusMm: EAR_PATCH.heightMm / lean, angleRad: lean },
+    { kind: 'straight', lengthMm: Math.max(0, sideHeight - patchFrom - EAR_PATCH.heightMm) },
+  ];
+  /** Where up the flat side a height lands once it leans: a touch further, as the lean shortens it. */
+  const flatFor = (height: number) => {
+    const segs = sideSegments(height + 100);
+    let lo = 0;
+    let hi = height + 50;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (bentPoint(segs, mid, 0).y < height) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
   };
+  const frontSegments: BendSegment[] = [
+    { kind: 'straight', lengthMm: Hb },
+    { kind: 'arc', radiusMm: l.bendRadiusMm, angleRad: l.bendAngleRad },
+    { kind: 'straight', lengthMm: l.slopeLengthMm },
+    { kind: 'arc', radiusMm: l.topBendRadiusMm, angleRad: -l.bendAngleRad },
+    { kind: 'straight', lengthMm: l.handleHeightMm },
+  ];
+  /** How far in the leaning side's inside face is at a height up the flat front: the front's edge follows it. */
+  const insetAt = (y: number) => {
+    if (y <= Hb) return 0;
+    const at = flatFor(bentPoint(frontSegments, y, 0).y);
+    return -T / 2 - bentPoint(sideSegments(at + 1), at, -T / 2).z;
+  };
+  /** The flap's and handle's edges at height y: against the ears' inside faces all the way up. */
+  const flapEdges = (y: number): [number, number] => [L + insetAt(y), R - insetAt(y)];
+  const hL = flapEdges(handleFrom)[0];
+  const hR = flapEdges(handleFrom)[1];
+  const lx = (y: number) => flapEdges(y)[0];
+  const rx = (y: number) => flapEdges(y)[1];
+  /** The edge from one height to another, in short steps so it follows the lean's curve. */
+  const edgeRun = (from: number, to: number, x: (y: number) => number) => {
+    const n = Math.max(1, Math.ceil(Math.abs(to - from) / 3));
+    return Array.from({ length: n }, (_, i) => ({ x: x(from + ((to - from) * (i + 1)) / n), y: from + ((to - from) * (i + 1)) / n }));
+  };
+  const cornerY = Hf - HANDLE_CORNER_MM;
   front.push(
     { x: W, y: 0 },
     { x: W, y: Hb },
     { x: R, y: Hb },
-    // The flap's edge slants in to the handle; the handle's edge and its hooked tab: the notch through
-    // the ear (which leans in to meet it), the hook rising beyond it.
-    { x: hR, y: handleFrom },
-    { x: hR, y: hy(notch.lo) },
-    { x: hR + T + HOOK.reachMm, y: hy(notch.lo) },
-    { x: hR + T + HOOK.reachMm, y: hy(notch.top) },
-    { x: hR + T, y: hy(notch.top) },
-    { x: hR + T, y: hy(notch.hi) },
-    { x: hR, y: hy(notch.hi) },
+    // The flap's edge slants in with the leaning ear, then the handle's edge and its hooked tab: the
+    // notch through the ear, the hook rising beyond it, each leaning as the ear does.
+    ...edgeRun(Hb, hy(notch.lo), rx),
+    { x: rx(hy(notch.lo)) + T + HOOK.reachMm, y: hy(notch.lo) },
+    { x: rx(hy(notch.top)) + T + HOOK.reachMm, y: hy(notch.top) },
+    { x: rx(hy(notch.top)) + T, y: hy(notch.top) },
+    { x: rx(hy(notch.hi)) + T, y: hy(notch.hi) },
+    { x: rx(hy(notch.hi)), y: hy(notch.hi) },
+    // Up to the corner, whose arc starts on the edge's last point.
+    ...edgeRun(hy(notch.hi), cornerY, rx).slice(0, -1),
   );
-  corner(hR - HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, 0, Math.PI / 2);
-  corner(hL + HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, Math.PI / 2, Math.PI);
+  corner(rx(cornerY) - HANDLE_CORNER_MM, cornerY, 0, Math.PI / 2);
+  corner(lx(cornerY) + HANDLE_CORNER_MM, cornerY, Math.PI / 2, Math.PI);
   front.push(
-    { x: hL, y: hy(notch.hi) },
-    { x: hL - T, y: hy(notch.hi) },
-    { x: hL - T, y: hy(notch.top) },
-    { x: hL - T - HOOK.reachMm, y: hy(notch.top) },
-    { x: hL - T - HOOK.reachMm, y: hy(notch.lo) },
-    { x: hL, y: hy(notch.lo) },
-    { x: hL, y: handleFrom },
-    { x: L, y: Hb },
+    ...edgeRun(cornerY, hy(notch.hi), lx),
+    { x: lx(hy(notch.hi)) - T, y: hy(notch.hi) },
+    { x: lx(hy(notch.top)) - T, y: hy(notch.top) },
+    { x: lx(hy(notch.top)) - T - HOOK.reachMm, y: hy(notch.top) },
+    { x: lx(hy(notch.lo)) - T - HOOK.reachMm, y: hy(notch.lo) },
+    { x: lx(hy(notch.lo)), y: hy(notch.lo) },
+    ...edgeRun(hy(notch.lo), Hb, lx),
     { x: 0, y: Hb },
   );
   // The notch's inside corners stay square: the hook seats its full depth on the ear.
-  const square = [hL, hL - T, hR, hR + T].map((x) => ({ x, y: hy(notch.hi) }));
+  const square = [lx(hy(notch.hi)), lx(hy(notch.hi)) - T, rx(hy(notch.hi)), rx(hy(notch.hi)) + T].map((x) => ({ x, y: hy(notch.hi) }));
   const frontOutline = roundCorners(front, roundFor(T), (q) => !square.some((c) => Math.abs(c.x - q.x) < 1e-9 && Math.abs(c.y - q.y) < 1e-9));
-  const handleHole = move(centredShape('pill', Math.max(24, Math.min(hR - hL - 24, 90)), 28), W / 2, Hf - 30);
+  const handleHole = move(centredShape('pill', Math.max(24, Math.min(rx(Hf - 30) - lx(Hf - 30) - 24, 90)), 28), W / 2, Hf - 30);
   const frontSlots = [
     ...slotsFor(sideRun, m + T / 2, T, kerf, false),
     ...slotsFor(sideRun, W - m - T / 2, T, kerf, false),
@@ -311,27 +352,6 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   const joined = largest(union([[side], [earShape]]));
   // Round the part above the body only; the body's tabs are hidden in the front and back.
   const sideOutline = roundCorners(joined, roundFor(T), (q) => q.y > Hb + 1e-6);
-  // The side leans in on its hinge patch by the flaps' taper, so its ear meets the narrowed handle:
-  // straight up to the patch, a gentle bend across it, straight on up.
-  const patchFrom = Hb + EAR_PATCH.aboveBodyMm - EAR_PATCH.heightMm / 2;
-  const lean = Math.atan(taper / Math.max(1, Hs - EAR_PATCH.aboveBodyMm));
-  const sideSegments = (sideHeight: number): BendSegment[] => [
-    { kind: 'straight', lengthMm: patchFrom },
-    { kind: 'arc', radiusMm: EAR_PATCH.heightMm / lean, angleRad: lean },
-    { kind: 'straight', lengthMm: Math.max(0, sideHeight - patchFrom - EAR_PATCH.heightMm) },
-  ];
-  /** Where up the flat side a height lands once it leans: a touch further, as the lean shortens it. */
-  const flatFor = (height: number) => {
-    const segs = sideSegments(height + 100);
-    let lo = 0;
-    let hi = height + 50;
-    for (let i = 0; i < 60; i++) {
-      const mid = (lo + hi) / 2;
-      if (bentPoint(segs, mid, 0).y < height) lo = mid;
-      else hi = mid;
-    }
-    return (lo + hi) / 2;
-  };
   const slotSpan = HOOK.notchMm + HOOK.hookMm;
   const slotLo = flatFor(Hb + Hs + notch.lo - HOOK.hookMm + slotSpan / 2) - slotSpan / 2;
   // Square, and the stacked plies' full width all the way up, so the hook passes.
@@ -402,6 +422,7 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
       bottomTabCount: bottomRun.count,
       handleLeftMm: hL,
       handleRightMm: hR,
+      handleEdgesAt: flapEdges,
       earLeftMm: L,
       earRightMm: R,
       notchHiMm: notch.hi,

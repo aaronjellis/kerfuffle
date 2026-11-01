@@ -4,6 +4,7 @@ import { bounds } from '../src/engine/geom';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters, Point2D } from '../src/engine/types';
 import { WINE_BOTTLES, shoulderLengthMm, taperHalfGapMm, wineCarrierLayout } from '../src/engine/wineBottles';
+import { NOTCH_FROM_MM } from '../src/engine/wineBottles';
 import { HOOK, wineCarrierPieces } from '../src/engine/wineCarrier';
 import { bentPoint } from '../src/engine/bentPanel';
 
@@ -113,7 +114,7 @@ describe('wine carrier pieces', () => {
     const handleFrom = l.bodyHeightMm + shoulderLengthMm(l) + 1;
     // The notch's inside corners are square on purpose: they sit inside the ear, where the hook seats.
     const notchY = handleFrom - 1 + parts.meta.notchHiMm;
-    const { handleLeftMm: hl, handleRightMm: hr } = parts.meta;
+    const [hl, hr] = parts.meta.handleEdgesAt(notchY);
     const inNotch = (q: { x: number; y: number }) => Math.abs(q.y - notchY) < 1e-6 && [hl, hl - T, hr, hr + T].some((x) => Math.abs(q.x - x) < 1e-6);
     expect(sharpestTurn(parts.front.outlineUp, (q) => q.y > handleFrom && !inNotch(q))).toBeLessThan(30);
     expect(sharpestTurn(parts.left.outlineUp, (q) => q.y > l.bodyHeightMm + 2)).toBeLessThan(30);
@@ -167,7 +168,7 @@ describe('wine carrier fit', () => {
     const y = handleFrom + parts.meta.notchHiMm;
     const has = (x: number) => parts.front.outlineUp.some((p) => Math.abs(p.x - x) < 1e-6 && Math.abs(p.y - y) < 1e-6);
     // At the handle's edge, and at the leaned ear's outer face where the hook rises.
-    const { handleLeftMm, handleRightMm } = parts.meta;
+    const [handleLeftMm, handleRightMm] = parts.meta.handleEdgesAt(y);
     expect(has(handleLeftMm)).toBe(true);
     expect(has(handleLeftMm - T)).toBe(true);
     expect(has(handleRightMm)).toBe(true);
@@ -335,8 +336,8 @@ describe('wine carrier handle taper', () => {
   it('reaches each tab just through its ear, now the ear leans in to meet the handle', () => {
     // The hook's tip, up in the handle: the ply of the ear past the handle's edge, then its reach.
     const handleFrom = l.bodyHeightMm + shoulderLengthMm(l);
-    const tipX = Math.min(...parts.front.outlineUp.filter((q) => q.y > handleFrom).map((q) => q.x));
-    expect(tipX).toBeCloseTo(hl - T - HOOK.reachMm, 6);
+    const tip = parts.front.outlineUp.filter((q) => q.y > handleFrom).reduce((a, q) => (q.x < a.x ? q : a));
+    expect(tip.x).toBeCloseTo(parts.meta.handleEdgesAt(tip.y)[0] - T - HOOK.reachMm, 6);
   });
 
   it('leans each side in on its hinge patch so its ear meets the narrowed handle', () => {
@@ -354,6 +355,43 @@ describe('wine carrier handle taper', () => {
         return bentPoint(segs, s0, 0);
       })();
       expect(-atHandle.z).toBeCloseTo(hl - el, 0);
+    }
+  });
+
+  it('keeps the front’s edge against the leaning ear all the way up, so neither cuts into the other', () => {
+    const m = generateBoxModel(p);
+    const front = m.panels3D.find((q) => q.id === 'front')!;
+    const side = m.panels3D.find((q) => q.id === 'left')!;
+    const segs = side.bend!.segments;
+    // The side's inside face, in the front's frame, at a height above the foot.
+    const sideInner = (y: number) => {
+      let lo = 0;
+      let hi = y + 60;
+      for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        if (bentPoint(segs, mid, 0).y < y) lo = mid;
+        else hi = mid;
+      }
+      return parts.meta.earLeftMm - T / 2 - bentPoint(segs, lo, -T / 2).z;
+    };
+    const ring = parts.front.outlineUp;
+    const leftAt = (y: number) => {
+      const xs: number[] = [];
+      ring.forEach((a, i) => {
+        const b = ring[(i + 1) % ring.length];
+        if ((a.y - y) * (b.y - y) < 0) xs.push(a.x + ((b.x - a.x) * (y - a.y)) / (b.y - a.y));
+      });
+      // The handle's own edge, not the tab beyond it.
+      return Math.max(...xs.filter((x) => x < l.innerSideMm / 2));
+    };
+    const top = l.bodyHeightMm + shoulderLengthMm(l) + l.handleHeightMm - 12;
+    const tabFrom = l.bodyHeightMm + shoulderLengthMm(l) + NOTCH_FROM_MM - 1;
+    const tabTo = tabFrom + HOOK.notchMm + HOOK.hookMm + 2;
+    for (let s = l.bodyHeightMm + 2.123; s < top; s += 4) {
+      // Across the tab, the outline is the tab's; the edge resumes above it.
+      if (s > tabFrom && s < tabTo) continue;
+      const y = bentPoint(front.bend!.segments, s, 0).y;
+      expect(Math.abs(leftAt(s) - sideInner(y))).toBeLessThan(0.3);
     }
   });
 
