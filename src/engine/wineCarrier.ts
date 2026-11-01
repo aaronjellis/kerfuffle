@@ -80,6 +80,9 @@ export interface CarrierParts {
     /** The handle half's two side edges across the front, and the notch's top up the handle. */
     handleLeftMm: number;
     handleRightMm: number;
+    /** The ears' inside faces across the front: where the flaps meet them at the body's top. */
+    earLeftMm: number;
+    earRightMm: number;
     notchHiMm: number;
   };
 }
@@ -199,34 +202,47 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
     }
   };
   const hy = (t: number) => handleFrom + t;
+  // The front and back narrow a little up the shoulder, a few mm a side, so the handle sits in from
+  // the ears and its tabs have room to find their slots.
+  const taper = Math.min(6, Math.max(3, 0.05 * S));
+  const hL = L + taper;
+  const hR = R - taper;
+  /** The flap's edges at height y: the ears' inside faces at the body's top, the handle's at the bend's top. */
+  const flapEdges = (y: number): [number, number] => {
+    const t = Math.min(1, Math.max(0, (y - Hb) / (handleFrom - Hb)));
+    return [L + taper * t, R - taper * t];
+  };
   front.push(
     { x: W, y: 0 },
     { x: W, y: Hb },
     { x: R, y: Hb },
-    // The right handle edge and its hooked tab: the notch through the ear, the hook rising beyond it.
-    { x: R, y: hy(notch.lo) },
+    // The flap's edge slants in to the handle; the handle's edge and its hooked tab: the notch across
+    // the gap and through the ear, the hook rising beyond it.
+    { x: hR, y: handleFrom },
+    { x: hR, y: hy(notch.lo) },
     { x: R + T + HOOK.reachMm, y: hy(notch.lo) },
     { x: R + T + HOOK.reachMm, y: hy(notch.top) },
     { x: R + T, y: hy(notch.top) },
     { x: R + T, y: hy(notch.hi) },
-    { x: R, y: hy(notch.hi) },
+    { x: hR, y: hy(notch.hi) },
   );
-  corner(R - HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, 0, Math.PI / 2);
-  corner(L + HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, Math.PI / 2, Math.PI);
+  corner(hR - HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, 0, Math.PI / 2);
+  corner(hL + HANDLE_CORNER_MM, Hf - HANDLE_CORNER_MM, Math.PI / 2, Math.PI);
   front.push(
-    { x: L, y: hy(notch.hi) },
+    { x: hL, y: hy(notch.hi) },
     { x: L - T, y: hy(notch.hi) },
     { x: L - T, y: hy(notch.top) },
     { x: L - T - HOOK.reachMm, y: hy(notch.top) },
     { x: L - T - HOOK.reachMm, y: hy(notch.lo) },
-    { x: L, y: hy(notch.lo) },
+    { x: hL, y: hy(notch.lo) },
+    { x: hL, y: handleFrom },
     { x: L, y: Hb },
     { x: 0, y: Hb },
   );
-  // The notch's two inside corners stay square: the hook seats its full depth on the ear.
-  const square = [L, L - T, R, R + T].map((x) => ({ x, y: hy(notch.hi) }));
+  // The notch's inside corners stay square: the hook seats its full depth on the ear.
+  const square = [hL, L - T, hR, R + T].map((x) => ({ x, y: hy(notch.hi) }));
   const frontOutline = roundCorners(front, roundFor(T), (q) => !square.some((c) => Math.abs(c.x - q.x) < 1e-9 && Math.abs(c.y - q.y) < 1e-9));
-  const handleHole = move(centredShape('pill', Math.max(24, Math.min(S - 24, 90)), 28), W / 2, Hf - 30);
+  const handleHole = move(centredShape('pill', Math.max(24, Math.min(hR - hL - 24, 90)), 28), W / 2, Hf - 30);
   const frontSlots = [
     ...slotsFor(sideRun, m + T / 2, T, kerf, false),
     ...slotsFor(sideRun, W - m - T / 2, T, kerf, false),
@@ -241,7 +257,16 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
           [Hb, Hb + lowArc],
           [handleFrom - topArc, handleFrom],
         ];
-  const frontCuts = bendZones.flatMap(([lo, hi]) => hingeCuts(settings, { x: L, y: lo, width: S, height: hi - lo }).flat());
+  // Each slit stops at the flap's edge at its own height, as the flap narrows.
+  const frontCuts = bendZones
+    .flatMap(([lo, hi]) => hingeCuts(settings, { x: L, y: lo, width: S, height: hi - lo }).flat())
+    .map((line) =>
+      line.map((q) => {
+        const [a, b] = flapEdges(q.y);
+        return { x: Math.min(b, Math.max(a, q.x)), y: q.y };
+      }),
+    )
+    .filter((line) => line.length > 1 && Math.hypot(line[line.length - 1].x - line[0].x, line[line.length - 1].y - line[0].y) > 1);
   const frontSafe: Rect = { x: L + 3, y: floor + T + 6, width: S - 6, height: Hb - 6 - (floor + T + 6) };
   const frontPiece = (id: 'front' | 'back'): CarrierPiece => sized({
     id,
@@ -347,8 +372,10 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
       tabLo: Hb + Hs + notch.lo,
       tabHi: Hb + Hs + notch.top,
       bottomTabCount: bottomRun.count,
-      handleLeftMm: L,
-      handleRightMm: R,
+      handleLeftMm: hL,
+      handleRightMm: hR,
+      earLeftMm: L,
+      earRightMm: R,
       notchHiMm: notch.hi,
     },
   };

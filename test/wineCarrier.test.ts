@@ -112,8 +112,8 @@ describe('wine carrier pieces', () => {
     const handleFrom = l.bodyHeightMm + shoulderLengthMm(l) + 1;
     // The notch's inside corners are square on purpose: they sit inside the ear, where the hook seats.
     const notchY = handleFrom - 1 + parts.meta.notchHiMm;
-    const { handleLeftMm: hl, handleRightMm: hr } = parts.meta;
-    const inNotch = (q: { x: number; y: number }) => Math.abs(q.y - notchY) < 1e-6 && [hl, hl - T, hr, hr + T].some((x) => Math.abs(q.x - x) < 1e-6);
+    const { handleLeftMm: hl, handleRightMm: hr, earLeftMm: el, earRightMm: er } = parts.meta;
+    const inNotch = (q: { x: number; y: number }) => Math.abs(q.y - notchY) < 1e-6 && [hl, el - T, hr, er + T].some((x) => Math.abs(q.x - x) < 1e-6);
     expect(sharpestTurn(parts.front.outlineUp, (q) => q.y > handleFrom && !inNotch(q))).toBeLessThan(30);
     expect(sharpestTurn(parts.left.outlineUp, (q) => q.y > l.bodyHeightMm + 2)).toBeLessThan(30);
   });
@@ -165,11 +165,12 @@ describe('wine carrier fit', () => {
     const handleFrom = l.bodyHeightMm + shoulderLengthMm(l);
     const y = handleFrom + parts.meta.notchHiMm;
     const has = (x: number) => parts.front.outlineUp.some((p) => Math.abs(p.x - x) < 1e-6 && Math.abs(p.y - y) < 1e-6);
-    const { handleLeftMm, handleRightMm } = parts.meta;
+    // At the handle's edge, and at the ear's outer face where the hook rises.
+    const { handleLeftMm, handleRightMm, earLeftMm, earRightMm } = parts.meta;
     expect(has(handleLeftMm)).toBe(true);
-    expect(has(handleLeftMm - T)).toBe(true);
+    expect(has(earLeftMm - T)).toBe(true);
     expect(has(handleRightMm)).toBe(true);
-    expect(has(handleRightMm + T)).toBe(true);
+    expect(has(earRightMm + T)).toBe(true);
   });
 
   it('keeps solid wood between every front slot and the front’s edge', () => {
@@ -296,5 +297,44 @@ describe('wine carrier side curve', () => {
   it('never leaves a gap inside the closed flaps', () => {
     // Its edge reaches at least the flaps' inside faces all the way up.
     for (let h = 1.123; h < l.shoulderHeightMm; h += 3) expect(halfAt(l.bodyHeightMm + h)).toBeGreaterThanOrEqual(taperHalfGapMm(l, T, h) - 0.05);
+  });
+});
+
+describe('wine carrier handle taper', () => {
+  const p = carrier();
+  const l = wineCarrierLayout(p);
+  const T = p.materialThicknessMm;
+  const parts = wineCarrierPieces(p);
+  const { handleLeftMm: hl, handleRightMm: hr, earLeftMm: el, earRightMm: er } = parts.meta;
+
+  it('narrows the front and back a little toward the handle: a few mm a side', () => {
+    const inset = hl - el;
+    expect(inset).toBeGreaterThanOrEqual(3);
+    expect(inset).toBeLessThanOrEqual(6);
+    expect(er - hr).toBeCloseTo(inset, 9);
+    expect(hr - hl).toBeCloseTo(l.innerSideMm - 2 * inset, 9);
+  });
+
+  it('slants the flaps’ edges from the body up to the handle', () => {
+    const ring = parts.front.outlineUp;
+    const handleFrom = l.bodyHeightMm + shoulderLengthMm(l);
+    const leftAt = (y: number) => {
+      const xs: number[] = [];
+      ring.forEach((a, i) => {
+        const b = ring[(i + 1) % ring.length];
+        if ((a.y - y) * (b.y - y) < 0) xs.push(a.x + ((b.x - a.x) * (y - a.y)) / (b.y - a.y));
+      });
+      return Math.min(...xs);
+    };
+    expect(leftAt(l.bodyHeightMm + 1)).toBeCloseTo(el, 0);
+    expect(leftAt((l.bodyHeightMm + handleFrom) / 2)).toBeGreaterThan(el + 0.5);
+    expect(leftAt(handleFrom - 1)).toBeCloseTo(hl, 0);
+  });
+
+  it('still reaches each tab through its ear, the hook beyond the ear’s outer face', () => {
+    // The hook's tip, up in the handle: past the ear's outer face by its reach.
+    const handleFrom = l.bodyHeightMm + shoulderLengthMm(l);
+    const tipX = Math.min(...parts.front.outlineUp.filter((q) => q.y > handleFrom).map((q) => q.x));
+    expect(tipX).toBeCloseTo(el - T - HOOK.reachMm, 0);
   });
 });
