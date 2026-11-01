@@ -55,14 +55,22 @@ describe('wine carrier pieces', () => {
     expect(front.heightMm).toBeCloseTo(l.bodyHeightMm + shoulderLengthMm(l) + l.handleHeightMm, 2);
   });
 
-  it('hinges the soft lower bend and the short top bend, with the slope between solid', () => {
-    const low = l.bendRadiusMm * l.bendAngleRad;
-    const top = l.topBendRadiusMm * l.bendAngleRad;
+  it('cuts one unbroken hinge up both bends when no slope comes between them', () => {
     const handleFrom = l.bodyHeightMm + shoulderLengthMm(l);
-    expect(parts.meta.bendZones).toEqual([
-      [l.bodyHeightMm, l.bodyHeightMm + low],
-      [handleFrom - top, handleFrom],
-    ]);
+    expect(l.slopeLengthMm).toBeLessThan(0.5);
+    expect(parts.meta.bendZones).toEqual([[l.bodyHeightMm, handleFrom]]);
+    // No gap between rows of slits wider than two rows' spacing, anywhere up the hinge.
+    const ys = [...new Set(parts.front.cutsUp.flat().map((q) => Math.round(q.y * 100) / 100))].sort((a, b) => a - b);
+    let widest = 0;
+    for (let i = 1; i < ys.length; i++) widest = Math.max(widest, ys[i] - ys[i - 1]);
+    expect(widest).toBeLessThan(2 * p.livingHingePitchMm + 0.01);
+  });
+
+  it('keeps a solid slope between the hinges when the shoulder is too short for one bend', () => {
+    const q = carrier({ wineShoulderHeightMm: 0, livingHingePitchMm: 6, livingHingeCutMm: 10, livingHingeBridgeMm: 6 });
+    const lq = wineCarrierLayout(q);
+    if (lq.slopeLengthMm < 0.5) return;
+    expect(wineCarrierPieces(q).meta.bendZones).toHaveLength(2);
   });
 
   it('puts hinge slits only in the bend zones', () => {

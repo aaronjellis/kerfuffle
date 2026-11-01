@@ -232,11 +232,15 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
     ...slotsFor(sideRun, W - m - T / 2, T, kerf, false),
     ...slotsFor({ ...bottomRun, fromMm: L + bottomRun.fromMm, toMm: L + bottomRun.toMm }, slotLine, T, kerf, true),
   ];
-  // A hinge in each bend: the soft lower one and the short top one; the slope between is solid.
-  const bendZones: [number, number][] = [
-    [Hb, Hb + lowArc],
-    [handleFrom - topArc, handleFrom],
-  ];
+  // A hinge in each bend, the slope between solid; when the bends touch, one unbroken hinge up both
+  // (two would each leave a solid row at their shared edge).
+  const bendZones: [number, number][] =
+    l.slopeLengthMm < 0.5
+      ? [[Hb, handleFrom]]
+      : [
+          [Hb, Hb + lowArc],
+          [handleFrom - topArc, handleFrom],
+        ];
   const frontCuts = bendZones.flatMap(([lo, hi]) => hingeCuts(settings, { x: L, y: lo, width: S, height: hi - lo }).flat());
   const frontSafe: Rect = { x: L + 3, y: floor + T + 6, width: S - 6, height: Hb - 6 - (floor + T + 6) };
   const frontPiece = (id: 'front' | 'back'): CarrierPiece => sized({
