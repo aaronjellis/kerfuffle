@@ -38,8 +38,9 @@ export interface WineCarrierLayout {
   shoulderClamped: boolean;
   /** The handle halves, above the shoulders */
   handleHeightMm: number;
-  /** Each shoulder bend's radius at mid-thickness, and its angle */
+  /** The soft lower bend's radius and the short top bend's, at mid-thickness, and the angle each turns */
   bendRadiusMm: number;
+  topBendRadiusMm: number;
   bendAngleRad: number;
   /** The straight slope between a shoulder's two bends */
   slopeLengthMm: number;
@@ -56,7 +57,7 @@ export const HOOK = { notchMm: 8, hookMm: 3, reachMm: 2 };
 /** Where the tab's notch starts, up the handle half. */
 export const NOTCH_FROM_MM = 37;
 /** The ear's flexing patch: its height, and its centre's distance below the taper's top. */
-export const EAR_PATCH = { heightMm: 24, belowTaperTopMm: 14 };
+export const EAR_PATCH = { heightMm: 24, aboveBodyMm: 18 };
 /** The arched feet's height, and the bottom's underside above the floor with and without them. */
 export const FOOT_ARCH_MM = 8;
 export const carrierFloorMm = (p: Pick<BoxParameters, 'wineFeet'>): number => (p.wineFeet ? FOOT_ARCH_MM + 4 : 4);
@@ -64,23 +65,43 @@ export const carrierFloorMm = (p: Pick<BoxParameters, 'wineFeet'>): number => (p
 const NECK_CLEARANCE_MM = 17;
 /** The shoulder hinges flex at every opening, so they bend half again gentler than they can. */
 const REPEAT_MARGIN = 1.5;
+/** The gentlest the short top bend is drawn. */
+const MAX_TOP_BEND_MM = 40;
 
 
 /**
- * A shoulder as one S-curve: an arc bending in, then one bending back out, each turning `angleRad`
- * on `radiusMm`, with no flat between, so the living hinge runs its whole length. The two meet
- * `insetMm` across and `heightMm` up: inset = 2R(1 − cos α), height = 2R sin α.
+ * A shoulder: a soft lower bend of `lowMm` radius turning in by `angleRad`, a straight slope, then a
+ * short top bend of `topMm` turning back up into the handle. They meet `insetMm` across and
+ * `heightMm` up: inset = (r1 + r2)(1 − cos α) + L sin α, height = (r1 + r2) sin α + L cos α.
+ * Null when no angle reaches the inset within the height.
  */
-export function shoulderCurve(insetMm: number, heightMm: number): { angleRad: number; radiusMm: number } {
-  const angleRad = 2 * Math.atan(insetMm / Math.max(1e-6, heightMm));
-  return { angleRad, radiusMm: heightMm / (2 * Math.sin(angleRad)) };
+export function shoulderProfile(insetMm: number, heightMm: number, lowMm: number, topMm: number): { angleRad: number; slopeMm: number } | null {
+  const R = lowMm + topMm;
+  // The steepest angle whose slope isn't negative.
+  const maxAngle = heightMm >= R ? Math.PI / 2 - 1e-9 : Math.asin(heightMm / R);
+  const slope = (a: number) => (heightMm - R * Math.sin(a)) / Math.cos(a);
+  const reach = (a: number) => R * (1 - Math.cos(a)) + slope(a) * Math.sin(a);
+  if (reach(maxAngle) < insetMm) return null;
+  let lo = 0;
+  let hi = maxAngle;
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    if (reach(mid) < insetMm) lo = mid;
+    else hi = mid;
+  }
+  const angleRad = (lo + hi) / 2;
+  return { angleRad, slopeMm: Math.max(0, slope(angleRad)) };
 }
+
+/** A shoulder's length along the panel: both bends and the slope between. */
+export const shoulderLengthMm = (l: Pick<WineCarrierLayout, 'bendRadiusMm' | 'topBendRadiusMm' | 'bendAngleRad' | 'slopeLengthMm'>): number =>
+  (l.bendRadiusMm + l.topBendRadiusMm) * l.bendAngleRad + l.slopeLengthMm;
 
 /** The shoulder's mid-surface, `n + 1` points from its foot: [up, in]. */
 function shoulderTrace(l: WineCarrierLayout, n = 240): [number, number][] {
-  const { bendRadiusMm: R, bendAngleRad: a, slopeLengthMm: L } = l;
+  const { bendRadiusMm: R, topBendRadiusMm: R2, bendAngleRad: a, slopeLengthMm: L } = l;
   const arc = R * a;
-  const total = 2 * arc + L;
+  const total = shoulderLengthMm(l);
   const pts: [number, number][] = [];
   for (let i = 0; i <= n; i++) {
     const s = (total * i) / n;
@@ -92,8 +113,8 @@ function shoulderTrace(l: WineCarrierLayout, n = 240): [number, number][] {
       pts.push([R * Math.sin(a) + d * Math.cos(a), R * (1 - Math.cos(a)) + d * Math.sin(a)]);
     } else {
       // The second arc turns back to vertical; measured from the top of the shoulder.
-      const t = (total - s) / R;
-      pts.push([l.shoulderHeightMm - R * Math.sin(t), l.insetMm - R * (1 - Math.cos(t))]);
+      const t = (total - s) / R2;
+      pts.push([l.shoulderHeightMm - R2 * Math.sin(t), l.insetMm - R2 * (1 - Math.cos(t))]);
     }
   }
   return pts;
@@ -133,19 +154,27 @@ export function wineCarrierLayout(p: BoxParameters): WineCarrierLayout {
     insetMm,
     neckClearanceMm: NECK_CLEARANCE_MM,
   };
-  const at = (h: number): WineCarrierLayout => {
-    const curve = shoulderCurve(insetMm, h);
-    return { ...base, shoulderHeightMm: h, minShoulderHeightMm: h, shoulderClamped: false, bendAngleRad: curve.angleRad, bendRadiusMm: curve.radiusMm, slopeLengthMm: 0 };
+  // The top bend as tight as the hinge takes repeatedly; the lower one soft, near half the shoulder.
+  const hinge = hingeBendRadiusMm(livingHingeSettings(p), T, p.kerfMm, innerSideMm);
+  // Capped: a stiff pattern would otherwise balloon the top bend; the checks warn instead.
+  const topBendRadiusMm = Math.max(10, Math.min(MAX_TOP_BEND_MM, REPEAT_MARGIN * (Number.isFinite(hinge) ? hinge : MAX_TOP_BEND_MM)));
+  const at = (h: number): WineCarrierLayout | null => {
+    const bendRadiusMm = Math.max(topBendRadiusMm, 0.45 * h);
+    const prof = shoulderProfile(insetMm, h, bendRadiusMm, topBendRadiusMm);
+    return (
+      prof && { ...base, shoulderHeightMm: h, minShoulderHeightMm: h, shoulderClamped: false, bendRadiusMm, topBendRadiusMm, bendAngleRad: prof.angleRad, slopeLengthMm: prof.slopeMm }
+    );
   };
   // The least whole-mm height whose profile exists and clears the neck at the bottle's top.
   const neckUp = stand + p.wineBottleHeightMm - bodyHeightMm;
   let minH = 1;
   for (; minH < 1000; minH++) {
-    if (taperHalfGapMm(at(minH), T, neckUp) >= NECK_CLEARANCE_MM) break;
+    const l = at(minH);
+    if (l && taperHalfGapMm(l, T, neckUp) >= NECK_CLEARANCE_MM) break;
   }
   const wanted = p.wineShoulderHeightMm > 0 ? p.wineShoulderHeightMm : minH;
   const h = Math.max(minH, wanted);
-  const l = at(h);
+  const l = at(h) ?? at(minH)!;
   return { ...l, minShoulderHeightMm: minH, shoulderClamped: p.wineShoulderHeightMm > 0 && p.wineShoulderHeightMm < minH };
 }
 
@@ -175,10 +204,10 @@ export function wineCarrierChecks(p: BoxParameters): WineCarrierChecks {
   const shoulderBendMm = raw(l.innerSideMm);
   const earBendMm = raw(2 * T + 16);
   // The slot must swing out the ply and the hook's reach; the patch turns that far over its lever.
-  const lever = EAR_PATCH.belowTaperTopMm + NOTCH_FROM_MM - HOOK.hookMm + (HOOK.notchMm + HOOK.hookMm) / 2;
+  const lever = l.shoulderHeightMm + NOTCH_FROM_MM - HOOK.hookMm + (HOOK.notchMm + HOOK.hookMm) / 2 - EAR_PATCH.aboveBodyMm;
   const earNeedMm = (EAR_PATCH.heightMm * lever) / (T + HOOK.reachMm);
   const webMm = hingeMinWebMm(settings, p.kerfMm);
-  const shoulderCracks = shoulderBendMm > l.bendRadiusMm + 1e-6;
+  const shoulderCracks = shoulderBendMm > l.topBendRadiusMm + 1e-6;
   const earCracks = earBendMm > earNeedMm;
   const thinWeb = webMm < MIN_SAFE_WEB_MM;
   const notes: string[] = [];

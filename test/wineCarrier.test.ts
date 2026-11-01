@@ -3,7 +3,7 @@ import { generateBoxModel } from '../src/engine/boxGenerator';
 import { bounds } from '../src/engine/geom';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters, Point2D } from '../src/engine/types';
-import { WINE_BOTTLES, wineCarrierLayout } from '../src/engine/wineBottles';
+import { WINE_BOTTLES, shoulderLengthMm, wineCarrierLayout } from '../src/engine/wineBottles';
 import { HOOK, wineCarrierPieces } from '../src/engine/wineCarrier';
 
 const carrier = (p: Partial<BoxParameters> = {}): BoxParameters => ({
@@ -52,14 +52,17 @@ describe('wine carrier pieces', () => {
 
   it('unrolls the front to the body, both bends, the slope and the handle', () => {
     const front = parts.front;
-    expect(front.heightMm).toBeCloseTo(l.bodyHeightMm + 2 * l.bendRadiusMm * l.bendAngleRad + l.slopeLengthMm + l.handleHeightMm, 2);
+    expect(front.heightMm).toBeCloseTo(l.bodyHeightMm + shoulderLengthMm(l) + l.handleHeightMm, 2);
   });
 
-  it('runs the hinge the whole shoulder, from the body to the handle', () => {
-    expect(parts.meta.bendZones).toEqual([[l.bodyHeightMm, l.bodyHeightMm + 2 * l.bendRadiusMm * l.bendAngleRad]]);
-    const ys = parts.front.cutsUp.flat().map((q) => q.y);
-    const zone = 2 * l.bendRadiusMm * l.bendAngleRad;
-    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.9 * zone);
+  it('hinges the soft lower bend and the short top bend, with the slope between solid', () => {
+    const low = l.bendRadiusMm * l.bendAngleRad;
+    const top = l.topBendRadiusMm * l.bendAngleRad;
+    const handleFrom = l.bodyHeightMm + shoulderLengthMm(l);
+    expect(parts.meta.bendZones).toEqual([
+      [l.bodyHeightMm, l.bodyHeightMm + low],
+      [handleFrom - top, handleFrom],
+    ]);
   });
 
   it('puts hinge slits only in the bend zones', () => {
@@ -98,7 +101,7 @@ describe('wine carrier pieces', () => {
   });
 
   it('rounds every touchable corner', () => {
-    const handleFrom = l.bodyHeightMm + 2 * l.bendRadiusMm * l.bendAngleRad + l.slopeLengthMm + 1;
+    const handleFrom = l.bodyHeightMm + shoulderLengthMm(l) + 1;
     // The notch's inside corners are square on purpose: they sit inside the ear, where the hook seats.
     const notchY = handleFrom - 1 + parts.meta.notchHiMm;
     const { handleLeftMm: hl, handleRightMm: hr } = parts.meta;
@@ -111,7 +114,10 @@ describe('wine carrier pieces', () => {
     for (const q of [carrier(bottle('half-375')), carrier({ materialThicknessMm: 6 })]) {
       const m = wineCarrierPieces(q).meta;
       const slot = bounds([m.earSlot])!;
-      for (const ring of m.earPatch) for (const pt of ring) expect(inside(pt, m.ear)).toBe(true);
+      // The patch sits low on the side, inside its outline (centred like the patch).
+      const S = wineCarrierLayout(q).innerSideMm;
+      const side = wineCarrierPieces(q).left.outlineUp.map((pt) => ({ x: pt.x - S / 2, y: pt.y }));
+      for (const ring of m.earPatch) for (const pt of ring) expect(inside(pt, side)).toBe(true);
       for (const pt of m.earSlot) expect(inside({ x: pt.x * 0.98, y: pt.y }, m.ear)).toBe(true);
       const patchTop = Math.max(...m.earPatch.flat().map((pt) => pt.y));
       expect(patchTop).toBeLessThan(slot.y);
@@ -148,7 +154,7 @@ describe('wine carrier fit', () => {
     const l = wineCarrierLayout(q);
     const T = q.materialThicknessMm;
     const parts = wineCarrierPieces(q);
-    const handleFrom = l.bodyHeightMm + 2 * l.bendRadiusMm * l.bendAngleRad + l.slopeLengthMm;
+    const handleFrom = l.bodyHeightMm + shoulderLengthMm(l);
     const y = handleFrom + parts.meta.notchHiMm;
     const has = (x: number) => parts.front.outlineUp.some((p) => Math.abs(p.x - x) < 1e-6 && Math.abs(p.y - y) < 1e-6);
     const { handleLeftMm, handleRightMm } = parts.meta;
@@ -189,7 +195,8 @@ describe('wine carrier sides', () => {
     expect(ear).toBeGreaterThanOrEqual(l.innerSideMm / 2 - 1e-6);
     const ring = parts.left.outlineUp;
     const top = Math.max(...ring.map((q) => q.y));
-    for (let y = l.bodyHeightMm + 1; y < top - ear; y += 5) {
+    // Off the outline's vertices, so every probe crosses its edges.
+    for (let y = l.bodyHeightMm + 1.123; y < top - ear; y += 5) {
       // The outline's width at height y: where its edges cross that height.
       const xs: number[] = [];
       ring.forEach((a, i) => {
@@ -203,5 +210,24 @@ describe('wine carrier sides', () => {
   it('draws the ears’ hinge slits in 3D', () => {
     const m = generateBoxModel(p);
     for (const id of ['left', 'right']) expect(m.panels3D.find((q) => q.id === id)!.surfaceLines!.length).toBe(parts.left.cutsUp.length);
+  });
+});
+
+describe('wine carrier ear and base', () => {
+  const p = carrier();
+  const l = wineCarrierLayout(p);
+  const parts = wineCarrierPieces(p);
+
+  it('puts the ear’s hinge low, where the side is near full width', () => {
+    const ys = parts.left.cutsUp.flat().map((q) => q.y);
+    const xs = parts.left.cutsUp.flat().map((q) => q.x);
+    expect((Math.min(...ys) + Math.max(...ys)) / 2).toBeLessThan(l.bodyHeightMm + 0.35 * l.shoulderHeightMm);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.8 * l.innerSideMm);
+  });
+
+  it('tabs the bottom into all four walls', () => {
+    const bottomTabs = parts.meta.bottomTabCount;
+    const bottomSlots = (piece: typeof parts.front) => piece.holesUp.filter((h) => Math.max(...h.map((q) => q.y)) < l.bodyHeightMm / 4 && Math.max(...h.map((q) => q.x)) - Math.min(...h.map((q) => q.x)) > Math.max(...h.map((q) => q.y)) - Math.min(...h.map((q) => q.y))).length;
+    for (const piece of [parts.front, parts.back, parts.left, parts.right]) expect(bottomSlots(piece)).toBe(bottomTabs);
   });
 });

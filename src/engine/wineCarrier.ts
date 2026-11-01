@@ -22,7 +22,7 @@ import { hingeCuts, hingeShapePath } from './livingHinge';
 import { buildShape, DEFAULT_SHAPE } from './shapes';
 import { slotsFor, tabbedEdge, tabCentres, tabCountFor, TAB_MM, type TabRun } from './tabSlot';
 import type { BoxPanel2D, BoxParameters, DielinePath, Panel3DTransform, Point2D } from './types';
-import { carrierFloorMm, EAR_PATCH, FOOT_ARCH_MM, HOOK, NOTCH_FROM_MM, taperHalfGapMm, wineCarrierLayout } from './wineBottles';
+import { carrierFloorMm, EAR_PATCH, FOOT_ARCH_MM, HOOK, NOTCH_FROM_MM, shoulderLengthMm, taperHalfGapMm, wineCarrierLayout } from './wineBottles';
 
 export { HOOK };
 
@@ -75,6 +75,8 @@ export interface CarrierParts {
     /** The handle tab beyond the ear, carried: its bottom and the hook's top. */
     tabLo: number;
     tabHi: number;
+    /** How many tabs the bottom has along each edge. */
+    bottomTabCount: number;
     /** The handle half's two side edges across the front, and the notch's top up the handle. */
     handleLeftMm: number;
     handleRightMm: number;
@@ -168,8 +170,9 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   const R = m + T + S; // and its right edge
   const Hb = l.bodyHeightMm;
   const Hs = l.shoulderHeightMm;
-  const arc = l.bendRadiusMm * l.bendAngleRad;
-  const handleFrom = Hb + 2 * arc + l.slopeLengthMm;
+  const lowArc = l.bendRadiusMm * l.bendAngleRad;
+  const topArc = l.topBendRadiusMm * l.bendAngleRad;
+  const handleFrom = Hb + shoulderLengthMm(l);
   const Hf = handleFrom + l.handleHeightMm;
   // The bottom's underside: raised clear of the feet.
   const floor = carrierFloorMm(params);
@@ -229,8 +232,11 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
     ...slotsFor(sideRun, W - m - T / 2, T, kerf, false),
     ...slotsFor({ ...bottomRun, fromMm: L + bottomRun.fromMm, toMm: L + bottomRun.toMm }, slotLine, T, kerf, true),
   ];
-  // One hinge the whole shoulder: the S bends in and back out with no flat between.
-  const bendZones: [number, number][] = [[Hb, handleFrom]];
+  // A hinge in each bend: the soft lower one and the short top one; the slope between is solid.
+  const bendZones: [number, number][] = [
+    [Hb, Hb + lowArc],
+    [handleFrom - topArc, handleFrom],
+  ];
   const frontCuts = bendZones.flatMap(([lo, hi]) => hingeCuts(settings, { x: L, y: lo, width: S, height: hi - lo }).flat());
   const frontSafe: Rect = { x: L + 3, y: floor + T + 6, width: S - 6, height: Hb - 6 - (floor + T + 6) };
   const frontPiece = (id: 'front' | 'back'): CarrierPiece => sized({
@@ -253,7 +259,7 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
   const mirrored: TabRun = { ...sideRun, fromMm: Hb - sideRun.toMm, toMm: Hb - sideRun.fromMm };
   // The side follows the closed flaps in to the handle's two plies, then the ear rises from a full-
   // width base well below the taper's top, so it flexes on its patch, not at a narrow neck.
-  const earBase = Hb + Hs - EAR_PATCH.belowTaperTopMm - EAR_PATCH.heightMm / 2 - 2;
+  const earBase = Hb + Hs - 30;
   const side: Point2D[] = [{ x: 0, y: 0 }, ...tabbedEdge({ x: S, y: 0 }, { x: S, y: Hb }, sideRun, T, 1)];
   for (let i = 1; i <= N; i++) side.push({ x: S / 2 + halfWidth((Hs * i) / N), y: Hb + (Hs * i) / N });
   for (let i = N; i >= 1; i--) side.push({ x: S / 2 - halfWidth((Hs * i) / N), y: Hb + (Hs * i) / N });
@@ -276,13 +282,20 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
     { x: S / 2 - slotW / 2, y: slotLo + HOOK.notchMm + HOOK.hookMm },
   ];
   // An oval wider than the ear, so its middle slits run out to the ear's edges: no solid border.
-  const patch = { cx: S / 2, cy: Hb + Hs - EAR_PATCH.belowTaperTopMm, rx: e + 4, ry: EAR_PATCH.heightMm / 2 };
+  // Low on the side, just above the body where it's near full width: the whole upper side swings out.
+  const patch = { cx: S / 2, cy: Hb + EAR_PATCH.aboveBodyMm, rx: halfWidth(EAR_PATCH.aboveBodyMm) + 4, ry: EAR_PATCH.heightMm / 2 };
   const earPatch: Point2D[][] = hingeCuts(settings, { x: patch.cx - patch.rx, y: patch.cy - patch.ry, width: 2 * patch.rx, height: 2 * patch.ry })
     .flat()
     .flatMap((line) => line.slice(1).map((b, i) => clipToEllipse(line[i], b, patch.cx, patch.cy, patch.rx, patch.ry)))
     .filter((seg): seg is [Point2D, Point2D] => seg !== null)
     // Within the ear's width, a hair inside its edges.
-    .map(([a, b]) => [a, b].map((q) => ({ x: Math.max(S / 2 - e + 0.01, Math.min(S / 2 + e - 0.01, q.x)), y: q.y })) as [Point2D, Point2D])
+    // Within the side's width at each slit's own height (the side narrows up the patch), a hair inside.
+    .map(([a, b]) =>
+      [a, b].map((q) => {
+        const w = halfWidth(q.y - Hb) - 0.05;
+        return { x: Math.max(S / 2 - w, Math.min(S / 2 + w, q.x)), y: q.y };
+      }) as [Point2D, Point2D],
+    )
     .filter(([a, b]) => Math.hypot(b.x - a.x, b.y - a.y) > 1);
   const sideSlots = slotsFor(bottomRun, slotLine, T, kerf, true);
   const sidePiece = (id: 'left' | 'right'): CarrierPiece => sized({
@@ -323,6 +336,7 @@ export function wineCarrierPieces(params: BoxParameters): CarrierParts {
       earPatch: earPatch.map((seg) => move(seg, -S / 2, 0)),
       tabLo: Hb + Hs + notch.lo,
       tabHi: Hb + Hs + notch.top,
+      bottomTabCount: bottomRun.count,
       handleLeftMm: L,
       handleRightMm: R,
       notchHiMm: notch.hi,
@@ -404,7 +418,7 @@ export function generateWineCarrier(params: BoxParameters): { panels2D: BoxPanel
                 { kind: 'straight' as const, lengthMm: l.bodyHeightMm },
                 { kind: 'arc' as const, radiusMm: l.bendRadiusMm, angleRad: l.bendAngleRad },
                 { kind: 'straight' as const, lengthMm: l.slopeLengthMm },
-                { kind: 'arc' as const, radiusMm: l.bendRadiusMm, angleRad: -l.bendAngleRad },
+                { kind: 'arc' as const, radiusMm: l.topBendRadiusMm, angleRad: -l.bendAngleRad },
                 { kind: 'straight' as const, lengthMm: l.handleHeightMm },
               ],
               lines: piece.cutsUp.map(down),

@@ -57,7 +57,7 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
   const bend = hingeBendRadiusMm(settings, params.materialThicknessMm, params.kerfMm, hingeWidth);
   // The wine carrier's hinges are its shoulders; the living-hinge box's is its lid.
   const isCarrier = params.templateId === 'finger-wine-carrier';
-  const lid = isCarrier ? wineCarrierLayout(params).bendRadiusMm : wrapBendRadiusMm(model.innerDims.depthMm, model.innerDims.heightMm);
+  const lid = isCarrier ? wineCarrierLayout(params).topBendRadiusMm : wrapBendRadiusMm(model.innerDims.depthMm, model.innerDims.heightMm);
   const [pitchMin, pitchMax] = HINGE_PITCH_RANGE_MM;
   // The front wall's height under the lid's lip, as the engine works it out.
   const straightH = Math.max(15, model.innerDims.heightMm - lid);

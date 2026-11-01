@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters } from '../src/engine/types';
-import { WINE_BOTTLES, bottlePatch, carrierFloorMm, shoulderCurve, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
+import { WINE_BOTTLES, bottlePatch, carrierFloorMm, shoulderProfile, taperHalfGapMm, wineCarrierChecks, wineCarrierLayout } from '../src/engine/wineBottles';
 
 const carrier = (p: Partial<BoxParameters> = {}): BoxParameters => ({
   ...DEFAULT_BOX_PARAMETERS,
@@ -24,14 +24,17 @@ describe('wine carrier layout', () => {
     expect(l.bodyHeightMm).toBe(229);
   });
 
-  it('curves each shoulder in one S, in and back out, meeting its inset and height', () => {
-    const { angleRad: a, radiusMm: r } = shoulderCurve(42, 90);
-    expect(2 * r * (1 - Math.cos(a))).toBeCloseTo(42, 6);
-    expect(2 * r * Math.sin(a)).toBeCloseTo(90, 6);
+  it('meets its inset and height with a soft lower bend, a slope and a short top bend', () => {
+    const r = shoulderProfile(42, 140, 60, 20)!;
+    const sum = 60 + 20;
+    expect(sum * (1 - Math.cos(r.angleRad)) + r.slopeMm * Math.sin(r.angleRad)).toBeCloseTo(42, 4);
+    expect(sum * Math.sin(r.angleRad) + r.slopeMm * Math.cos(r.angleRad)).toBeCloseTo(140, 4);
   });
 
-  it('leaves no flat slope: the hinge runs the whole shoulder', () => {
-    expect(wineCarrierLayout(carrier()).slopeLengthMm).toBe(0);
+  it('softens the lower bend, keeps the top one short, and runs a straight slope between', () => {
+    const l = wineCarrierLayout(carrier());
+    expect(l.bendRadiusMm).toBeGreaterThan(2 * l.topBendRadiusMm);
+    expect(l.slopeLengthMm).toBeGreaterThan(0);
   });
 
   it('clamps a shoulder below the minimum and says so', () => {
@@ -87,7 +90,7 @@ describe('wine carrier bend checks', () => {
 
   it('bends the shoulders gently enough for the default hinge, with its margin', () => {
     const c = wineCarrierChecks(carrier());
-    expect(wineCarrierLayout(carrier()).bendRadiusMm).toBeGreaterThan(c.shoulderBendMm);
+    expect(wineCarrierLayout(carrier()).topBendRadiusMm).toBeGreaterThanOrEqual(c.shoulderBendMm - 1e-6);
   });
 });
 
