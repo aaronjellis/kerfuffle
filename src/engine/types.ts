@@ -255,6 +255,8 @@ export interface BoxPanel2D {
   /** Position on the nested 2D cut sheet in mm */
   sheetX: number;
   sheetY: number;
+  /** Turned a quarter turn clockwise on the sheet to fit; `placement.ts` maps its frame there. */
+  quarterTurn?: boolean;
   /** Cut, score, and guide vector paths in panel-local coordinates */
   paths: DielinePath[];
   /**

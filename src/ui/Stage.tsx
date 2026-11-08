@@ -205,6 +205,11 @@ export const Stage: React.FC<StageProps> = ({
         {isLaser &&
           (model.fitsOnBed ? (
             <span>Fits {bedName} bed</span>
+          ) : model.sheetSize && model.oversizePanelIds.length === 0 ? (
+            // Split onto bed-sized sheets, each of which fits.
+            <span>
+              {model.sheets.length} sheets · each fits the {bedName} bed
+            </span>
           ) : (
             <span className="stage-caption-warn">Too big for the {bedName} bed</span>
           ))}

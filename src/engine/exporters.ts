@@ -11,6 +11,7 @@ import { EXPORT_PROFILES } from './presets';
 import { containRect, imageAspect, svgTextFromDataUrl } from './artworkImage';
 import { inlineSvgArtwork } from './svgInline';
 import { fmt, translateSvgPath } from './fingerJointEngine';
+import { placeSvgPath, placementRotationDeg, toSheet } from './placement';
 import { export3DPrintBoxStl, export3DPrintBoxStlParts } from './printStl';
 
 const MM_TO_PT = 72 / 25.4;
@@ -20,7 +21,15 @@ export interface ResolvedArtworkPlacement {
   /** Center X/Y in global 2D sheet coordinates (mm) */
   sheetCenterX: number;
   sheetCenterY: number;
+  /** Whether its piece lies a quarter turn round on the sheet; `artwork` is turned with it. */
+  quarterTurn: boolean;
 }
+
+/** The artwork as it lies on the sheet: turned with its piece, if the piece is turned. */
+const turnedWith = (panel: BoxPanel2D, art: FaceArtwork) => {
+  const turn = placementRotationDeg(panel);
+  return { artwork: turn ? { ...art, rotationDeg: art.rotationDeg + turn } : art, quarterTurn: !!panel.quarterTurn };
+};
 
 /**
  * Resolves where each FaceArtwork sits on the 2D nested cut sheet in mm.
@@ -37,17 +46,9 @@ export function resolveSheetArtworks(
       (p) => p.id === art.faceId || p.id === `base-${art.faceId}`
     );
     if (directPanel) {
-      const cx =
-        directPanel.sheetX +
-        directPanel.safeRect.x +
-        directPanel.safeRect.width / 2 +
-        art.xMm;
-      const cy =
-        directPanel.sheetY +
-        directPanel.safeRect.y +
-        directPanel.safeRect.height / 2 +
-        art.yMm;
-      result.push({ artwork: art, sheetCenterX: cx, sheetCenterY: cy });
+      const r = directPanel.safeRect;
+      const c = toSheet(directPanel, { x: r.x + r.width / 2 + art.xMm, y: r.y + r.height / 2 + art.yMm });
+      result.push({ ...turnedWith(directPanel, art), sheetCenterX: c.x, sheetCenterY: c.y });
       continue;
     }
 
@@ -55,9 +56,8 @@ export function resolveSheetArtworks(
     for (const panel of panels) {
       const sub = panel.subFaces?.find((s) => s.id === art.faceId);
       if (sub) {
-        const cx = panel.sheetX + sub.x + sub.width / 2 + art.xMm;
-        const cy = panel.sheetY + sub.y + sub.height / 2 + art.yMm;
-        result.push({ artwork: art, sheetCenterX: cx, sheetCenterY: cy });
+        const c = toSheet(panel, { x: sub.x + sub.width / 2 + art.xMm, y: sub.y + sub.height / 2 + art.yMm });
+        result.push({ ...turnedWith(panel, art), sheetCenterX: c.x, sheetCenterY: c.y });
         break;
       }
     }
@@ -216,7 +216,7 @@ export function exportBoxSvg(
     for (const path of panel.paths) {
       const layer = effectiveLayer(path, params);
       if (layer === 'guide') continue;
-      const bakedD = translateSvgPath(path.d, panel.sheetX, panel.sheetY, unitScale);
+      const bakedD = translateSvgPath(placeSvgPath(path.d, panel), 0, 0, unitScale);
       if (layer === 'score' && includeScore) {
         panelScoreSubpaths.push(bakedD);
         allScoreSubpaths.push(bakedD);
@@ -419,7 +419,7 @@ export async function exportBoxPdf(
 
       const subpathsPt: string[] = [];
       for (const path of layerPaths) {
-        const polylines = svgPathToPolylines(path.d, panel.sheetX, panel.sheetY);
+        const polylines = svgPathToPolylines(placeSvgPath(path.d, panel), 0, 0);
         for (const poly of polylines) {
           if (poly.points.length < 2) continue;
           const cmds = poly.points.map(
@@ -476,7 +476,7 @@ export function exportBoxDxf(model: GeneratedBoxModel): string {
       if (layer === 'guide') continue;
       const layerName = layer === 'cut' ? 'CUT' : 'SCORE';
       const colorCode = layer === 'cut' ? '1' : '5'; // 1 = Red, 5 = Blue
-      const polylines = svgPathToPolylines(path.d, panel.sheetX, panel.sheetY);
+      const polylines = svgPathToPolylines(placeSvgPath(path.d, panel), 0, 0);
       for (const poly of polylines) {
         if (poly.points.length < 2) continue;
         lines.push(

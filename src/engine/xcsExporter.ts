@@ -1,6 +1,6 @@
 import { DielinePath, GeneratedBoxModel } from './types';
 import { EXPORT_PROFILES, laserSettingsFor } from './presets';
-import { translateSvgPath } from './fingerJointEngine';
+import { placeSvgPath } from './placement';
 import { effectiveLayer, svgPathToPolylines } from './exporters';
 
 /** One PATH shape on an xTool Studio canvas (`canvas[0].displays[]` in a `.xcs` file). */
@@ -91,7 +91,7 @@ export function buildXcsDisplays(
     for (const path of panel.paths) {
       const layer = effectiveLayer(path, model.params);
       if (layer === 'guide') continue;
-      const dPath = translateSvgPath(path.d, panel.sheetX, panel.sheetY, 1);
+      const dPath = placeSvgPath(path.d, panel);
       const pts = svgPathToPolylines(dPath, 0, 0).flatMap((p) => p.points);
       if (pts.length === 0) continue;
 

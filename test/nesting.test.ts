@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateBoxModel } from '../src/engine/boxGenerator';
 import { BOX_TEMPLATES, DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import type { BoxParameters } from '../src/engine/types';
+import { footprint } from '../src/engine/placement';
 
 const sizes = [
   { widthMm: 110, depthMm: 80, heightMm: 55 },
@@ -23,7 +24,8 @@ describe('sheet layout', () => {
       const params: BoxParameters = { ...DEFAULT_BOX_PARAMETERS, category: template.category, templateId: template.id, ...size };
       const m = generateBoxModel(params);
       const gap = params.partSpacingMm - 1e-6;
-      const ps = m.panels2D;
+      // Each piece by the room it takes on the sheet, turned or not.
+      const ps = m.panels2D.map((p) => ({ ...p, ...footprint(p) }));
       for (let i = 0; i < ps.length; i++) {
         const a = ps[i];
         // Inside the sheet, clear of its margin.

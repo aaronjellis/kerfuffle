@@ -7,6 +7,7 @@ import {
 import { EXPORT_PROFILES, MACHINE_BED_PRESETS } from '../engine/presets';
 import { effectiveLayer, resolveSheetArtworks } from '../engine/exporters';
 import { fmt } from '../engine/fingerJointEngine';
+import { panelTransform } from '../engine/placement';
 import { STAGE_ACCENT_HEX } from '../ui/stageColors';
 
 /** "Front Face" reads as "Front face": accessible names in sentence case. */
@@ -88,6 +89,8 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
     startClientY: number;
     origX: number;
     origY: number;
+    /** The artwork's piece lies a quarter turn round, so sheet moves turn back into its frame. */
+    quarterTurn: boolean;
   } | null>(null);
 
   const panCapturedRef = useRef(false);
@@ -153,10 +156,13 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (dragArt) {
-      const { dxMm, dyMm } = clientDeltaToMm(
+      const sheetMove = clientDeltaToMm(
         e.clientX - dragArt.startClientX,
         e.clientY - dragArt.startClientY
       );
+      const { dx: dxMm, dy: dyMm } = dragArt.quarterTurn
+        ? { dx: sheetMove.dyMm, dy: -sheetMove.dxMm }
+        : { dx: sheetMove.dxMm, dy: sheetMove.dyMm };
       let nextX = Number((dragArt.origX + dxMm).toFixed(1));
       let nextY = Number((dragArt.origY + dyMm).toFixed(1));
       // Magnetic snap to piece center (0, 0) within 1.5mm unless Alt key is held
@@ -418,7 +424,7 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
           return (
             <g
               key={panel.id}
-              transform={`translate(${fmt(panel.sheetX)}, ${fmt(panel.sheetY)})`}
+              transform={panelTransform(panel)}
               data-ph-capture-attribute-face={panel.id.replace(/^base-/, '')}
               onClick={(e) => {
                 e.stopPropagation();
@@ -554,7 +560,7 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
         })}
 
         {/* Interactive User Artwork Overlays */}
-        {resolvedArts.map(({ artwork, sheetCenterX, sheetCenterY }) => {
+        {resolvedArts.map(({ artwork, sheetCenterX, sheetCenterY, quarterTurn }) => {
           const isSelected = artwork.id === selectedArtworkId;
           const x = sheetCenterX - artwork.widthMm / 2;
           const y = sheetCenterY - artwork.heightMm / 2;
@@ -581,6 +587,7 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
                   startClientY: e.clientY,
                   origX: artwork.xMm,
                   origY: artwork.yMm,
+                  quarterTurn,
                 });
               }}
             >

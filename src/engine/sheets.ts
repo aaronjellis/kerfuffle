@@ -4,7 +4,8 @@
  *
  * Each sheet is packed skyline-fashion, as Kerfuffle packs its one sheet: every piece drops to the
  * lowest spot across the sheet it fits, leftmost on a tie; a piece that would run off the bottom
- * waits for the next sheet. Of the orders tried, the one that puts the most wood on the sheet wins.
+ * waits for the next sheet. A piece may lie a quarter turn round where that sits it lower, never at
+ * any other angle. Of the orders tried, the one that puts the most wood on the sheet wins.
  */
 import type { BoxPanel2D, GeneratedBoxModel, SheetRegion } from './types';
 
@@ -32,26 +33,32 @@ function packOne(panels: BoxPanel2D[], order: number[], w: number, h: number, ma
   const placed = new Map<number, BoxPanel2D>();
   for (const i of order) {
     const p = panels[i];
-    let bestX = left;
-    let bestY = Infinity;
-    for (let s = 0; s < sky.length; s++) {
-      const x = sky[s].x;
-      if (x + p.widthMm > right + EPS) break;
-      let y = 0;
-      for (let t = s; t < sky.length && sky[t].x < x + p.widthMm - EPS; t++) y = Math.max(y, sky[t].y);
-      if (y < bestY - EPS) {
-        bestY = y;
-        bestX = x;
+    // Each way round the piece can lie: as drawn, and a quarter turn (unless it's square).
+    const ways = [{ turn: false, w: p.widthMm, h: p.heightMm }];
+    if (Math.abs(p.widthMm - p.heightMm) > EPS) ways.push({ turn: true, w: p.heightMm, h: p.widthMm });
+    let best: { x: number; y: number; turn: boolean; w: number; h: number } | null = null;
+    for (const way of ways) {
+      for (let s = 0; s < sky.length; s++) {
+        const x = sky[s].x;
+        if (x + way.w > right + EPS) break;
+        let y = 0;
+        for (let t = s; t < sky.length && sky[t].x < x + way.w - EPS; t++) y = Math.max(y, sky[t].y);
+        // Off the bottom: not here.
+        if (y + way.h > bottom + EPS) continue;
+        // Lowest wins, then leftmost; on a tie the piece stays as drawn, as `ways` tries it first.
+        if (!best || y < best.y - EPS || (y < best.y + EPS && x < best.x - EPS)) best = { x, y, ...way };
       }
     }
-    // Off the bottom (or wider than the sheet): it waits for the next sheet.
-    if (bestY === Infinity || bestY + p.heightMm > bottom + EPS) continue;
-    placed.set(i, { ...p, sheetX: bestX, sheetY: bestY });
+    // Nowhere on this sheet either way round: it waits for the next sheet.
+    if (!best) continue;
+    const bestX = best.x;
+    const bestY = best.y;
+    placed.set(i, { ...p, sheetX: bestX, sheetY: bestY, ...(best.turn ? { quarterTurn: true } : {}) });
 
     // Raise the skyline under the piece and its gap, then merge level neighbours.
     const x0 = bestX;
-    const x1 = Math.min(right, bestX + p.widthMm + gap);
-    const top = bestY + p.heightMm + gap;
+    const x1 = Math.min(right, bestX + best.w + gap);
+    const top = bestY + best.h + gap;
     const next: typeof sky = [];
     for (const seg of sky) {
       const a = seg.x;
@@ -78,7 +85,8 @@ function packOne(panels: BoxPanel2D[], order: number[], w: number, h: number, ma
 /** The pieces packed onto sheets of `widthMm` × `heightMm`, as few as the packing manages. */
 export function packSheets(panels: BoxPanel2D[], widthMm: number, heightMm: number, marginMm: number, gapMm: number): SheetLayout {
   const area = (p: BoxPanel2D) => p.widthMm * p.heightMm;
-  const fitsAlone = (p: BoxPanel2D) => p.widthMm <= widthMm - 2 * marginMm + EPS && p.heightMm <= heightMm - 2 * marginMm + EPS;
+  const fitsAs = (w: number, h: number) => w <= widthMm - 2 * marginMm + EPS && h <= heightMm - 2 * marginMm + EPS;
+  const fitsAlone = (p: BoxPanel2D) => fitsAs(p.widthMm, p.heightMm) || fitsAs(p.heightMm, p.widthMm);
   const tooBig = panels.filter((p) => !fitsAlone(p));
   let remaining = panels.map((_, i) => i).filter((i) => fitsAlone(panels[i]));
   const sheets: Sheet[] = [];
