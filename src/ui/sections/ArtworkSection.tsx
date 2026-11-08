@@ -11,6 +11,7 @@ import {
   Sparkles,
   Trash2,
   Type,
+  X,
 } from 'lucide-react';
 import { NumberField } from '../../components/NumberField';
 import { fetchFontMeta, offeredWeights, type TextWeight } from '../../engine/fontSource';
@@ -178,36 +179,13 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
         </div>
       </div>
 
-      {/* With more than one item on the piece, a chip per item picks which one to edit. */}
-      {artworks.filter((a) => a.faceId === selectedFaceId).length > 1 && (
-        <div className="face-layer-list">
-          <span className="mini-heading">
-            Items on {FACE_OPTIONS.find((f) => f.id === selectedFaceId)?.label}
-          </span>
-          <div className="chip-row" role="group" aria-label="Items on this piece">
-            {artworks
-              .filter((a) => a.faceId === selectedFaceId)
-              .map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  // The chip shows the user's own text or file name: PostHog skips it.
-                  className="chip layer-chip ph-no-capture"
-                  aria-pressed={selectedArtwork?.id === item.id}
-                  data-ph-no-capture
-                  onClick={() => setSelectedArtworkId(item.id)}
-                >
-                  {item.textConfig ? (
-                    <Type size={16} strokeWidth={1.75} aria-hidden="true" />
-                  ) : (
-                    <ImagePlus size={16} strokeWidth={1.75} aria-hidden="true" />
-                  )}
-                  <span>{item.name}</span>
-                </button>
-              ))}
-          </div>
-        </div>
-      )}
+      <ItemList
+        items={artworks.filter((a) => a.faceId === selectedFaceId)}
+        pieceLabel={FACE_OPTIONS.find((f) => f.id === selectedFaceId)?.label ?? 'this piece'}
+        selectedId={selectedArtwork?.id ?? null}
+        onSelect={setSelectedArtworkId}
+        onRemove={removeArtwork}
+      />
 
       {selectedArtwork ? (
         <div className="artwork-inspector">
@@ -700,5 +678,90 @@ const FontButton: React.FC<{ config: TextArtworkConfig; onOpen: () => void }> = 
         {config.fontFamily}
       </span>
     </button>
+  );
+};
+
+/** Each item's name, numbered when the piece holds more than one of the same name. */
+const itemLabels = (items: FaceArtwork[]): string[] => {
+  const total = new Map<string, number>();
+  for (const a of items) total.set(a.name, (total.get(a.name) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return items.map((a) => {
+    if ((total.get(a.name) ?? 0) < 2) return a.name;
+    const n = (seen.get(a.name) ?? 0) + 1;
+    seen.set(a.name, n);
+    return `${a.name} ${n}`;
+  });
+};
+
+/**
+ * Everything on the piece, one row each, so every item stays in view on a phone: tap a row to edit
+ * it, or remove it from its own row. With several items, "Remove all" asks for a second tap.
+ */
+const ItemList: React.FC<{
+  items: FaceArtwork[];
+  pieceLabel: string;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onRemove: (id: string) => void;
+}> = ({ items, pieceLabel, selectedId, onSelect, onRemove }) => {
+  const [confirmAll, setConfirmAll] = useState(false);
+  useEffect(() => {
+    if (!confirmAll) return;
+    const t = window.setTimeout(() => setConfirmAll(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [confirmAll]);
+  useEffect(() => setConfirmAll(false), [items.length]);
+  if (items.length === 0) return null;
+  const labels = itemLabels(items);
+  return (
+    <div className="face-layer-list">
+      <div className="mini-heading-row">
+        <span className="mini-heading">
+          On the {pieceLabel.toLowerCase()} <span className="count">{items.length}</span>
+        </span>
+        {items.length > 1 && (
+          <button
+            type="button"
+            className={confirmAll ? 'link-btn link-btn-danger' : 'link-btn'}
+            onClick={() => {
+              if (!confirmAll) return setConfirmAll(true);
+              items.forEach((a) => onRemove(a.id));
+            }}
+          >
+            <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+            {confirmAll ? `Tap again to remove ${items.length}` : 'Remove all'}
+          </button>
+        )}
+      </div>
+      {/* Names are the user's own text or file names: PostHog skips the list. */}
+      <ul className="layer-list ph-no-capture" aria-label={`Items on the ${pieceLabel.toLowerCase()}`} data-ph-no-capture>
+        {items.map((item, i) => (
+          <li key={item.id} className="layer-row" aria-current={item.id === selectedId ? 'true' : undefined}>
+            <button type="button" className="layer-pick" onClick={() => onSelect(item.id)}>
+              <span className="layer-thumb" aria-hidden="true">
+                {item.dataUrl ? (
+                  <img src={item.dataUrl} alt="" />
+                ) : item.textConfig ? (
+                  <Type size={16} strokeWidth={1.75} />
+                ) : (
+                  <ImagePlus size={16} strokeWidth={1.75} />
+                )}
+              </span>
+              <span className="layer-name">{labels[i]}</span>
+            </button>
+            <button
+              type="button"
+              className="icon-btn icon-btn-danger layer-remove"
+              onClick={() => onRemove(item.id)}
+              aria-label={`Remove ${labels[i]}`}
+              title={`Remove ${labels[i]}`}
+            >
+              <X size={16} strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 };

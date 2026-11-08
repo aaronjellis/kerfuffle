@@ -52,6 +52,10 @@ import { Stage, type ViewMode } from './ui/Stage';
 import { withPrintedPinClamp } from './ui/paramRules';
 
 /** Set once the kerf test is finished or skipped, so it opens by itself only on a first visit. */
+/** A fresh artwork id. Taps a few milliseconds apart would share a timestamp, so a counter follows it. */
+let artworkSeq = 0;
+const newArtworkId = (prefix: string) => `${prefix}-${Date.now()}-${++artworkSeq}`;
+
 const ONBOARDED_KEY = 'kerfuffle.kerf-test-done';
 
 const readOnboarded = () => {
@@ -383,7 +387,7 @@ export const App: React.FC = () => {
     const targetW = Math.max(18, Math.min(85, Math.round(pieceDims.widthMm * 0.65)));
     const targetH = Math.max(8, Number((targetW / aspectRatio).toFixed(1)));
     const newArt: FaceArtwork = {
-      id: `text-${Date.now()}`,
+      id: newArtworkId('text'),
       faceId: selectedFaceId,
       name: `Text: ${initialConfig.text.split('\n')[0].slice(0, 18)}`,
       dataUrl,
@@ -468,7 +472,7 @@ export const App: React.FC = () => {
     const destFace = targetFaceId || art.faceId;
     const copy: FaceArtwork = {
       ...art,
-      id: `art-${Date.now()}`,
+      id: newArtworkId('art'),
       faceId: destFace,
       name: `${art.name} (Copy)`,
       xMm: destFace === art.faceId ? Number((art.xMm + 5).toFixed(1)) : art.xMm,
@@ -495,7 +499,7 @@ export const App: React.FC = () => {
       const place = (aspect: number) => {
         const size = sizeForAspect(aspect, Math.round(defaultSize));
         const newArt: FaceArtwork = {
-          id: `art-${Date.now()}`,
+          id: newArtworkId('art'),
           faceId: selectedFaceId,
           name: file.name.replace(/\.[^.]+$/, ''),
           dataUrl,
@@ -520,7 +524,7 @@ export const App: React.FC = () => {
 
   const handleAddSampleStamp = (preset: SampleArtworkPreset) => {
     const newArt: FaceArtwork = {
-      id: `art-${Date.now()}`,
+      id: newArtworkId('art'),
       faceId: selectedFaceId,
       name: preset.name,
       dataUrl: createSampleArtworkDataUrl(preset),

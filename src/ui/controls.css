@@ -781,10 +781,87 @@
   min-width: 0;
 }
 
-.layer-chip span {
-  max-width: 12rem;
+/* Everything on the piece, a row each: the row picks the item, the cross removes it. */
+.layer-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
   overflow: hidden;
+}
+
+.layer-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  background: var(--surface);
+}
+
+.layer-row + .layer-row {
+  border-top: 1px solid var(--line);
+}
+
+.layer-row[aria-current='true'] {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.layer-pick {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+  min-height: var(--control-h, 36px);
+  padding: 0.25rem 0.5rem 0.25rem 0.625rem;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.layer-row[aria-current='true'] .layer-pick {
+  color: var(--accent-text);
+}
+
+.layer-thumb {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+  background: var(--sunken);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.layer-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.layer-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.layer-remove {
+  flex: none;
+  margin-right: 0.25rem;
+}
+
+.link-btn-danger {
+  color: var(--danger);
 }
 
 .artwork-inspector,
