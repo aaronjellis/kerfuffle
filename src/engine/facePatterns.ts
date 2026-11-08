@@ -24,15 +24,6 @@ function polyArea(p: Poly): number {
   return a / 2;
 }
 
-function polyPerimeter(p: Poly): number {
-  let l = 0;
-  for (let i = 0; i < p.length; i++) {
-    const q = p[(i + 1) % p.length];
-    l += Math.hypot(q.x - p[i].x, q.y - p[i].y);
-  }
-  return l;
-}
-
 /**
  * A convex outline inset by `inset` on every side, its corners rounded to `r`: each edge pushed in
  * by inset + r, then the result grown back by r with an arc at every corner. Empty when nothing's left.
@@ -315,14 +306,17 @@ function scallop(r: number, r1: number, r2: number): Poly {
  * Square holes on a log-spiral grid. In log-polar space (u = ln ρ, θ) two families of lines,
  * θ − u = a·k and θ + u = a·m with a = 2π / n, cut the plane into squares; mapped back, they are
  * spiral arms turning both ways, and every cell is a near-square that grows with its radius. Each
- * cell becomes a straight-edged square hole, shrunk about its centre to leave a gap of at least
- * `bar` (a third of the cell further out). Cells too small to cut leave the centre solid.
+ * cell becomes a straight-edged square hole, shrunk about its centre to leave a `bar`-wide gap
+ * everywhere: wider bars on the big outer cells would meet the face's edge in solid wedges that read
+ * as missing cells. Cells too small to cut leave the centre solid.
  */
 function spiralLattice(cx: number, cy: number, reach: number, cell: number, bar: number): Poly[] {
   // A cell's side is about ρ·a/√2; size the grid so the outermost cells are `cell` across.
   const n = Math.max(16, Math.min(96, Math.round((TAU * reach) / (cell * Math.SQRT2))));
   const a = TAU / n;
-  const minHole = Math.max(1.5, bar * 0.6);
+  // Holes down to 1 mm across: the rings carry on that much nearer the centre, which matters on a
+  // short face, where the solid centre otherwise runs almost to the edge and leaves it sparse.
+  const minHole = 1;
   const toXY = (k: number, m: number) => {
     const u = (a * (m - k)) / 2;
     const th = (a * (m + k)) / 2;
@@ -342,7 +336,7 @@ function spiralLattice(cx: number, cy: number, reach: number, cell: number, bar:
       const c = { x: corners.reduce((s, v) => s + v.x, 0) / 4, y: corners.reduce((s, v) => s + v.y, 0) / 4 };
       const side = (Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) +
         Math.hypot(corners[2].x - corners[1].x, corners[2].y - corners[1].y)) / 2;
-      const gap = Math.max(bar, side * 0.35);
+      const gap = bar;
       if (side - gap < minHole) continue;
       const f = (side - gap) / side;
       holes.push(corners.map((v) => ({ x: c.x + (v.x - c.x) * f, y: c.y + (v.y - c.y) * f })));
@@ -357,7 +351,7 @@ function spiralLattice(cx: number, cy: number, reach: number, cell: number, bar:
 /**
  * Holes for a `width × height` region (origin top-left, y down), centred on it and clipped to the
  * region inset by `paddingMm` with rounded corners. With an `outline` (region-local, convex) the
- * holes follow that shape instead, as on an arched wall. Slivers thinner than 1 mm are dropped.
+ * holes follow that shape instead, as on an arched wall. Pieces the edge trims are kept however small.
  */
 export function generatePatternHoles(spec: FacePatternSettings, width: number, height: number, outline?: Point2D[]): Poly[] {
   if (spec.style === 'none') return [];
@@ -393,7 +387,9 @@ export function generatePatternHoles(spec: FacePatternSettings, width: number, h
     for (const clipped of crop ? intersect([raw], crop) : [clipConvex(raw, window)]) {
       if (clipped.length < 3) continue;
       const area = Math.abs(polyArea(clipped));
-      if (area < 1 || (2 * area) / polyPerimeter(clipped) < 0.5) continue;
+      // Every piece of a hole inside the border is cut, however small a sliver the edge leaves:
+      // the pattern stays whole up to the border. Only a piece too small to draw is left out.
+      if (area < 0.01) continue;
       out.push(clipped);
     }
   }

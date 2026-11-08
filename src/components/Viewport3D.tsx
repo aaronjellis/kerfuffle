@@ -341,6 +341,14 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           // but no colour, so hidden edges stay hidden instead of every triangle showing.
           colorWrite: !showWireframe,
         });
+      /** The laser's charred edge: the part's wood, darker and duller. */
+      const makeBurntMaterial = () =>
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(spec.color).multiplyScalar(0.45),
+          roughness: 0.9,
+          metalness: 0,
+          colorWrite: !showWireframe,
+        });
 
       if (isPrint) {
         // One mesh per print piece group (shell, lip, hinge, clasp), already placed in the
@@ -376,6 +384,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       }
 
       let geometry: THREE.BufferGeometry;
+      // An extruded wood part draws its cut edges (outline and holes) darker, as the laser burns
+      // them: a hole then reads as a hole even where the lit inside of the box shows through it.
+      let burntEdges = false;
       const bent = panelGeometryFor(spec);
       if (bent) {
         geometry = bent;
@@ -405,11 +416,13 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           bevelEnabled: false,
         });
         geometry.translate(0, 0, -spec.thicknessMm / 2);
+        burntEdges = !brass;
       } else {
         geometry = new THREE.BoxGeometry(spec.widthMm, spec.heightMm, spec.thicknessMm);
       }
 
-      const mesh = new THREE.Mesh(geometry, makeMaterial());
+      // ExtrudeGeometry puts its faces in group 0 and its sides in group 1.
+      const mesh = new THREE.Mesh(geometry, burntEdges ? [makeMaterial(), makeBurntMaterial()] : makeMaterial());
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.userData = {
@@ -467,9 +480,10 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           selectedPart === 'artwork'
             ? spec.faceId === selectedFaceId || spec.id === selectedFaceId
             : selectedPart !== null && partForMesh(partId ?? faceId, templateId) === selectedPart;
-        const mat = mesh.material as THREE.MeshStandardMaterial;
-        mat.emissive.set(on ? accent : '#000000');
-        mat.emissiveIntensity = on ? 0.22 : 0;
+        for (const mat of (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as THREE.MeshStandardMaterial[]) {
+          mat.emissive.set(on ? accent : '#000000');
+          mat.emissiveIntensity = on ? 0.22 : 0;
+        }
         const edges = mesh.getObjectByName(EDGES_NAME) as THREE.LineSegments | undefined;
         if (edges) {
           const edgeMat = edges.material as THREE.LineBasicMaterial;

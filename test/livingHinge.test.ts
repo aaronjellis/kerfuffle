@@ -481,6 +481,23 @@ describe('living-hinge box', () => {
     }
   });
 
+  it.each([3, 6])('leaves a solid band between the rear hinge and a separate back wall\'s joint (%s mm ply)', (T) => {
+    const m = generateBoxModel({ ...base, livingHingeAttachMode: 'finger-joint-back', materialThicknessMm: T, kerfMm: 0 });
+    const wrap = m.panels2D.find((p) => p.id === 'top')!;
+    const ys = (d: string) => [...d.matchAll(/[ML]\s*(-?[\d.]+)\s+(-?[\d.]+)/g)].map((x) => Number(x[2]));
+    // Laid end for end, the back joint is at the top: its tabs run from y = 0 to T, their roots at T.
+    const outline = ys(wrap.paths.find((p) => p.id === 'living-wrap-outline')!.d);
+    expect(Math.min(...outline)).toBeCloseTo(0, 6);
+    const slits = wrap.paths.filter((p) => p.id.startsWith('lh-z2-')).flatMap((p) => ys(p.d));
+    const band = Math.min(...slits) - T;
+    expect(band).toBeGreaterThanOrEqual(Math.max(5, 1.5 * T) - 1e-6);
+    // The back wall is shorter by the band, so the closed lid's joint still lands on it.
+    const { depthMm: D, heightMm: H } = m.innerDims;
+    const straightH = Math.max(15, H - wrapBendRadiusMm(D, H));
+    const back = m.panels2D.find((p) => p.id === 'back')!;
+    expect(back.heightMm).toBeCloseTo(Math.max(12, straightH - T - Math.max(5, 1.5 * T)) + 2 * T, 6);
+  });
+
   it('opens an old project, which has no pattern, as straight slits', () => {
     const text = serializeProject({ params: base, artworks: [], displayUnit: 'mm' });
     const raw = JSON.parse(text);

@@ -1944,7 +1944,10 @@ function generateLivingHingeBox(
   // Lower Back Spine Wall:
   // - When `isOnePieceBack` ('one-piece-back' or 'side-arch-tabs'), it is integrated directly into the 1-Piece Living-Hinge Wrap Lid in both 2D and 3D!
   // - When `finger-joint-back`, it is a separate wall with `odd-tabs` along its top edge (`Y` in `[seamY - T .. seamY]`) that interlock with the lid's rear `even-tabs` fingers!
-  const backInnerH = isOnePieceBack ? straightH : Math.max(12, straightH - T);
+  // A separate back wall meets the wrap below a solid band, so the joint's slots don't run into the
+  // rear hinge's last row of slits and snap off when it's pushed together. The wall is that much shorter.
+  const rearBandH = isOnePieceBack ? 0 : Math.max(5, 1.5 * T);
+  const backInnerH = isOnePieceBack ? straightH : Math.max(12, straightH - T - rearBandH);
   const countBackH = computeOddFingerCount(backInnerH, params.fingerWidthMm);
   const backRes = specToPanel2D({
     id: 'back',
@@ -2215,7 +2218,7 @@ function generateLivingHingeBox(
       name: 'Lid Rear Finger Joint',
       faceLabel: 'SKIRT',
       innerW,
-      innerH: 0,
+      innerH: rearBandH,
       thickness: T,
       kerf,
       countX: countW,
@@ -2232,7 +2235,7 @@ function generateLivingHingeBox(
       y: p.y + zone2End - T,
     }));
     wrapOutlinePts = [...topCatchHeaderPts, ...lowerSkirtChain];
-    wrapTotalH = zone2End + T;
+    wrapTotalH = zone2End + rearBandH + T;
   }
 
   // The top guides: each side wall's tab rises into a notch in the deck's edge, the wall's thickness

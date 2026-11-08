@@ -24,6 +24,31 @@ function polyGap(p: Point2D[], q: Point2D[]): number {
 }
 
 describe('generatePatternHoles', () => {
+  it('keeps every piece the border trims off a hole, however small', () => {
+    const area = (h: Point2D[]) => Math.abs(h.reduce((s, p, i) => s + p.x * h[(i + 1) % h.length].y - h[(i + 1) % h.length].x * p.y, 0)) / 2;
+    // On this face the edge trims a few spiral cells down to slivers under 1 mm².
+    const holes = generatePatternHoles({ style: 'spiral', cellMm: 14, barMm: 3, paddingMm: 8 }, 100, 160);
+    expect(holes.filter((h) => area(h) < 1).length).toBeGreaterThan(0);
+  });
+
+  it('spiral: cuts holes down to 1 mm, so the solid centre stays clear of a short face\'s edge', () => {
+    const holes = generatePatternHoles({ style: 'spiral', cellMm: 14, barMm: 3, paddingMm: 8 }, 150, 94);
+    const centre = (h: Point2D[]) => ({ x: h.reduce((s, p) => s + p.x, 0) / h.length, y: h.reduce((s, p) => s + p.y, 0) / h.length });
+    const nearest = Math.min(...holes.map((h) => Math.hypot(centre(h).x - 75, centre(h).y - 47)));
+    expect(nearest).toBeLessThan(26);
+  });
+
+  it('spiral: keeps its bars at the bar width out to the edge, so they meet it without wide wedges', () => {
+    const bar = 3;
+    const holes = generatePatternHoles({ style: 'spiral', cellMm: 14, barMm: bar, paddingMm: 8 }, 150, 100);
+    // Every hole's nearest neighbour sits one bar away, however big the hole.
+    for (let i = 0; i < holes.length; i++) {
+      let nearest = Infinity;
+      for (let j = 0; j < holes.length; j++) if (j !== i) nearest = Math.min(nearest, polyGap(holes[i], holes[j]));
+      expect(nearest, `hole ${i}`).toBeLessThan(bar * 1.15);
+    }
+  });
+
   for (const style of STYLES) {
     it(`${style}: holes stay inside the padding and keep a bar between them`, () => {
       const bar = 3;
