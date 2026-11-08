@@ -2010,14 +2010,30 @@ function generateLivingHingeBox(
     // with the front wall's.
     const frontEdge: keyof Pick<FingerPanelSpec, 'leftEdge' | 'rightEdge'> = isRight ? 'leftEdge' : 'rightEdge';
     const backEdge: keyof Pick<FingerPanelSpec, 'leftEdge' | 'rightEdge'> = isRight ? 'rightEdge' : 'leftEdge';
-    const flatFront = buildFingerPanelPolygon({ ...baseSpec, [frontEdge]: 'flat-inner' });
+    // A separate back wall is a ply shorter than the sides, under the lid's skirt, with its own finger
+    // count, so the back edge takes the same treatment: fingers as high as the back wall, flat above.
+    const flatFront = buildFingerPanelPolygon({
+      ...baseSpec,
+      [frontEdge]: 'flat-inner',
+      ...(isOnePieceBack ? {} : { [backEdge]: 'flat-inner' }),
+    });
     const frontFingers = buildFingerPanelPolygon({
       ...baseSpec,
       innerH: frontH,
       countY: countFrontH,
       [backEdge]: 'flat-inner',
     }).map((p) => ({ x: p.x, y: p.y + frontLipH }));
-    const rawLowerPts = startAtTopRight(polygonUnion(flatFront, frontFingers), T + innerD, T);
+    let lowerPoly = polygonUnion(flatFront, frontFingers);
+    if (!isOnePieceBack) {
+      const backFingers = buildFingerPanelPolygon({
+        ...baseSpec,
+        innerH: backInnerH,
+        countY: countBackH,
+        [frontEdge]: 'flat-inner',
+      }).map((p) => ({ x: p.x, y: p.y + straightH - backInnerH }));
+      lowerPoly = polygonUnion(lowerPoly, backFingers);
+    }
+    const rawLowerPts = startAtTopRight(lowerPoly, T + innerD, T);
 
     const archPts: Point2D[] = [];
     const arcSteps = 12;

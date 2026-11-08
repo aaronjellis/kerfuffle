@@ -459,6 +459,28 @@ describe('living-hinge box', () => {
     expect(z1.every((x) => x.layer === 'cut' && !x.closed)).toBe(true);
   });
 
+  it.each([3, 6])('meets a separate back wall with matching fingers on the side walls (%s mm ply)', (T) => {
+    const m = generateBoxModel({ ...base, livingHingeAttachMode: 'finger-joint-back', heightMm: 160, materialThicknessMm: T, kerfMm: 0 });
+    const outlineOf = (id: string) => m.panels3D.find((p) => p.id === id)!.outlinePoints!;
+    const back = outlineOf('back');
+    const backH = Math.max(...back.map((p) => p.y));
+    // Heights, from the floor's outer face, where an edge steps between in and out.
+    const steps = (pts: { x: number; y: number }[], bottom: number, onEdge: (x: number) => boolean) =>
+      [...new Set(pts.filter((p) => onEdge(p.x)).map((p) => +(bottom - p.y).toFixed(3)))]
+        .filter((h) => h > 1e-6 && h < backH - T - 1e-6)
+        .sort((a, b) => a - b);
+    const backSteps = steps(back, backH, (x) => x <= T + 1e-6);
+    expect(backSteps.length).toBeGreaterThan(2);
+    for (const side of ['left', 'right']) {
+      const pts = outlineOf(side);
+      const bottom = Math.max(...pts.map((p) => p.y));
+      const w = Math.max(...pts.map((p) => p.x));
+      // The back edge: the left wall's left, the right wall's right.
+      const onBack = side === 'left' ? (x: number) => x <= T + 1e-6 : (x: number) => x >= w - T - 1e-6;
+      expect(steps(pts, bottom, onBack)).toEqual(backSteps);
+    }
+  });
+
   it('opens an old project, which has no pattern, as straight slits', () => {
     const text = serializeProject({ params: base, artworks: [], displayUnit: 'mm' });
     const raw = JSON.parse(text);
