@@ -27,6 +27,7 @@ npm run build    # Typecheck and build to dist
   - Supports both **Continuous Vector Score** and **Dashed Perforation (`Cut / Bridge`)** for thick corrugated flutes
 - **3D-Printed Parametric Enclosure Utility**:
   - Customizable wall/floor thickness, inner fillets, outer fillets, and 45° print-bed chamfers; registration lip, filament-pin knuckle hinge, cantilever snap clasp; STL as one file or two
+  - Freeform dividers: pick the Divider tool, click inside the box to place one, and drag dividers until the sections fit; they print as part of the base
 - **Face Artwork & 1:1 Print-Then-Cut Export**:
   - Place and scale SVG/PNG graphics on any box face, preview in 3D and 2D, and export 1:1 millimeter **Layered SVG**, **Layered PDF (`pdf-lib`)**, **DXF**, or **STL** with presets for **xTool Studio (xTool M2 Print + Cut)**, **LightBurn**, **Adobe Illustrator**, and **Glowforge**.
 

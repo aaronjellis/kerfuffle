@@ -8,6 +8,8 @@ import { Segmented } from './Field';
 import type { PartId } from './parts';
 import { STAGE_ACCENT_HEX, STAGE_HEX } from './stageColors';
 import { PHONE_QUERY, useMediaQuery } from './useMediaQuery';
+import { DividerToolbar } from './DividerToolbar';
+import type { DividerEditing } from './useDividerEditing';
 
 export type ViewMode = 'split' | '3d' | '2d';
 
@@ -31,6 +33,8 @@ interface StageProps {
   onSelectArtwork: (artId: string | null) => void;
   onUpdateArtwork: (artId: string, patch: Partial<FaceArtwork>) => void;
   onToggleParam: (key: keyof BoxParameters) => void;
+  /** The printed box's divider tools; null for every other box. */
+  dividerEditing: DividerEditing | null;
 }
 
 const metres = (mm: number) => `${(mm / 1000).toFixed(2)} m`;
@@ -54,6 +58,7 @@ export const Stage: React.FC<StageProps> = ({
   onSelectArtwork,
   onUpdateArtwork,
   onToggleParam,
+  dividerEditing,
 }) => {
   // A phone's stage is too short to split: Split shows as 3D there, without changing the choice.
   const isPhone = useMediaQuery(PHONE_QUERY);
@@ -86,6 +91,14 @@ export const Stage: React.FC<StageProps> = ({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [isPlaying]);
+  // Until the 3D view takes the divider tools (plan Task 8), a tool needs the 2D plan on screen.
+  const dividerToolOn = !!dividerEditing?.tool;
+  useEffect(() => {
+    if (dividerToolOn && viewMode === '3d') onViewMode(isPhone ? '2d' : 'split');
+    // Only when a tool turns on: the user can still switch back to 3D afterwards.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dividerToolOn]);
+
   const onScrub = (progress: number) => {
     setIsPlaying(false);
     setAssemblyProgress(progress);
@@ -139,11 +152,13 @@ export const Stage: React.FC<StageProps> = ({
               onSelectArtwork={onSelectArtwork}
               onUpdateArtwork={onUpdateArtwork}
               onToggleParam={onToggleParam}
+              dividerEditing={dividerEditing}
             />
           </div>
         )}
       </div>
 
+      {dividerEditing && <DividerToolbar editing={dividerEditing} displayUnit={displayUnit} />}
       {shows3d && !hintDone && <p className="stage-hint">Click a part to select it. Drag to orbit.</p>}
 
       <div className="stage-pill" role="group" aria-label="View controls">

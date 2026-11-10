@@ -117,8 +117,15 @@
 
   .stage-pill .segmented-toggle button,
   .stage-icon-btn,
+  .stage-tool-btn,
   .stage-toggle {
     min-height: 44px;
+  }
+
+  .stage-tools {
+    left: 0.75rem;
+    max-width: calc(100% - 1.5rem);
+    border-radius: var(--r-panel);
   }
 
   .stage-pill .segmented-toggle button {

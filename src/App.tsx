@@ -828,6 +828,7 @@ export const App: React.FC = () => {
           onSelectArtwork={setSelectedArtworkId}
           onUpdateArtwork={updateArtwork}
           onToggleParam={(key) => updateParam(key, !params[key])}
+          dividerEditing={dividerEditing}
         />
         {kerfTest ? (
           <KerfTestPanel

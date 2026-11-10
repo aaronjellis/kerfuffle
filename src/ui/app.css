@@ -547,6 +547,90 @@ h4 {
   }
 }
 
+/* The printed box's divider tools: a second pill, just above the view controls, clear of the
+   2D view's own chips along the top. */
+.stage-tools {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(var(--pill-bottom) + var(--pill-h) + 0.5rem);
+  left: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 2rem);
+  padding: var(--pill-pad);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: calc(var(--control-h) / 2 + var(--pill-pad));
+  box-shadow: var(--shadow-float);
+}
+
+.stage-tool-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: var(--control-h);
+  padding: 0 0.8rem 0 0.65rem;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+
+.stage-tool-btn:hover {
+  background: var(--sunken);
+}
+
+.stage-tool-btn[aria-pressed='true'] {
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+
+.stage-tools .stage-icon-btn:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.stage-tools .stage-icon-btn:disabled:hover {
+  background: transparent;
+}
+
+.stage-tool-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding-left: 0.35rem;
+  color: var(--muted);
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+}
+
+.stage-tool-field input {
+  width: 4.5rem;
+  height: 28px;
+  padding: 0 0.4rem;
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface);
+  border: 1px solid var(--field-line);
+  border-radius: var(--r-control);
+}
+
+.stage-tool-field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* The first-visit hint over the 3D view; it goes after the first click. */
 .stage-hint {
   position: absolute;

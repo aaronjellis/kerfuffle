@@ -9,6 +9,8 @@ import { effectiveLayer, resolveSheetArtworks } from '../engine/exporters';
 import { fmt } from '../engine/fingerJointEngine';
 import { panelTransform } from '../engine/placement';
 import { STAGE_ACCENT_HEX } from '../ui/stageColors';
+import type { DividerEditing } from '../ui/useDividerEditing';
+import { DividerOverlay2D } from './DividerOverlay2D';
 
 /** "Front Face" reads as "Front face": accessible names in sentence case. */
 const sentenceCase = (name: string) =>
@@ -51,6 +53,8 @@ interface Viewport2DProps {
       | 'showGuideLabels2D'
       | 'includeRegistrationMarks'
   ) => void;
+  /** The printed box's divider tools; they draw on the base plan while one is on. */
+  dividerEditing?: DividerEditing | null;
 }
 
 const Viewport2DView: React.FC<Viewport2DProps> = ({
@@ -63,6 +67,7 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
   onSelectArtwork,
   onUpdateArtwork,
   onToggleParam,
+  dividerEditing,
 }) => {
   const { params, panels2D, sheetWidthMm, sheetHeightMm } = model;
   const profile = EXPORT_PROFILES[params.exportProfile];
@@ -643,6 +648,22 @@ const Viewport2DView: React.FC<Viewport2DProps> = ({
             </g>
           );
         })}
+
+        {/* The divider tools, over everything else on the printed base's plan. */}
+        {dividerEditing &&
+          dividerEditing.tool !== null &&
+          panels2D
+            .filter((panel) => panel.id === 'base-3d-plan')
+            .map((panel) => (
+              <g key="divider-tools" transform={panelTransform(panel)}>
+                <DividerOverlay2D
+                  editing={dividerEditing}
+                  originX={panel.safeRect.x}
+                  originY={panel.safeRect.y}
+                  displayUnit={displayUnit}
+                />
+              </g>
+            ))}
       </svg>
     </div>
   );
