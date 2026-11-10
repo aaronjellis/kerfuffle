@@ -82,14 +82,17 @@ export function useDividerEditing(
   // The pointer and key handlers outlive a render; they read the latest state here.
   const latest = useRef({ layout, space, axis, selectedId, history });
   latest.current = { layout, space, axis, selectedId, history };
-  /** The saved list this hook last wrote; any other list came from outside (a load, Remove all). */
-  const lastWritten = useRef<PrintDivider[] | null>(null);
+  /**
+   * Every saved list this hook wrote; any other list came from outside (a load, Remove all). A set,
+   * not the last one: during a drag a later write can land before an earlier render's effect runs.
+   */
+  const written = useRef(new WeakSet<PrintDivider[]>());
   const drag = useRef<{ id: string; recorded: boolean } | null>(null);
 
   // Undo steps hold positions for one saved layout at one interior size; neither survives a
   // layout replaced from outside or a resized box.
   useEffect(() => {
-    if (params.printDividers === lastWritten.current) return;
+    if (written.current.has(params.printDividers)) return;
     setHistory(EMPTY_HISTORY);
     setSelectedId(null);
   }, [params.printDividers]);
@@ -106,7 +109,7 @@ export function useDividerEditing(
   const actions = useMemo(() => {
     const write = (next: PrintDivider[]) => {
       const { space: s } = latest.current;
-      lastWritten.current = next;
+      written.current.add(next);
       latest.current = { ...latest.current, layout: next };
       setParams((p) => ({ ...p, printDividers: next, printDividersBasis: { w: s.w, d: s.d } }));
     };

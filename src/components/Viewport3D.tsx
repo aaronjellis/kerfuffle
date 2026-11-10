@@ -304,6 +304,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
       const ed = dividerRef.current;
       if (ed?.tool) {
+        // Only the main button, or a lone finger: a right-click or a second finger places nothing.
+        if (e.button !== 0 || !e.isPrimary) return;
         // With a divider tool on, a click places or selects a divider, not a part.
         const id = dividerUnder(e);
         if (id) ed.select(id);

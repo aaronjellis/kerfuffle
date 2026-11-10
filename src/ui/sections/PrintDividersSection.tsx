@@ -57,7 +57,10 @@ export const PrintDividersSection: React.FC<SectionProps> = ({ params, updatePar
       </p>
       {hidden > 0 && (
         <p className="helper-note">
-          <strong>{hidden} hidden:</strong> {hidden === 1 ? 'it doesn’t' : 'they don’t'} fit at this size.
+          <strong>{`${hidden} hidden:`}</strong>{' '}
+          {hidden === 1
+            ? 'it doesn’t fit at this size, and comes back when it does. Changing the dividers now removes it for good.'
+            : 'they don’t fit at this size, and come back when they do. Changing the dividers now removes them for good.'}
         </p>
       )}
       {params.printDividers.length > 0 && (

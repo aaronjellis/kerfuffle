@@ -91,7 +91,9 @@ can change in review, not as owner requirements.
   size it was drawn for and is scaled on use, so nothing is lost. A divider that no longer fits
   (a section under the minimum, or an end inside a corner fillet) is hidden, not deleted: the
   inspector says how many are hidden, and they return if the box grows back. The same applies when
-  a thicker divider setting squeezes a section.
+  a thicker divider setting squeezes a section. Limit: an edit saves the layout that is on screen,
+  so editing while dividers are hidden removes them for good; the inspector says so beside the
+  hidden count.
 - **Rounded corners.** A divider end meets the straight part of a wall. A divider can't be placed
   where it would end inside an inner corner fillet.
 - **Saving.** The layout is part of `BoxParameters` and saves in the `.kerf` project file. Old

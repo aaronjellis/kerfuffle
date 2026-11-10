@@ -105,3 +105,31 @@ describe('section rendering', () => {
     }
   });
 });
+
+describe('printed dividers section', () => {
+  const render = (extra: Partial<BoxParameters>) => {
+    const params: BoxParameters = { ...DEFAULT_BOX_PARAMETERS, category: '3d-print', templateId: '3d-snap-box', ...extra };
+    const model = generateBoxModel(params);
+    return renderToString(
+      createElement(SECTION_COMPONENTS['print-dividers'], { params, updateParam: noop, displayUnit: 'mm', model, handlers: stubHandlers([]) })
+    );
+  };
+  const { widthMm: w, depthMm: d } = generateBoxModel({ ...DEFAULT_BOX_PARAMETERS, category: '3d-print', templateId: '3d-snap-box' }).innerDims;
+
+  it('says that editing drops the hidden dividers', () => {
+    // The second divider sits 3 mm from the first: it can't fit, so it is hidden.
+    const html = render({
+      printDividersBasis: { w, d },
+      printDividers: [
+        { id: 'a', axis: 'y', pos: 40, from: 0, to: d },
+        { id: 'b', axis: 'y', pos: 45, from: 0, to: d },
+      ],
+    });
+    expect(html).toContain('1 hidden');
+    expect(html).toContain('Changing the dividers now removes');
+  });
+  it('gives no warning when every divider fits', () => {
+    const html = render({ printDividersBasis: { w, d }, printDividers: [{ id: 'a', axis: 'y', pos: 40, from: 0, to: d }] });
+    expect(html).not.toContain('hidden');
+  });
+});
