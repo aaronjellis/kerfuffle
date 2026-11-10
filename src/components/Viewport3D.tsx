@@ -19,6 +19,10 @@ import {
   type PanelEntry,
 } from '../engine/scene3d';
 import { buildPrintPartWorldGeometry } from '../engine/printWorld';
+import { computePrintBoxDims } from '../engine/printParts';
+import { floorWorldY, interiorToWorld, worldToInterior } from '../engine/dividerPick';
+import type { DividerPreview } from '../engine/printDividers';
+import type { DividerEditing } from '../ui/useDividerEditing';
 import type { PrintPartId } from '../engine/printParts';
 import { partForMesh, type PartId } from '../ui/parts';
 import { meshPartIdFor } from '../ui/meshParts';
@@ -39,6 +43,8 @@ interface Viewport3DProps {
   showWireframe: boolean;
   /** The scene's clear color; the stage passes its own so the canvas and the stage match. */
   background?: string;
+  /** The printed box's divider tools: place on the floor, drag a divider, with the lid out of the way. */
+  dividerEditing?: DividerEditing | null;
 }
 
 const DEFAULT_BACKGROUND = '#0f141c';
@@ -60,10 +66,20 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   accent,
   showWireframe,
   background = DEFAULT_BACKGROUND,
+  dividerEditing = null,
 }) => {
   // The click handler is bound once; read the latest callbacks through a ref.
   const callbacksRef = useRef({ onSelectFace, onSelectPart });
   callbacksRef.current = { onSelectFace, onSelectPart };
+  // The pointer handlers are bound once too; they read the divider tools and the box here.
+  const dividerRef = useRef<DividerEditing | null>(dividerEditing);
+  dividerRef.current = dividerEditing;
+  const modelRef = useRef(model);
+  modelRef.current = model;
+  /** The translucent divider that follows the pointer across the floor. */
+  const ghostRef = useRef<THREE.Mesh | null>(null);
+  /** The divider under the pointer, lit before a drag can move it. */
+  const hoverDividerRef = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -75,6 +91,22 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   const panelMeshesRef = useRef<Map<string, PanelEntry>>(new Map());
   const cubeBodyRef = useRef<HTMLDivElement>(null);
   // The view cube's handlers need the camera and controls, which the init effect creates.
+  /** Lights the hovered and the selected divider over whatever glow the open section gives them. */
+  const applyDividerLook = () => {
+    const selected = dividerRef.current?.selectedId ?? null;
+    for (const mesh of panelMeshesRef.current.get('3d-base')?.meshes ?? []) {
+      const id = mesh.userData.dividerId as string | undefined;
+      if (!id) continue;
+      const lit = id === selected || id === hoverDividerRef.current;
+      const glow = lit ? 0.8 : mesh.userData.baseGlow ? 0.22 : 0;
+      for (const mat of (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as THREE.MeshStandardMaterial[]) {
+        mat.emissive.set(glow > 0 ? accent : '#000000');
+        mat.emissiveIntensity = glow;
+      }
+    }
+  };
+  const dividerLookRef = useRef(applyDividerLook);
+  dividerLookRef.current = applyDividerLook;
   const cubeActionsRef = useRef<{
     orbit: (dx: number, dy: number) => void;
     pickView: (dir: CubeDir) => void;
@@ -153,12 +185,136 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       downY = e.clientY;
     };
 
-    const onPointerUp = (e: PointerEvent) => {
-      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
+    const setRay = (e: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
+    };
+
+    // ---- The divider tools (3D-printed box) ----
+    const ghost = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.45, depthWrite: false })
+    );
+    ghost.visible = false;
+    ghostRef.current = ghost;
+    let dragDividerId: string | null = null;
+    const toLocal = new THREE.Matrix4();
+    const floorHit = new THREE.Vector3();
+
+    const printDims = () => {
+      const m = modelRef.current;
+      if (m.params.category !== '3d-print') return null;
+      return computePrintBoxDims(m.params, m.innerDims.widthMm, m.innerDims.depthMm, m.innerDims.heightMm);
+    };
+    /** The divider the pointer is on, nearest first. */
+    const dividerUnder = (e: PointerEvent): string | null => {
+      const meshes = (panelMeshesRef.current.get('3d-base')?.meshes ?? []).filter((m) => m.userData.dividerId);
+      if (meshes.length === 0) return null;
+      setRay(e);
+      const hit = raycaster.intersectObjects(meshes, false)[0];
+      return hit ? (hit.object.userData.dividerId as string) : null;
+    };
+    /** Where the pointer meets the base's floor, in the dividers' interior frame. */
+    const floorPoint = (e: PointerEvent): { x: number; y: number } | null => {
+      const base = panelMeshesRef.current.get('3d-base');
+      const dims = printDims();
+      if (!base || !dims) return null;
+      setRay(e);
+      // The base moves when the box is exploded; meet the floor in the base's own frame.
+      base.wrapper.updateWorldMatrix(true, false);
+      const ray = raycaster.ray.clone().applyMatrix4(toLocal.copy(base.wrapper.matrixWorld).invert());
+      const hit = ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -floorWorldY(dims)), floorHit);
+      return hit ? worldToInterior(dims, hit) : null;
+    };
+    const showGhost = (preview: DividerPreview | null) => {
+      const ed = dividerRef.current;
+      const dims = printDims();
+      if (!preview || !ed || !dims) {
+        ghost.visible = false;
+        return;
+      }
+      const g = preview.divider;
+      const mid = (g.from + g.to) / 2;
+      const length = g.to - g.from;
+      const at = interiorToWorld(dims, g.axis === 'y' ? { x: g.pos, y: mid } : { x: mid, y: g.pos });
+      ghost.scale.set(g.axis === 'y' ? ed.space.t : length, ed.heightMm, g.axis === 'y' ? length : ed.space.t);
+      ghost.position.set(at.x, floorWorldY(dims) + ed.heightMm / 2, at.z);
+      ghost.visible = true;
+    };
+    const setHover = (id: string | null) => {
+      if (hoverDividerRef.current === id) return;
+      hoverDividerRef.current = id;
+      dividerLookRef.current();
+    };
+
+    // A press on a divider starts a slide and never reaches the orbit controls: this listener
+    // runs in the capture phase, ahead of theirs. A press anywhere else orbits as usual.
+    const onDividerDown = (e: PointerEvent) => {
+      const ed = dividerRef.current;
+      if (!ed || !ed.tool || e.button !== 0) return;
+      const id = dividerUnder(e);
+      if (!id) return;
+      e.stopImmediatePropagation();
+      dragDividerId = id;
+      setHover(id);
+      showGhost(null);
+      ed.beginDrag(id);
+      try {
+        renderer.domElement.setPointerCapture(e.pointerId);
+      } catch {
+        // The pointer is already gone.
+      }
+    };
+    const onDividerMove = (e: PointerEvent) => {
+      const ed = dividerRef.current;
+      if (!ed || !ed.tool) return;
+      if (dragDividerId) {
+        const p = floorPoint(e);
+        const d = ed.layout.find((x) => x.id === dragDividerId);
+        if (p && d) ed.dragTo(d.axis === 'y' ? p.x : p.y);
+        return;
+      }
+      // Touch has no hover, and a held button is an orbit in progress.
+      if (e.pointerType === 'touch' || e.buttons !== 0) {
+        showGhost(null);
+        return;
+      }
+      const over = dividerUnder(e);
+      setHover(over);
+      renderer.domElement.style.cursor = over ? 'grab' : ed.tool === 'place' ? 'crosshair' : '';
+      const p = over || ed.tool !== 'place' ? null : floorPoint(e);
+      showGhost(p ? ed.preview(p) : null);
+    };
+    const endDividerDrag = () => {
+      dragDividerId = null;
+    };
+    const onDividerLeave = () => {
+      if (dragDividerId) return;
+      setHover(null);
+      showGhost(null);
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (dragDividerId) {
+        dragDividerId = null;
+        return;
+      }
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
+      const ed = dividerRef.current;
+      if (ed?.tool) {
+        // With a divider tool on, a click places or selects a divider, not a part.
+        const id = dividerUnder(e);
+        if (id) ed.select(id);
+        else if (ed.tool === 'place') {
+          const p = floorPoint(e);
+          if (p) ed.place(p);
+        } else ed.select(null);
+        showGhost(null);
+        return;
+      }
+      setRay(e);
       const meshes: THREE.Object3D[] = [];
       panelMeshesRef.current.forEach((v) => meshes.push(...v.meshes));
       const hits = raycaster.intersectObjects(meshes, true);
@@ -175,8 +331,12 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       }
     };
 
+    renderer.domElement.addEventListener('pointerdown', onDividerDown, { capture: true });
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointermove', onDividerMove);
+    renderer.domElement.addEventListener('pointercancel', endDividerDrag);
+    renderer.domElement.addEventListener('pointerleave', onDividerLeave);
 
     // A view cube pick swings the camera's direction round the target, keeping its distance.
     let turn: { from: THREE.Vector3; spin: THREE.Quaternion; distance: number; start: number } | null =
@@ -269,8 +429,15 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     return () => {
       cancelAnimationFrame(animFrameId);
       resizeObserver.disconnect();
+      renderer.domElement.removeEventListener('pointerdown', onDividerDown, { capture: true });
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      renderer.domElement.removeEventListener('pointermove', onDividerMove);
+      renderer.domElement.removeEventListener('pointercancel', endDividerDrag);
+      renderer.domElement.removeEventListener('pointerleave', onDividerLeave);
+      ghost.removeFromParent();
+      disposeObject(ghost);
+      ghostRef.current = null;
       controls.removeEventListener('start', cancelTurn);
       cubeActionsRef.current = undefined;
       boxGroup.children.forEach(disposeObject);
@@ -314,6 +481,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       grid.position.y = -model.outerDims.heightMm / 2 - 4;
     }
 
+    // The divider preview rides on the base's wrapper; lift it off before the wrappers go.
+    ghostRef.current?.removeFromParent();
     // Clear the previous wrappers, freeing their GPU geometry, materials and decal textures.
     while (boxGroup.children.length > 0) {
       const child = boxGroup.children[0];
@@ -356,17 +525,17 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         const pieces = buildPrintPartWorldGeometry(model, spec.id === '3d-lid' ? 'lid' : 'base');
         const groups = new Map<PrintPartId, THREE.BufferGeometry[]>();
         for (const p of pieces) {
+          if (p.dividerId) continue;
           const list = groups.get(p.partId) ?? [];
           list.push(p.geometry);
           groups.set(p.partId, list);
         }
         const meshes: THREE.Mesh[] = [];
-        groups.forEach((geoms, partId) => {
-          const geometry = mergeBufferGeometries(geoms);
+        const addPrintMesh = (geometry: THREE.BufferGeometry, partId: PrintPartId, dividerId?: string) => {
           const mesh = new THREE.Mesh(geometry, makeMaterial());
           mesh.castShadow = true;
           mesh.receiveShadow = true;
-          mesh.userData = { faceId: spec.faceId, panelId: spec.id, partId };
+          mesh.userData = { faceId: spec.faceId, panelId: spec.id, partId, ...(dividerId ? { dividerId } : {}) };
           // Outlines show only while the piece is selected.
           const edges = new THREE.LineSegments(
             new THREE.EdgesGeometry(geometry, 30),
@@ -377,7 +546,10 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           mesh.add(edges);
           wrapper.add(mesh);
           meshes.push(mesh);
-        });
+        };
+        groups.forEach((geoms, partId) => addPrintMesh(mergeBufferGeometries(geoms), partId));
+        // Each divider is a mesh of its own, so the pointer can tell them apart.
+        for (const p of pieces) if (p.dividerId) addPrintMesh(p.geometry, p.partId, p.dividerId);
         boxGroup.add(wrapper);
         panelMeshesRef.current.set(spec.id, { wrapper, meshes, spec });
         continue;
@@ -480,6 +652,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
           selectedPart === 'artwork'
             ? spec.faceId === selectedFaceId || spec.id === selectedFaceId
             : selectedPart !== null && partForMesh(partId ?? faceId, templateId) === selectedPart;
+        mesh.userData.baseGlow = on;
         for (const mat of (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as THREE.MeshStandardMaterial[]) {
           mat.emissive.set(on ? accent : '#000000');
           mat.emissiveIntensity = on ? 0.22 : 0;
@@ -502,6 +675,26 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       }
     });
   }, [model, artworks, showWireframe, selectedPart, selectedFaceId, accent]);
+
+  // 2c. The divider tools: the lid steps aside while one is on, the preview rides on the base, and
+  //     the selected divider stays lit. After 2 and 2b, so rebuilt meshes pick all of it up.
+  const dividerToolOn = !!dividerEditing?.tool;
+  const selectedDividerId = dividerEditing?.selectedId ?? null;
+  useEffect(() => {
+    const lid = panelMeshesRef.current.get('3d-lid');
+    if (lid) lid.wrapper.visible = !dividerToolOn;
+    const ghost = ghostRef.current;
+    const base = panelMeshesRef.current.get('3d-base');
+    if (ghost) {
+      if (base) base.wrapper.add(ghost);
+      if (!dividerToolOn || !base) ghost.visible = false;
+    }
+    if (!dividerToolOn) {
+      hoverDividerRef.current = null;
+      if (rendererRef.current) rendererRef.current.domElement.style.cursor = '';
+    }
+    dividerLookRef.current();
+  }, [dividerToolOn, selectedDividerId, model, artworks, showWireframe, selectedPart, selectedFaceId, accent]);
 
   // 3. Smoothly update panel positions/rotations when assemblyProgress slider moves
   useEffect(() => {

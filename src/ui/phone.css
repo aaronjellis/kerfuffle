@@ -122,10 +122,29 @@
     min-height: 44px;
   }
 
+  /* One row of icon buttons, so the tools leave the short stage to the box; the labels stay for
+     screen readers. A selected divider's fields scroll sideways. */
   .stage-tools {
     left: 0.75rem;
+    flex-wrap: nowrap;
     max-width: calc(100% - 1.5rem);
+    overflow-x: auto;
     border-radius: var(--r-panel);
+  }
+
+  .stage-tool-btn {
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+  }
+
+  .stage-tool-btn span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .stage-pill .segmented-toggle button {

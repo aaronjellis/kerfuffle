@@ -91,14 +91,6 @@ export const Stage: React.FC<StageProps> = ({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [isPlaying]);
-  // Until the 3D view takes the divider tools (plan Task 8), a tool needs the 2D plan on screen.
-  const dividerToolOn = !!dividerEditing?.tool;
-  useEffect(() => {
-    if (dividerToolOn && viewMode === '3d') onViewMode(isPhone ? '2d' : 'split');
-    // Only when a tool turns on: the user can still switch back to 3D afterwards.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dividerToolOn]);
-
   const onScrub = (progress: number) => {
     setIsPlaying(false);
     setAssemblyProgress(progress);
@@ -137,6 +129,7 @@ export const Stage: React.FC<StageProps> = ({
               accent={STAGE_ACCENT_HEX}
               showWireframe={showWireframe}
               background={STAGE_HEX}
+              dividerEditing={dividerEditing}
             />
           </div>
         )}
