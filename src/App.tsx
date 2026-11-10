@@ -49,6 +49,7 @@ import { currentBoxType, type BoxType } from './ui/boxTypes';
 import { KerfTestPanel } from './ui/KerfTestPanel';
 import { HingeCardsPanel, type HingeCardPick } from './ui/HingeCardsPanel';
 import { Stage, type ViewMode } from './ui/Stage';
+import { useDividerEditing } from './ui/useDividerEditing';
 import { withPrintedPinClamp } from './ui/paramRules';
 
 /** Set once the kerf test is finished or skipped, so it opens by itself only on a first visit. */
@@ -173,6 +174,14 @@ export const App: React.FC = () => {
   const testModel = kerfTestModel ?? hingeCardsModel;
   /** What the stage shows and the exports cut: the test pieces while a test is open. */
   const activeModel = testModel ?? model;
+
+  // The printed box's divider tools; off while a test sheet stands in for the box.
+  const dividerTools = useDividerEditing(params, setParams, model);
+  const dividerEditing = testModel ? null : dividerTools;
+  const dividerToolOn = !!dividerEditing?.tool;
+  useEffect(() => {
+    if (dividerToolOn) setSelectedPart('print-dividers');
+  }, [dividerToolOn]);
 
   const openKerfTest = () => {
     setHingeCards(null);
