@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BoxParameters } from './types';
 import { buildRoundedRectPoints } from './roundedRect';
+import { resolveDividers } from './printDividers';
 
 /**
  * Dimensions of the 3D-printed box: two shells, a registration lip, a filament-pin knuckle
@@ -194,7 +195,7 @@ export function computePrintBoxDims(
   };
 }
 
-export type PrintPartId = 'shell' | 'lip' | 'hinge' | 'clasp';
+export type PrintPartId = 'shell' | 'lip' | 'hinge' | 'clasp' | 'divider';
 
 /**
  * One closed primitive of a printed part, in the print frame. Pieces may overlap; the slicer
@@ -204,6 +205,8 @@ export type PrintPartId = 'shell' | 'lip' | 'hinge' | 'clasp';
 export interface PrintPiece {
   partId: PrintPartId;
   geometry: THREE.BufferGeometry;
+  /** Which divider a `divider` piece is. */
+  dividerId?: string;
 }
 
 const CORNER_SEGMENTS = 8;
@@ -572,4 +575,41 @@ export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
       x1
     ),
   ];
+}
+
+/** The lowest divider worth printing. */
+const MIN_DIVIDER_HEIGHT = 2;
+
+/**
+ * How tall the dividers stand above the floor: the user's height, or up to the base rim. Never
+ * above the rim, so a divider can't reach into the lid.
+ */
+export function resolveDividerHeight(params: BoxParameters, dims: PrintBoxDims): number {
+  const max = dims.baseH - dims.floor;
+  if (!(params.dividerHeight3dMm > 0)) return max;
+  return Math.min(max, Math.max(Math.min(MIN_DIVIDER_HEIGHT, max), params.dividerHeight3dMm));
+}
+
+/**
+ * The base's dividers, one box each, in the print frame. Each box sinks OVERLAP into the floor.
+ * An end on a wall runs to the wall's mid-thickness line, like the lip anchor; an end on another
+ * divider already reaches that divider's centerline. The slicer merges the overlaps.
+ */
+export function buildDividerPieces(params: BoxParameters, dims: PrintBoxDims): PrintPiece[] {
+  const { layout, space } = resolveDividers(params, dims.innerW, dims.innerD, dims.rIn);
+  if (layout.length === 0) return [];
+  const height = resolveDividerHeight(params, dims);
+  const { wall, floor } = dims;
+  return layout.map((d) => {
+    const length = d.axis === 'y' ? space.d : space.w;
+    const a0 = wall + d.from - (d.from <= 1e-6 ? wall / 2 : 0);
+    const a1 = wall + d.to + (d.to >= length - 1e-6 ? wall / 2 : 0);
+    const c0 = wall + d.pos - space.t / 2;
+    const [x0, x1, y0, y1] = d.axis === 'y' ? [c0, c0 + space.t, a0, a1] : [a0, a1, c0, c0 + space.t];
+    const z0 = floor - OVERLAP;
+    const z1 = floor + height;
+    const box = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+    box.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    return { partId: 'divider' as const, geometry: nonIndexed(box), dividerId: d.id };
+  });
 }

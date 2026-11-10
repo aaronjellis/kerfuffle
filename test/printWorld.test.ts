@@ -228,3 +228,19 @@ describe('3D print panels and blueprint', () => {
     });
   });
 });
+
+describe('printed dividers in the world', () => {
+  it('adds one tagged piece per divider to the base and none to the lid', () => {
+    const { model } = setup({
+      ...p,
+      printDividersBasis: { w: 110, d: 80 },
+      printDividers: [
+        { id: 'v', axis: 'y', pos: 40, from: 0, to: 80 },
+        { id: 'h', axis: 'x', pos: 30, from: 40, to: 110 },
+      ],
+    });
+    const base = buildPrintPartWorldGeometry(model, 'base').filter((x) => x.partId === 'divider');
+    expect(base.map((x) => x.dividerId)).toEqual(['v', 'h']);
+    expect(buildPrintPartWorldGeometry(model, 'lid').some((x) => x.partId === 'divider')).toBe(false);
+  });
+});

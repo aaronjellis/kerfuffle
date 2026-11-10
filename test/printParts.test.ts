@@ -3,7 +3,7 @@ import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import * as THREE from 'three';
 import { generateBoxModel } from '../src/engine/boxGenerator';
 import { export3DPrintBoxStl, export3DPrintBoxStlParts } from '../src/engine/exporters';
-import { buildClaspPieces, buildHingePieces, buildShellPieces, computePrintBoxDims, type PrintPiece } from '../src/engine/printParts';
+import { buildClaspPieces, buildDividerPieces, buildHingePieces, buildShellPieces, computePrintBoxDims, resolveDividerHeight, type PrintPiece } from '../src/engine/printParts';
 import { hingeHoleLayout } from '../src/engine/fingerJointEngine';
 import { buildPrintedHingeLeaves, buildPrintedHingePins, exportPrintedHingeStl, printedHingeStl } from '../src/engine/printedHinge';
 const p = { ...DEFAULT_BOX_PARAMETERS, category: '3d-print' as const, templateId: '3d-snap-box' as const };
@@ -850,5 +850,75 @@ describe('printed hinge', () => {
     const stl = exportPrintedHingeStl(clam, 110);
     expect(stl).toContain('Kerfuffle_Printed_Hinge');
     expect(stl).not.toContain('NaN');
+  });
+});
+
+describe('printed dividers', () => {
+  const withDividers = {
+    ...p,
+    wallThickness3dMm: 2,
+    printDividersBasis: { w: 110, d: 80 },
+    printDividers: [
+      { id: 'v', axis: 'y' as const, pos: 40, from: 0, to: 80 },
+      { id: 'h', axis: 'x' as const, pos: 30, from: 40, to: 110 },
+    ],
+  };
+  const bounds = (piece: PrintPiece) => {
+    piece.geometry.computeBoundingBox();
+    return piece.geometry.boundingBox!;
+  };
+
+  it('builds one closed, non-indexed box per divider, tagged with its id', () => {
+    const d = computePrintBoxDims(withDividers, 110, 80, 55);
+    const pieces = buildDividerPieces(withDividers, d);
+    expect(pieces.map((x) => x.dividerId)).toEqual(['v', 'h']);
+    for (const piece of pieces) {
+      expect(piece.partId).toBe('divider');
+      expect(piece.geometry.index).toBeNull();
+      expect(piece.geometry.getAttribute('position').count).toBe(36);
+    }
+  });
+  it('sinks into the floor and both walls and stops at the rim', () => {
+    const d = computePrintBoxDims(withDividers, 110, 80, 55);
+    const b = bounds(buildDividerPieces(withDividers, d)[0]);
+    expect(b.min.x).toBeCloseTo(d.wall + 39);
+    expect(b.max.x).toBeCloseTo(d.wall + 41);
+    expect(b.min.y).toBeCloseTo(d.wall / 2);
+    expect(b.max.y).toBeCloseTo(d.outerD - d.wall / 2);
+    expect(b.min.z).toBeLessThan(d.floor);
+    expect(b.max.z).toBeCloseTo(d.baseH);
+  });
+  it('ends a divider on another divider at its centerline', () => {
+    const d = computePrintBoxDims(withDividers, 110, 80, 55);
+    expect(bounds(buildDividerPieces(withDividers, d)[1]).min.x).toBeCloseTo(d.wall + 40);
+  });
+  it('honors a lower height and never passes the rim', () => {
+    const d = computePrintBoxDims(withDividers, 110, 80, 55);
+    expect(resolveDividerHeight({ ...withDividers, dividerHeight3dMm: 10 }, d)).toBe(10);
+    expect(resolveDividerHeight({ ...withDividers, dividerHeight3dMm: 999 }, d)).toBeCloseTo(d.baseH - d.floor);
+    expect(resolveDividerHeight(withDividers, d)).toBeCloseTo(d.baseH - d.floor);
+  });
+  it('still builds in the shortest base', () => {
+    const short = { ...withDividers, lidHeightMm: 100 };
+    const d = computePrintBoxDims(short, 110, 80, 20);
+    expect(resolveDividerHeight(short, d)).toBeLessThanOrEqual(d.baseH - d.floor + 1e-9);
+    const b = bounds(buildDividerPieces(short, d)[0]);
+    expect(b.max.z).toBeLessThanOrEqual(d.baseH + 1e-9);
+    expect(b.max.z).toBeGreaterThan(d.floor);
+  });
+  it('puts dividers in the base STL only', () => {
+    const tri = (s: string) => (s.match(/facet normal/g) ?? []).length;
+    const none = { ...withDividers, printDividers: [] };
+    const plain = export3DPrintBoxStlParts(none);
+    const parts = export3DPrintBoxStlParts(withDividers);
+    expect(tri(parts.base) - tri(plain.base)).toBe(24);
+    expect(tri(parts.lid)).toBe(tri(plain.lid));
+    expect(tri(export3DPrintBoxStl(withDividers)) - tri(export3DPrintBoxStl(none))).toBe(24);
+  });
+  it('draws each divider on the base plan and none on the lid', () => {
+    const m = generateBoxModel(withDividers);
+    const ids = (panelId: string) => m.panels2D.find((x) => x.id === panelId)!.paths.map((x) => x.id);
+    expect(ids('base-3d-plan')).toEqual(expect.arrayContaining(['3d-divider-v', '3d-divider-h']));
+    expect(ids('lid-3d-plan').some((id) => id.startsWith('3d-divider'))).toBe(false);
   });
 });

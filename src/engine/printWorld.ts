@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GeneratedBoxModel } from './types';
 import {
   buildClaspPieces,
+  buildDividerPieces,
   buildHingePieces,
   buildShellPieces,
   computePrintBoxDims,
@@ -11,6 +12,8 @@ import {
 export interface PrintWorldPiece {
   partId: PrintPartId;
   geometry: THREE.BufferGeometry;
+  /** Which divider a `divider` piece is. */
+  dividerId?: string;
 }
 
 /**
@@ -53,9 +56,11 @@ export function buildPrintPartWorldGeometry(
     ...buildShellPieces(dims, part, params.outerChamferMm),
     ...buildHingePieces(dims, part),
     ...buildClaspPieces(dims, part),
+    ...(part === 'base' ? buildDividerPieces(params, dims) : []),
   ];
   return pieces.map((piece) => ({
     partId: piece.partId,
     geometry: piece.geometry.clone().applyMatrix4(m),
+    ...(piece.dividerId ? { dividerId: piece.dividerId } : {}),
   }));
 }

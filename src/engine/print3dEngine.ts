@@ -9,6 +9,7 @@ import {
 import { fmt, pointsToSvgPath } from './fingerJointEngine';
 import { CLASP_THUMB_FLARE, computePrintBoxDims, lidPrintRange } from './printParts';
 import { buildRoundedRectPoints } from './roundedRect';
+import { resolveDividers } from './printDividers';
 
 export function generate3DPrintBox(
   params: BoxParameters,
@@ -86,6 +87,19 @@ export function generate3DPrintBox(
         d: rectPath(x0, oy - frontDepth, x0 + w, oy),
         closed: true,
       });
+    }
+
+    // The base's dividers, each as its footprint on the floor.
+    if (part === 'base') {
+      const { layout, space } = resolveDividers(params, innerW, innerD, rIn);
+      for (const dv of layout) {
+        const c0 = wall + dv.pos - space.t / 2;
+        const [x0, x1, y0, y1] =
+          dv.axis === 'y'
+            ? [c0, c0 + space.t, wall + dv.from, wall + dv.to]
+            : [wall + dv.from, wall + dv.to, c0, c0 + space.t];
+        paths.push({ id: `3d-divider-${dv.id}`, layer: 'score', d: rectPath(x0, y0 + oy, x1, y1 + oy), closed: true });
+      }
     }
 
     return { paths, oy, heightMm: frontDepth + outerD + knuckleDepth };
