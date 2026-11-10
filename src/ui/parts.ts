@@ -36,6 +36,7 @@ export type PartId =
   | 'flaps'
   | 'score-lines'
   | 'shell'
+  | 'print-dividers'
   | 'pattern'
   | 'labels'
   | 'artwork'
@@ -123,6 +124,12 @@ const DEFS: Record<PartId, PartDef> = {
     keywords: 'wall floor thickness inner outer fillet chamfer lid split height snap',
     icon: Box
   },
+  'print-dividers': {
+    id: 'print-dividers',
+    label: 'Dividers',
+    keywords: 'divider compartment section organizer insert thickness height',
+    icon: LayoutGrid
+  },
   pattern: {
     id: 'pattern',
     label: 'Pattern',
@@ -170,7 +177,7 @@ const PART_IDS: Record<BoxTemplateId, PartId[]> = {
   'cardboard-mailer': ['size', 'material', 'closure', 'side-locks', 'flaps', 'score-lines', ...PATTERN_TAIL],
   'cardboard-tuck-carton': ['size', 'material', 'score-lines', ...PATTERN_TAIL],
   'cardboard-telescope': ['size', 'material', 'score-lines', ...PATTERN_TAIL],
-  '3d-snap-box': ['size', 'shell', 'hinge', 'clasp', 'labels', 'artwork', 'print-export']
+  '3d-snap-box': ['size', 'shell', 'print-dividers', 'hinge', 'clasp', 'labels', 'artwork', 'print-export']
 };
 
 /**
@@ -207,6 +214,7 @@ const MESH_TO_PART: Record<string, PartId> = {
   closure: 'closure',
   shell: 'shell',
   lip: 'shell',
+  divider: 'print-dividers',
   dividers: 'dividers',
   'living-hinge': 'living-hinge'
 };

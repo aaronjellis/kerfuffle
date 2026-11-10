@@ -19,7 +19,7 @@ const EXPECTED: Record<BoxTemplateId, PartId[]> = {
   'cardboard-mailer': ['size', 'material', 'closure', 'side-locks', 'flaps', 'score-lines', 'pattern', 'labels', 'artwork', 'sheet'],
   'cardboard-tuck-carton': ['size', 'material', 'score-lines', 'pattern', 'labels', 'artwork', 'sheet'],
   'cardboard-telescope': ['size', 'material', 'score-lines', 'pattern', 'labels', 'artwork', 'sheet'],
-  '3d-snap-box': ['size', 'shell', 'hinge', 'clasp', 'labels', 'artwork', 'print-export']
+  '3d-snap-box': ['size', 'shell', 'print-dividers', 'hinge', 'clasp', 'labels', 'artwork', 'print-export']
 };
 const TEMPLATES = Object.keys(EXPECTED) as BoxTemplateId[];
 
@@ -90,6 +90,8 @@ describe('partForMesh', () => {
     expect(partForMesh('lid', '3d-snap-box')).toBe('shell');
     expect(partForMesh('shell', '3d-snap-box')).toBe('shell');
     expect(partForMesh('lip', '3d-snap-box')).toBe('shell');
+    expect(partForMesh('divider', '3d-snap-box')).toBe('print-dividers');
+    expect(partForMesh('divider', 'finger-organizer')).toBeNull();
     expect(partForMesh('flap', 'cardboard-mailer')).toBe('flaps');
     expect(partForMesh('tabs', 'cardboard-mailer')).toBe('side-locks');
     expect(partForMesh('closure', 'cardboard-mailer')).toBe('closure');

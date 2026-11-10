@@ -13,6 +13,7 @@ import { LidSection } from './LidSection';
 import { LivingHingeSection } from './LivingHingeSection';
 import { MaterialSection } from './MaterialSection';
 import { PatternSection } from './PatternSection';
+import { PrintDividersSection } from './PrintDividersSection';
 import { PrintExportSection } from './PrintExportSection';
 import { ScoreLinesSection } from './ScoreLinesSection';
 import { SheetSection } from './SheetSection';
@@ -39,6 +40,7 @@ export const SECTION_COMPONENTS: Record<PartId, React.FC<SectionProps>> = {
   flaps: FlapsSection,
   'score-lines': ScoreLinesSection,
   shell: ShellSection,
+  'print-dividers': PrintDividersSection,
   pattern: PatternSection,
   labels: LabelsSection,
   artwork: ArtworkSection,
