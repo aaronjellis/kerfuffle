@@ -64,3 +64,35 @@ describe('project files', () => {
     expect(() => parseProject(fileWith({}, { templateId: 'teapot' }))).toThrow(/template/);
   });
 });
+
+describe('printed box dividers in a project file', () => {
+  const good = { id: 'a', axis: 'y', pos: 40, from: 0, to: 80 };
+  const file = (p: object) =>
+    JSON.stringify({ format: 'kerfuffle-project', version: 1, params: { templateId: '3d-snap-box', ...p } });
+
+  it('round-trips a divider layout', () => {
+    const withDividers = {
+      ...DEFAULT_BOX_PARAMETERS,
+      printDividers: [good as { id: string; axis: 'y'; pos: number; from: number; to: number }],
+      printDividersBasis: { w: 110, d: 80 },
+      dividerThickness3dMm: 1.6,
+    };
+    const back = parseProject(serializeProject({ params: withDividers, artworks: [], displayUnit: 'mm' })).params;
+    expect(back.printDividers).toEqual([good]);
+    expect(back.printDividersBasis).toEqual({ w: 110, d: 80 });
+    expect(back.dividerThickness3dMm).toBe(1.6);
+  });
+  it('opens an old file with no dividers', () => {
+    expect(parseProject(file({})).params.printDividers).toEqual([]);
+  });
+  it('drops bad divider entries and keeps good ones', () => {
+    const bad = [{ ...good, axis: 'z' }, { ...good, pos: null }, { ...good, id: 7 }, { ...good, from: 50, to: 10 }, 'x', good, good];
+    const p = parseProject(file({ printDividers: bad, printDividersBasis: { w: 110, d: 80 } })).params;
+    expect(p.printDividers).toEqual([good]);
+  });
+  it('drops every divider when the basis is unusable', () => {
+    const p = parseProject(file({ printDividers: [good], printDividersBasis: { w: 0, d: 'x' } })).params;
+    expect(p.printDividers).toEqual([]);
+    expect(p.printDividersBasis).toEqual({ w: 0, d: 0 });
+  });
+});

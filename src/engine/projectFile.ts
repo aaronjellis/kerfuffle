@@ -1,4 +1,4 @@
-import type { BoxParameters, DisplayUnit, FaceArtwork, FacePatternSettings, FacePatternStyle } from './types';
+import type { BoxParameters, DisplayUnit, FaceArtwork, FacePatternSettings, FacePatternStyle, PrintDivider } from './types';
 import { isHingePatternId } from './livingHinge';
 import { BOX_TEMPLATES, DEFAULT_BOX_PARAMETERS } from './presets';
 
@@ -71,6 +71,22 @@ export function parseProject(text: string): KerfProject {
   params.facePatterns = Object.fromEntries(
     Object.entries(params.facePatterns).filter(([, p]) => isPattern(p)),
   ) as Record<string, FacePatternSettings>;
+  // Dividers: each entry is checked on its own, and a layout with no usable basis can't be placed.
+  const basis = params.printDividersBasis as unknown as Record<string, unknown>;
+  const basisOk = [basis.w, basis.d].every((n) => typeof n === 'number' && Number.isFinite(n) && n > 0);
+  const seenIds = new Set<string>();
+  params.printDividers = basisOk
+    ? (params.printDividers as unknown[]).filter((d): d is PrintDivider => {
+        if (!isRecord(d) || typeof d.id !== 'string' || seenIds.has(d.id)) return false;
+        if (d.axis !== 'x' && d.axis !== 'y') return false;
+        const nums = [d.pos, d.from, d.to];
+        if (!nums.every((n) => typeof n === 'number' && Number.isFinite(n))) return false;
+        if ((d.from as number) >= (d.to as number)) return false;
+        seenIds.add(d.id);
+        return true;
+      }).map((d) => ({ id: d.id, axis: d.axis, pos: d.pos, from: d.from, to: d.to }))
+    : [];
+  params.printDividersBasis = basisOk ? { w: basis.w as number, d: basis.d as number } : { w: 0, d: 0 };
   // The old attachment that carried the top guides is now the one-piece back with guides switched on.
   if (params.livingHingeAttachMode === 'side-arch-tabs') {
     params.livingHingeAttachMode = 'one-piece-back';

@@ -115,6 +115,20 @@ export interface MachineBedPreset {
   description: string;
 }
 
+/**
+ * A divider in the 3D-printed base. Coordinates are millimetres in the interior frame: origin at
+ * the inner front-left corner, x across the width, y front to back. `axis` is the axis the divider
+ * runs along, `pos` its centerline on the other axis. `from` and `to` are its ends along `axis`:
+ * 0 or the interior extent at a wall, the supporting divider's `pos` at a divider.
+ */
+export interface PrintDivider {
+  id: string;
+  axis: 'x' | 'y';
+  pos: number;
+  from: number;
+  to: number;
+}
+
 export interface BoxParameters {
   category: BoxCategory;
   templateId: BoxTemplateId;
@@ -183,6 +197,14 @@ export interface BoxParameters {
   outerFilletMm: number;
   includeSnapClasp: boolean;
   include3dHinge: boolean;
+  /** Freeform dividers in the printed base, in the interior's own frame */
+  printDividers: PrintDivider[];
+  /** The interior size (mm) the saved divider positions were drawn for; 0 × 0 with no layout */
+  printDividersBasis: { w: number; d: number };
+  /** One thickness for every divider; 0 follows the wall thickness */
+  dividerThickness3dMm: number;
+  /** Divider height above the floor; 0 means up to the base rim */
+  dividerHeight3dMm: number;
   /** See-through pattern per face ('top', 'front', …); a face with no entry stays solid */
   facePatterns: Record<string, FacePatternSettings>;
   /** Inner Side Vector Score Face Labels */
