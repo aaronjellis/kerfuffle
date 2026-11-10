@@ -1,4 +1,4 @@
-import type { PrintDivider } from './types';
+import type { BoxParameters, PrintDivider } from './types';
 
 /**
  * The layout rules for the printed box's freeform dividers. Pure numbers: no React, no three.js.
@@ -162,4 +162,172 @@ function faultOf(layout: PrintDivider[], space: DividerSpace, d: PrintDivider): 
 /** True when every divider ends on something, keeps its clearances, and crosses nothing. */
 export function isValidLayout(layout: PrintDivider[], space: DividerSpace): boolean {
   return layout.every((d) => faultOf(layout, space, d) === null);
+}
+
+/** The perpendicular dividers that end on `d`, with which of their ends does. */
+function attachedTo(layout: PrintDivider[], d: PrintDivider): { id: string; end: 'from' | 'to' }[] {
+  const out: { id: string; end: 'from' | 'to' }[] = [];
+  for (const e of layout) {
+    if (e.id === d.id || e.axis === d.axis) continue;
+    if (e.pos < d.from - EPS || e.pos > d.to + EPS) continue;
+    if (Math.abs(e.from - d.pos) <= EPS) out.push({ id: e.id, end: 'from' });
+    else if (Math.abs(e.to - d.pos) <= EPS) out.push({ id: e.id, end: 'to' });
+  }
+  return out;
+}
+
+/** The positions a divider may slide between; `min > max` means it can't move. */
+export function moveLimits(layout: PrintDivider[], space: DividerSpace, id: string): { min: number; max: number } {
+  const d = layout.find((e) => e.id === id);
+  if (!d) return { min: 0, max: -1 };
+  const { lo, hi } = facesBeside(layout, space, d, id);
+  let min = lo + MIN_SECTION_MM + space.t / 2;
+  let max = hi - MIN_SECTION_MM - space.t / 2;
+  // Dividers that end on it keep their minimum length.
+  for (const a of attachedTo(layout, d)) {
+    const e = layout.find((x) => x.id === a.id)!;
+    if (a.end === 'to') min = Math.max(min, e.from + MIN_SECTION_MM);
+    else max = Math.min(max, e.to - MIN_SECTION_MM);
+  }
+  // It stays on the dividers its own ends rest on.
+  const length = lengthOf(space, d.axis);
+  for (const coord of [d.from, d.to]) {
+    if (Math.abs(coord) <= EPS || Math.abs(coord - length) <= EPS) continue;
+    const support = layout.find(
+      (e) => e.axis !== d.axis && Math.abs(e.pos - coord) <= EPS && d.pos >= e.from - EPS && d.pos <= e.to + EPS,
+    );
+    if (support) {
+      min = Math.max(min, support.from);
+      max = Math.min(max, support.to);
+    }
+  }
+  // An end on a wall stays clear of the corner fillets.
+  if (d.from <= EPS || d.to >= length - EPS) {
+    min = Math.max(min, space.rIn + space.t / 2);
+    max = Math.min(max, acrossOf(space, d.axis) - space.rIn - space.t / 2);
+  }
+  return { min: r3(min), max: r3(max) };
+}
+
+/** Puts a divider at `pos`, clamped to its limits; the dividers that end on it follow. */
+function slideTo(layout: PrintDivider[], space: DividerSpace, d: PrintDivider, pos: number): PrintDivider[] {
+  const { min, max } = moveLimits(layout, space, d.id);
+  if (min > max + EPS) return layout;
+  const next = r3(Math.min(max, Math.max(min, pos)));
+  if (Math.abs(next - d.pos) <= EPS) return layout;
+  const ends = new Map(attachedTo(layout, d).map((a) => [a.id, a.end]));
+  return layout.map((e) => {
+    if (e.id === d.id) return { ...e, pos: next };
+    const end = ends.get(e.id);
+    return end ? { ...e, [end]: next } : e;
+  });
+}
+
+/** Slides a divider toward `rawPos`: the gap before it snaps, then the limits clamp it. */
+export function moveDivider(layout: PrintDivider[], space: DividerSpace, id: string, rawPos: number): PrintDivider[] {
+  const d = layout.find((e) => e.id === id);
+  if (!d) return layout;
+  const { lo } = facesBeside(layout, space, d, id);
+  const gap = Math.round((rawPos - space.t / 2 - lo) / DIVIDER_SNAP_MM) * DIVIDER_SNAP_MM;
+  return slideTo(layout, space, d, lo + gap + space.t / 2);
+}
+
+/** The clear gap on each side of a divider. */
+export function clearSizes(layout: PrintDivider[], space: DividerSpace, id: string): { before: number; after: number } {
+  const d = layout.find((e) => e.id === id);
+  if (!d) return { before: 0, after: 0 };
+  const { before, after } = gapsOf(layout, space, d, id);
+  return { before: r3(before), after: r3(after) };
+}
+
+/** Sets the clear gap on one side of a divider exactly, within its limits. No snapping. */
+export function setClearSize(
+  layout: PrintDivider[],
+  space: DividerSpace,
+  id: string,
+  side: 'before' | 'after',
+  clearMm: number,
+): PrintDivider[] {
+  const d = layout.find((e) => e.id === id);
+  if (!d || !Number.isFinite(clearMm)) return layout;
+  const { lo, hi } = facesBeside(layout, space, d, id);
+  return slideTo(layout, space, d, side === 'before' ? lo + clearMm + space.t / 2 : hi - clearMm - space.t / 2);
+}
+
+/**
+ * Removes a divider. Each divider that ended on it grows to the next wall or divider; two that
+ * meet on the same line become one. A grown divider with no room (it would come within the
+ * minimum of another) is removed too, the later-placed one first.
+ */
+export function deleteDivider(layout: PrintDivider[], space: DividerSpace, id: string): PrintDivider[] {
+  const d = layout.find((e) => e.id === id);
+  if (!d) return layout;
+  const deps = attachedTo(layout, d);
+  let rest = layout.filter((e) => e.id !== id);
+  const grownIds: string[] = [];
+  for (const dep of deps) {
+    const cur = rest.find((e) => e.id === dep.id);
+    if (!cur) continue;
+    const c = dep.end === 'to' ? d.pos + 1e-3 : d.pos - 1e-3;
+    const ends = endsAt(rest, space, cur.axis, cur.pos, c, cur.id);
+    let grown: PrintDivider = { ...cur, [dep.end]: dep.end === 'to' ? ends.to : ends.from };
+    const twin = rest.find(
+      (f) =>
+        f.id !== cur.id &&
+        f.axis === cur.axis &&
+        Math.abs(f.pos - cur.pos) <= EPS &&
+        f.from < grown.to - EPS &&
+        f.to > grown.from + EPS,
+    );
+    if (twin) {
+      grown = { ...grown, from: Math.min(grown.from, twin.from), to: Math.max(grown.to, twin.to) };
+      rest = rest.filter((e) => e.id !== twin.id);
+    }
+    rest = rest.map((e) => (e.id === cur.id ? grown : e));
+    grownIds.push(cur.id);
+  }
+  for (const grownId of grownIds.reverse()) {
+    const g = rest.find((e) => e.id === grownId);
+    if (g && !fits(rest, space, g, g.id)) rest = deleteDivider(rest, space, g.id);
+  }
+  return rest;
+}
+
+/** One thickness for every divider: the wall's, until the user sets their own. */
+export function resolveDividerThickness(params: BoxParameters): number {
+  return params.dividerThickness3dMm > 0
+    ? Math.min(8, Math.max(0.8, params.dividerThickness3dMm))
+    : Math.max(1.2, params.wallThickness3dMm);
+}
+
+/**
+ * The saved layout as it applies to this box: scaled from the interior it was drawn for, with the
+ * dividers that no longer fit left out. Nothing is removed from the saved layout, so they return
+ * when the box has room again. Scaled positions are not re-snapped.
+ */
+export function resolveDividers(
+  params: BoxParameters,
+  innerW: number,
+  innerD: number,
+  rIn: number,
+): { layout: PrintDivider[]; space: DividerSpace; hidden: number } {
+  const space: DividerSpace = { w: innerW, d: innerD, t: resolveDividerThickness(params), rIn };
+  const saved = params.printDividers ?? [];
+  const basis = params.printDividersBasis;
+  if (saved.length === 0 || !basis || !(basis.w > 0) || !(basis.d > 0) || !(innerW > 0) || !(innerD > 0)) {
+    return { layout: [], space, hidden: 0 };
+  }
+  const sx = innerW / basis.w;
+  const sy = innerD / basis.d;
+  let layout: PrintDivider[] = saved.map((e) => {
+    const across = e.axis === 'y' ? sx : sy;
+    const along = e.axis === 'y' ? sy : sx;
+    return { ...e, pos: r3(e.pos * across), from: r3(e.from * along), to: r3(e.to * along) };
+  });
+  for (;;) {
+    const bad = layout.find((e) => faultOf(layout, space, e) !== null);
+    if (!bad) break;
+    layout = deleteDivider(layout, space, bad.id);
+  }
+  return { layout, space, hidden: saved.length - layout.length };
 }
