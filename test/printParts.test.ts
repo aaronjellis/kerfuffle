@@ -960,7 +960,7 @@ describe('magnet pockets', () => {
     const d = computePrintBoxDims(on, 110, 80, 55);
     for (const part of ['base', 'lid'] as const) {
       const pieces = buildMagnetPieces(d, part);
-      expect(pieces).toHaveLength(4);
+      expect(pieces).toHaveLength(part === 'base' ? 6 : 8);
       const rim = part === 'base' ? d.baseH : d.lidH;
       const b = unionBox(pieces);
       expect(b.max.z).toBeCloseTo(rim, 4);
@@ -969,6 +969,50 @@ describe('magnet pockets', () => {
       const ring = bbox(pieces[1].geometry);
       expect(ring.max.z - ring.min.z).toBeCloseTo(3.2 + 0.01, 4);
     }
+  });
+
+  it('tie each column to both walls with a corner block', () => {
+    const d = computePrintBoxDims(on, 110, 80, 55);
+    const [left, right] = buildMagnetPieces(d, 'base').filter((_, i) => i % 3 === 2).map((x) => bbox(x.geometry));
+    // Into the side and front walls, out to the column's centre.
+    expect(left.min.x).toBeLessThan(d.wall);
+    expect(left.min.y).toBeLessThan(d.wall);
+    expect(left.max.x).toBeCloseTo(d.magnets!.centres[0].x, 6);
+    expect(left.max.y).toBeCloseTo(d.magnets!.centres[0].y, 6);
+    expect(left.min.z).toBeLessThanOrEqual(d.floor);
+    expect(left.max.z).toBeCloseTo(d.baseH, 4);
+    expect(right.max.x).toBeGreaterThan(d.outerW - d.wall);
+    // Never through the outside of the wall.
+    expect(left.min.x).toBeGreaterThan(0);
+    expect(right.max.x).toBeLessThan(d.outerW);
+  });
+
+  it("step the lid's block in clear of the base's lip", () => {
+    const d = computePrintBoxDims(on, 110, 80, 55);
+    const blocks = buildMagnetPieces(d, 'lid').filter((_, i) => i % 4 >= 2).map((x) => bbox(x.geometry));
+    const [lower, upper] = blocks;
+    expect(lower.min.x).toBeLessThan(d.wall);
+    expect(lower.max.z).toBeCloseTo(d.lidH - d.lip.height - 0.3, 4);
+    // The lip rises lip.height into the lid, clearance + thickness in from the wall.
+    const lipInner = d.wall + d.lip.clearance + d.lip.thickness;
+    expect(upper.min.x).toBeGreaterThanOrEqual(lipInner + 0.3 - 1e-5);
+    expect(upper.min.y).toBeGreaterThanOrEqual(lipInner + 0.3 - 1e-5);
+    expect(upper.max.z).toBeCloseTo(d.lidH, 4);
+  });
+
+  it('size the pockets and columns to the magnet', () => {
+    const d = computePrintBoxDims({ ...on, magnet3dDiameterMm: 10, magnet3dThicknessMm: 2 }, 110, 80, 55);
+    expect(d.magnets!.pocketD).toBeCloseTo(10.2, 6);
+    expect(d.magnets!.pocketDepth).toBeCloseTo(2.2, 6);
+    expect(d.magnets!.columnR).toBeCloseTo(5.1 + 1.2, 6);
+    const ring = bbox(buildMagnetPieces(d, 'base')[1].geometry);
+    expect(ring.max.x - ring.min.x).toBeCloseTo(2 * 6.3, 1);
+  });
+
+  it('are left off when the magnet is thicker than a part has room for', () => {
+    const d = computePrintBoxDims({ ...on, magnet3dThicknessMm: 10, lidHeightMm: 10 }, 110, 80, 25);
+    expect(d.magnets).toBeNull();
+    expect(d.dropped).toContain('magnet-room');
   });
 
   it('are left off a box too small for them', () => {

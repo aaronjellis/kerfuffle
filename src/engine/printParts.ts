@@ -64,7 +64,7 @@ export interface PrintBoxDims {
    * the base's frame; they're symmetric across the box, so the lid's x mirror leaves them in place.
    */
   magnets: {
-    /** Pocket diameter and depth: the magnet's plus 0.2 mm. */
+    /** Pocket diameter and depth: the magnet's plus MAGNET_POCKET_OVER. */
     pocketD: number;
     pocketDepth: number;
     /** Column radius. */
@@ -113,9 +113,13 @@ const CLASP_GAP = 0.2;
 const CLASP_TIP = 2;
 /** Vertical gap between the hook's catch face and the ridge's when the lid is shut. */
 const CATCH_CLEARANCE = 0.3;
-/** A 6 x 3 mm disc magnet's pocket: 0.2 mm over in each. */
-const MAGNET_POCKET_D = 6.2;
-const MAGNET_POCKET_DEPTH = 3.2;
+/** A magnet's pocket is this much over its diameter and its thickness. */
+const MAGNET_POCKET_OVER = 0.2;
+/** The range of disc magnets the pockets take. */
+export const MAGNET_DIAMETER_RANGE_MM: [number, number] = [3, 20];
+export const MAGNET_THICKNESS_RANGE_MM: [number, number] = [1, 10];
+/** Solid column left under a pocket, above the floor plate. */
+const MAGNET_SEAT = 0.6;
 /** The column's wall around the pocket. */
 const MAGNET_WALL = 1.2;
 /** The lid's columns clear the base's registration lip by this. */
@@ -228,21 +232,27 @@ export function computePrintBoxDims(
     : null;
 
   // Magnet columns in the front corners, inside the base's registration lip (which rises into the
-  // lid) with MAGNET_LIP_GAP to spare, and clear of the lip's rounded corner.
+  // lid) with MAGNET_LIP_GAP to spare, and clear of the lip's rounded corner. Each part's pocket
+  // needs MAGNET_SEAT of column under it, above the floor plate.
   let magnets: PrintBoxDims['magnets'] = null;
   if (params.include3dMagnets) {
+    const [dMin, dMax] = MAGNET_DIAMETER_RANGE_MM;
+    const [tMin, tMax] = MAGNET_THICKNESS_RANGE_MM;
+    const pocketD = Math.min(dMax, Math.max(dMin, params.magnet3dDiameterMm || 6)) + MAGNET_POCKET_OVER;
+    const pocketDepth = Math.min(tMax, Math.max(tMin, params.magnet3dThicknessMm || 3)) + MAGNET_POCKET_OVER;
     const lipT = Math.max(1, wall / 2);
     const lipInnerR = Math.max(0, Math.max(0.5, rIn - 0.2) - lipT);
-    const columnR = MAGNET_POCKET_D / 2 + MAGNET_WALL;
+    const columnR = pocketD / 2 + MAGNET_WALL;
     const edge = 0.2 + lipT + MAGNET_LIP_GAP;
     const inset = edge + Math.max(columnR, lipInnerR - MAGNET_LIP_GAP);
     const roomW = innerW - 2 * inset;
     const roomD = innerD - inset - columnR - 1;
-    if (roomW >= 1 && roomD >= 0) {
+    const roomH = Math.min(baseH, lidH) - floor - MAGNET_SEAT;
+    if (roomW >= 1 && roomD >= 0 && roomH >= pocketDepth) {
       const y = wall + inset;
       magnets = {
-        pocketD: MAGNET_POCKET_D,
-        pocketDepth: MAGNET_POCKET_DEPTH,
+        pocketD,
+        pocketDepth,
         columnR,
         centres: [
           { x: wall + inset, y },
@@ -679,28 +689,82 @@ const circleXY = (cx: number, cy: number, r: number, n = 32) =>
   Array.from({ length: n }, (_, i) => ({ x: cx + r * Math.cos((i / n) * 2 * Math.PI), y: cy + r * Math.sin((i / n) * 2 * Math.PI) }));
 
 /**
+ * The outline of a magnet column's corner block: the front corner of the cavity inset by `offset`
+ * (negative reaches into the walls), out to the column's centre, less the pocket's quarter. With
+ * the column's circle it ties the column to both walls, so nothing stands loose in the corner.
+ * Drawn for the left column; `mirror` flips it to the right one.
+ */
+export function magnetBlockOutline(
+  dims: PrintBoxDims,
+  centre: { x: number; y: number },
+  offset: number,
+  n = CORNER_SEGMENTS
+): { x: number; y: number }[] {
+  const { wall, rIn, outerW, magnets } = dims;
+  const right = centre.x > outerW / 2;
+  const cx = right ? outerW - centre.x : centre.x;
+  const cy = centre.y;
+  const r = (magnets?.pocketD ?? 0) / 2;
+  const b = wall + offset;
+  const rr = Math.max(0, rIn - offset);
+  const k = wall + Math.max(rIn, offset);
+  const pts: { x: number; y: number }[] = [{ x: cx, y: cy - r }, { x: cx, y: b }];
+  for (let i = 0; i <= n; i++) {
+    const a = 1.5 * Math.PI - (i / n) * 0.5 * Math.PI;
+    pts.push({ x: Math.min(cx, k + rr * Math.cos(a)), y: Math.min(cy, k + rr * Math.sin(a)) });
+  }
+  pts.push({ x: b, y: cy });
+  for (let i = 0; i < n; i++) {
+    const a = Math.PI + (i / n) * 0.5 * Math.PI;
+    pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+  }
+  const out = right ? pts.map((p) => ({ x: outerW - p.x, y: p.y })).reverse() : pts;
+  return out.filter((p, i) => i === 0 || Math.hypot(p.x - out[i - 1].x, p.y - out[i - 1].y) > 1e-6);
+}
+
+/** How far a corner block reaches into the walls, so it fuses with them. */
+const blockEmbed = (wall: number) => Math.min(0.5, wall / 2);
+
+/**
  * The magnet columns of one part, in its print frame (open side up): each a solid cylinder from the
- * plate up to the pocket's floor, then a ring around the pocket up to the rim. The pocket opens up,
- * so nothing overhangs. Built at the same x in both parts: the centres are symmetric across the box.
+ * plate up to the pocket's floor, then a ring around the pocket up to the rim, with a corner block
+ * joining it to both walls. In the lid the base's lip rises LIP_HEIGHT into the corner, so the
+ * block's top LIP_HEIGHT + MAGNET_LIP_GAP steps in to clear it. The pocket opens up, so nothing
+ * overhangs. Built at the same x in both parts: the centres are symmetric across the box.
  */
 export function buildMagnetPieces(dims: PrintBoxDims, part: 'base' | 'lid'): PrintPiece[] {
-  const { magnets, floor } = dims;
+  const { magnets, floor, wall, lip } = dims;
   if (!magnets) return [];
   const rim = part === 'base' ? dims.baseH : dims.lidH;
   const pocketFloor = rim - magnets.pocketDepth;
-  return magnets.centres.flatMap(({ x, y }) => {
+  const z0 = floor - OVERLAP;
+  const block = (c: { x: number; y: number }, offset: number, from: number, to: number) => {
+    const g = new THREE.ExtrudeGeometry(toShape(magnetBlockOutline(dims, c, offset)), { depth: to - from, bevelEnabled: false });
+    g.translate(0, 0, from);
+    return { partId: 'shell' as const, geometry: nonIndexed(g) };
+  };
+  return magnets.centres.flatMap((c) => {
+    const { x, y } = c;
     const solid = new THREE.ExtrudeGeometry(toShape(circleXY(x, y, magnets.columnR)), {
-      depth: pocketFloor - (floor - OVERLAP),
+      depth: pocketFloor - z0,
       bevelEnabled: false,
     });
-    solid.translate(0, 0, floor - OVERLAP);
-    return [
+    solid.translate(0, 0, z0);
+    const pieces: PrintPiece[] = [
       { partId: 'shell' as const, geometry: nonIndexed(solid) },
       {
         partId: 'shell' as const,
         geometry: extrudeRing(circleXY(x, y, magnets.columnR), circleXY(x, y, magnets.pocketD / 2), pocketFloor - OVERLAP, magnets.pocketDepth + OVERLAP),
       },
     ];
+    if (part === 'base') {
+      pieces.push(block(c, -blockEmbed(wall), z0, rim));
+    } else {
+      const step = rim - lip.height - MAGNET_LIP_GAP;
+      if (step > z0) pieces.push(block(c, -blockEmbed(wall), z0, step));
+      pieces.push(block(c, lip.clearance + lip.thickness + MAGNET_LIP_GAP, Math.max(z0, step - OVERLAP), rim));
+    }
+    return pieces;
   });
 }
 

@@ -24,5 +24,5 @@ export const DROPPED_NOTES: Record<PrintDroppedFeature, string> = {
   'clasp-height': 'Box too short for the clasp',
   'clasp-width': 'Box too narrow for the clasp',
   'hinge-height': 'Box too short for the hinge',
-  'magnet-room': 'Box too small for the magnet columns',
+  'magnet-room': 'The box is too small or too shallow for these magnets',
 };

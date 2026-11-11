@@ -7,7 +7,7 @@ import {
   Point2D,
 } from './types';
 import { fmt, pointsToSvgPath } from './fingerJointEngine';
-import { CLASP_THUMB_FLARE, computePrintBoxDims, lidPrintRange } from './printParts';
+import { CLASP_THUMB_FLARE, computePrintBoxDims, lidPrintRange, magnetBlockOutline } from './printParts';
 import { buildRoundedRectPoints } from './roundedRect';
 import { resolveDividers } from './printDividers';
 
@@ -89,11 +89,13 @@ export function generate3DPrintBox(
       });
     }
 
-    // The magnet pockets, at the top of each front-corner column.
+    // The magnet pockets, at the top of each front-corner column, and the block tying it to the walls.
     for (const [i, c] of (dims.magnets?.centres ?? []).entries()) {
       const ring = (r: number) =>
         Array.from({ length: 24 }, (_, k) => ({ x: c.x + r * Math.cos((k / 24) * 2 * Math.PI), y: c.y + oy + r * Math.sin((k / 24) * 2 * Math.PI) }));
       paths.push({ id: `3d-magnet-column-${i}`, layer: 'score', d: pointsToSvgPath(ring(dims.magnets!.columnR), true), closed: true });
+      const block = magnetBlockOutline(dims, c, 0).map((p) => ({ x: p.x, y: p.y + oy }));
+      paths.push({ id: `3d-magnet-block-${i}`, layer: 'score', d: pointsToSvgPath(block, true), closed: true });
       paths.push({ id: `3d-magnet-pocket-${i}`, layer: 'cut', d: pointsToSvgPath(ring(dims.magnets!.pocketD / 2), true), closed: true });
     }
 
