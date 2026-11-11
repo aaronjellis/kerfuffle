@@ -13,7 +13,7 @@ import {
   hingeShapePath,
   type HingePatternId,
 } from '../../engine/livingHinge';
-import { MIN_THUMB_HOLE_MM, livingHingeCatch, livingHingeSettings, wrapBendRadiusMm } from '../../engine/fingerJointEngine';
+import { CATCH_TAPER_DEG, CATCH_WEAR_TRAVEL_MM, MIN_THUMB_HOLE_MM, livingHingeCatch, livingHingeSettings, wrapBendRadiusMm } from '../../engine/fingerJointEngine';
 import type { BoxParameters } from '../../engine/types';
 import { wineCarrierLayout } from '../../engine/wineBottles';
 import { Field, Switch } from '../Field';
@@ -243,6 +243,11 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
           </p>
         </>
       )}
+      <p className="helper-note">
+        The catch tongue and its notch taper {CATCH_TAPER_DEG}° a side, so the fit wedges tight as it seats. A new lid
+        stops about {len(CATCH_WEAR_TRAVEL_MM, 0)} {uLabel} above the front wall; as the sides wear it sinks onto the
+        wall, getting tighter on the way.
+      </p>
       <Switch
         label="Top guides"
         checked={params.livingHingeTopGuides || params.livingHingeAttachMode === 'side-arch-tabs'}

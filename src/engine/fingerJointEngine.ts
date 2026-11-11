@@ -1727,6 +1727,19 @@ const TONGUE_END_MM = 2.5;
 const FRONT_BELOW_NOTCH_MM = 6;
 /** The smallest finger hole worth cutting. */
 export const MIN_THUMB_HOLE_MM = 4;
+/**
+ * The catch tongue's sides, and its notch's, lean in by this from square, so the fit is a wedge:
+ * it only grips as it seats, instead of scraping along its whole depth each time, and pushing it
+ * further in makes it tighter.
+ */
+export const CATCH_TAPER_DEG = 2;
+/**
+ * How far short of fully home the new tongue wedges tight: its notch's mouth is narrowed to match.
+ * The lid's front lip then stands this far above the front wall, and as the sides wear the lid
+ * sinks onto it, the fit tightening by 2 * travel * tan(taper) (0.07 mm at 2 degrees) on the way.
+ */
+export const CATCH_WEAR_TRAVEL_MM = 1;
+const catchTaper = Math.tan((CATCH_TAPER_DEG * Math.PI) / 180);
 
 /**
  * The catch tongue on the living-hinge lid's front edge, which drops into a notch in the front wall's
@@ -1761,9 +1774,10 @@ export function livingHingeCatch(params: BoxParameters, innerW: number, frontH: 
  * The catch tongue's edge as a path, origin at its root's middle, y running out toward its tip:
  * from the left end of the root line, a fillet `rootR` into the tongue's side, down to the tip with
  * its corners rounded to `tipR`, and back up the other side to the root line. A tongue `width` across
- * and `height` long; both radii shrink to what fits.
+ * at its root and `height` long; both radii shrink to what fits. With `taperDeg`, each side leans in
+ * by that angle, so the tip is 2 * height * tan(taper) narrower than the root.
  */
-export function catchTongueEdge(width: number, height: number, tipR: number, rootR: number, steps = 8): Point2D[] {
+export function catchTongueEdge(width: number, height: number, tipR: number, rootR: number, steps = 8, taperDeg = 0): Point2D[] {
   const r = Math.max(0, Math.min(tipR, width / 2, height / 2));
   const f = Math.max(0, Math.min(rootR, height - r));
   const w = width / 2;
@@ -1781,7 +1795,11 @@ export function catchTongueEdge(width: number, height: number, tipR: number, roo
     // Root fillet, right.
     ...(f > 0 ? arc(w + f, f, f, Math.PI, Math.PI * 1.5) : [{ x: w, y: 0 }]),
   ];
-  return pts.filter((p, i) => i === 0 || Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y) > 1e-9);
+  // The taper: each point drawn in toward the middle in proportion to how far it is down the tongue,
+  // so the sides lean in by the angle and the root fillets and tip corners follow them.
+  const lean = Math.tan((taperDeg * Math.PI) / 180);
+  const tapered = lean === 0 ? pts : pts.map((p) => ({ x: p.x * (1 - (Math.max(0, Math.min(height, p.y)) * lean) / w), y: p.y }));
+  return tapered.filter((p, i) => i === 0 || Math.hypot(p.x - tapered[i - 1].x, p.y - tapered[i - 1].y) > 1e-9);
 }
 
 /** The tongue's tip corners and its root fillets, before kerf, softened for the hand. */
@@ -1911,8 +1929,11 @@ function generateLivingHingeBox(
   // beam has burned both they meet at catchW and press-fit like the fingers.
   // Shaped to the tongue: its tip corners rounded inside the notch, its root fillets rounding over
   // the notch's mouth. The kerf offset moves each radius by half a kerf, as it moves the edges.
+  // Tapered as the tongue is, and narrower at the mouth by the wear travel's worth of taper, so the
+  // new tongue wedges tight CATCH_WEAR_TRAVEL_MM short of home and has that far to sink as it wears.
   const radii = catchTongueRadii(catchW, tongue.height);
-  const notchEdge = catchTongueEdge(catchW - kerf, tongue.height, radii.tip - kerf / 2, radii.root + kerf / 2).map(
+  const notchMouth = catchW - kerf - 2 * CATCH_WEAR_TRAVEL_MM * catchTaper;
+  const notchEdge = catchTongueEdge(notchMouth, tongue.height, radii.tip - kerf / 2, radii.root + kerf / 2, 8, CATCH_TAPER_DEG).map(
     (p) => ({ x: T + innerW / 2 + p.x, y: T + p.y }),
   );
   const notch: Point2D[] = [
@@ -2174,6 +2195,8 @@ function generateLivingHingeBox(
       tongue.height,
       catchTongueRadii(catchW, tongue.height).tip + kerf / 2,
       catchTongueRadii(catchW, tongue.height).root - kerf / 2,
+      8,
+      CATCH_TAPER_DEG,
     ).map((p) => ({ x: wFull / 2 + p.x, y: tongue.height - p.y })),
     { x: wFull, y: tongue.height },
     { x: wFull, y: zone2End },

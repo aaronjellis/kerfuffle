@@ -13,7 +13,21 @@ import {
   type HingeShape,
 } from '../src/engine/livingHinge';
 import { generateBoxModel } from '../src/engine/boxGenerator';
-import { catchTongueEdge, catchTongueRadii, livingHingeCatch, wrapBendRadiusMm } from '../src/engine/fingerJointEngine';
+import { CATCH_TAPER_DEG, CATCH_WEAR_TRAVEL_MM, catchTongueEdge, catchTongueRadii, livingHingeCatch, wrapBendRadiusMm } from '../src/engine/fingerJointEngine';
+
+const taper = Math.tan((CATCH_TAPER_DEG * Math.PI) / 180);
+/** A closed outline's width across at height y, between its crossings within `near` of x = cx. */
+function widthAt(poly: { x: number; y: number }[], y: number, cx: number, near: number): number {
+  const xs: number[] = [];
+  poly.forEach((a, i) => {
+    const b = poly[(i + 1) % poly.length];
+    if ((a.y - y) * (b.y - y) < 0 || (a.y === y && b.y !== y)) {
+      const x = a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x);
+      if (Math.abs(x - cx) < near) xs.push(x);
+    }
+  });
+  return Math.max(...xs) - Math.min(...xs);
+}
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import { parseProject, serializeProject } from '../src/engine/projectFile';
 
@@ -317,15 +331,18 @@ describe('living-hinge wrap fit', () => {
     expect(wrap.heightMm).toBeCloseTo(tongue.height + lip + 2 * shoulder + deck + straightH + T, 3);
   });
 
-  it('draws the tongue a kerf wider and the notch a kerf narrower, so they press-fit like the fingers', () => {
-    // The wrap lies end for end: the tongue is at the bottom of the piece. Its width is measured
-    // along its straight sides, below the root fillets.
-    const { root } = catchTongueRadii(catchW, tongue.height);
-    const sides = outline.filter((p) => p.y > wrap.heightMm - tongue.height + root + 1e-3);
-    expect(Math.max(...sides.map((p) => p.x)) - Math.min(...sides.map((p) => p.x))).toBeCloseTo(catchW + 0.2, 3);
+  it('draws the tongue a kerf wider and the notch a kerf narrower, both tapered, the notch’s mouth narrowed for wear', () => {
+    // The wrap lies end for end: the tongue hangs at the bottom of the piece, its root
+    // tongue.height above the bottom edge. Measured halfway down its straight sides.
+    const s = tongue.height / 2;
+    const tongueAt = (d: number) => widthAt(outline, wrap.heightMm - tongue.height + d, wrap.widthMm / 2, catchW);
+    expect(tongueAt(s)).toBeCloseTo(catchW + 0.2 - 2 * s * taper, 2);
+    // The sides lean in: a millimetre further down is 2 tan(taper) narrower.
+    expect(tongueAt(s) - tongueAt(s + 1)).toBeCloseTo(2 * taper, 3);
     const front = m.panels3D.find((p) => p.id === 'front')!.outlinePoints!;
-    const notchSides = front.filter((p) => p.y > T + root + 0.1 + 1e-3 && p.y < T + tongue.height + 1e-3 && Math.abs(p.x - (T + innerW / 2)) < catchW);
-    expect(Math.max(...notchSides.map((p) => p.x)) - Math.min(...notchSides.map((p) => p.x))).toBeCloseTo(catchW - 0.2, 3);
+    const notchAt = (d: number) => widthAt(front, T + d, T + innerW / 2, catchW);
+    expect(notchAt(s)).toBeCloseTo(catchW - 0.2 - 2 * CATCH_WEAR_TRAVEL_MM * taper - 2 * s * taper, 2);
+    expect(notchAt(s) - notchAt(s + 1)).toBeCloseTo(2 * taper, 3);
   });
 
   it('lays the wrap back wall up, so deck artwork reads from the front of the box', () => {
@@ -378,7 +395,25 @@ describe('living-hinge catch and guides', () => {
     }
   });
 
-  it('shapes the front wall’s notch exactly as the tongue at zero kerf, so the rounded corners mate', () => {
+  it('at zero kerf, seats the new tongue the wear travel short of home: the notch matches the tongue sunk that far', () => {
+    const m = generateBoxModel({ ...base, kerfMm: 0 });
+    const wrap = m.panels2D.find((x) => x.id === 'top')!;
+    const outline = outlinePts(wrap.paths.find((p) => p.id === 'living-wrap-outline')!.d);
+    const front = m.panels3D.find((x) => x.id === 'front')!.outlinePoints!;
+    const T = base.materialThicknessMm;
+    const innerW = m.innerDims.widthMm;
+    const innerH = m.innerDims.heightMm;
+    const straightH = Math.max(15, innerH - wrapBendRadiusMm(m.innerDims.depthMm, innerH));
+    const { width, height } = livingHingeCatch(base, innerW, straightH - Math.min(14, straightH * 0.38));
+    // Along the straight sides, the notch at depth d is as wide as the tongue at d + travel from its root.
+    for (const d of [height * 0.3, height * 0.5]) {
+      const notch = widthAt(front, T + d, T + innerW / 2, width);
+      const tongue = widthAt(outline, wrap.heightMm - height + d + CATCH_WEAR_TRAVEL_MM, wrap.widthMm / 2, width);
+      expect(notch).toBeCloseTo(tongue, 3);
+    }
+  });
+
+  it('shapes the front wall’s notch as the tongue, its tip corners rounded alike', () => {
     const m = generateBoxModel({ ...base, kerfMm: 0 });
     const wrap = m.panels2D.find((x) => x.id === 'top')!;
     const outline = outlinePts(wrap.paths.find((p) => p.id === 'living-wrap-outline')!.d);
@@ -390,7 +425,15 @@ describe('living-hinge catch and guides', () => {
     const straightH = Math.max(15, innerH - wrapBendRadiusMm(m.innerDims.depthMm, innerH));
     const { width, height } = livingHingeCatch(base, innerW, straightH - Math.min(14, straightH * 0.38));
     const key = (x: number) => x.toFixed(3);
-    const tongueTip = outline.filter((p) => p.y > tipY - 0.5).map((p) => key(p.x - wrap.widthMm / 2)).sort();
+    // The notch's floor is the tongue's tip drawn at the notch's narrower mouth.
+    const { tip, root } = catchTongueRadii(width, height);
+    const mouth = width - 2 * CATCH_WEAR_TRAVEL_MM * taper;
+    const tongueTip = catchTongueEdge(mouth, height, tip, root, 8, CATCH_TAPER_DEG)
+      .filter((p) => p.y > height - 0.5)
+      .map((p) => key(p.x))
+      .sort();
+    void outline;
+    void tipY;
     // The notch's floor, in the front wall's frame: its top inner line at y = T.
     const notchFloor = front
       .filter((p) => p.y > T + height - 0.5 && p.y < T + height + 1e-6 && Math.abs(p.x - (T + innerW / 2)) < width)

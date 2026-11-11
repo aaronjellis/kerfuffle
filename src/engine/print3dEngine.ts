@@ -28,7 +28,7 @@ export function generate3DPrintBox(
   // 2D plan blueprints, one per part, each drawn in that part's print frame (plate on the bed):
   // front face at y = 0, back at y = outerD. The lid's hinge segments are mirrored in x, as it
   // prints. Mechanism footprints sit outside the outline: knuckles behind the back edge, standing
-  // off it by the radial clearance (y outerD + 0.3..outerD + 0.3 + 2R), clasp in front of the front
+  // off it by the radial clearance (y outerD + c..outerD + c + 2R), clasp in front of the front
   // edge (y < 0). Each plan is shifted down by its front feature's depth so the whole drawing stays
   // inside the panel's 0..heightMm.
   const knuckleGap = hinge ? hinge.axisY - outerD - hinge.R : 0;
@@ -40,7 +40,7 @@ export function generate3DPrintBox(
     // Base: the catch ridge. Lid: boss, tongue and the thumb lip that flares past the tongue.
     const frontDepth = clasp
       ? part === 'base'
-        ? clasp.hookProud
+        ? clasp.ridgeProud
         : clasp.standoff + clasp.tongueT + CLASP_THUMB_FLARE
       : 0;
     const oy = frontDepth;
@@ -87,6 +87,14 @@ export function generate3DPrintBox(
         d: rectPath(x0, oy - frontDepth, x0 + w, oy),
         closed: true,
       });
+    }
+
+    // The magnet pockets, at the top of each front-corner column.
+    for (const [i, c] of (dims.magnets?.centres ?? []).entries()) {
+      const ring = (r: number) =>
+        Array.from({ length: 24 }, (_, k) => ({ x: c.x + r * Math.cos((k / 24) * 2 * Math.PI), y: c.y + oy + r * Math.sin((k / 24) * 2 * Math.PI) }));
+      paths.push({ id: `3d-magnet-column-${i}`, layer: 'score', d: pointsToSvgPath(ring(dims.magnets!.columnR), true), closed: true });
+      paths.push({ id: `3d-magnet-pocket-${i}`, layer: 'cut', d: pointsToSvgPath(ring(dims.magnets!.pocketD / 2), true), closed: true });
     }
 
     // The base's dividers, each as its footprint on the floor.

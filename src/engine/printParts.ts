@@ -44,36 +44,82 @@ export interface PrintBoxDims {
   } | null;
   clasp: {
     width: number;
-    tongueT: 1.6;
-    hang: 8;
-    hookProud: 0.8;
-    standoff: 1.0;
-    ridgeH: 1.5;
+    tongueT: number;
+    /** How far the hook's lower end hangs below the seam. */
+    hang: number;
+    /** How far the hook stands in from the tongue toward the box. */
+    hookProud: number;
+    /** How far the base's ridge stands out from the front face. */
+    ridgeProud: number;
+    /** The tongue's inner face, off the front face: the ridge plus 0.2 mm. */
+    standoff: number;
+    /** The ridge's height up the wall: two 45 degree faces and a flat between. */
+    ridgeH: number;
     /** Distance below the rim of the ridge's top edge. */
     ridgeTop: number;
+  } | null;
+  /**
+   * Magnet pockets: a column standing in each front corner of both parts, a pocket in its top for
+   * a disc magnet, the base's and lid's columns meeting at the seam. Positions are column centres in
+   * the base's frame; they're symmetric across the box, so the lid's x mirror leaves them in place.
+   */
+  magnets: {
+    /** Pocket diameter and depth: the magnet's plus 0.2 mm. */
+    pocketD: number;
+    pocketDepth: number;
+    /** Column radius. */
+    columnR: number;
+    centres: { x: number; y: number }[];
   } | null;
   /**
    * Why a switched-on feature came out null: `hinge-height` (no lid height keeps both parts 2R + 1.3
    * tall), `clasp-width` (the flat front face leaves under 4 mm for the clasp), `clasp-height` (the
    * base cannot reach the tongue's 10.5 mm without pushing the lid under its minimum). Empty when
-   * every switched-on feature is present.
+   * every switched-on feature is present. `magnet-room`: the front corners leave no room for the
+   * magnet columns.
    */
   dropped: PrintDroppedFeature[];
 }
 
-export type PrintDroppedFeature = 'clasp-height' | 'clasp-width' | 'hinge-height';
+export type PrintDroppedFeature = 'clasp-height' | 'clasp-width' | 'hinge-height' | 'magnet-room';
 
-const KNUCKLE_GAP = 0.3;
+/**
+ * Gap between neighbouring knuckles along the hinge. A printed box bound at 0.3 mm: FDM prints each
+ * knuckle's ends a little proud, so they rubbed.
+ */
+export const KNUCKLE_GAP = 0.5;
 /** Radial clearance between a knuckle and the other part's back-wall edge as the lid swings. */
-const KNUCKLE_CLEARANCE = 0.3;
+export const KNUCKLE_CLEARANCE = 0.5;
 const MIN_HINGE_R = 2.6;
-const PIN_CLEARANCE = 0.25;
+/** The bore over the pin's diameter. Horizontal holes print small, so it's more than a vertical hole needs. */
+export const PIN_CLEARANCE = 0.4;
 const LIP_HEIGHT = 3;
 const MIN_BASE_INNER_H = 5;
-const CLASP_HANG = 8;
+/**
+ * The clasp. Both catch faces print as 45 degree slopes (a flat ledge printed in mid-air sags into a
+ * slope anyway, and then the hook slides off), so the latch holds by the tongue's stiffness: the hook
+ * overlaps the ridge by 1.2 mm, and opening it bends the tongue 1.2 mm out. A 12 mm tongue keeps that
+ * bend under 2% strain in PLA.
+ */
+const CLASP_HANG = 12;
+const CLASP_TONGUE_T = 1.6;
+/** The hook's and the ridge's 45 degree faces each run this far in Y. */
+const CLASP_PROUD = 1.4;
+/** The flat between the two 45 degree faces of the hook, and of the ridge. */
+const CLASP_FLAT = 0.6;
+/** The tongue's inner face clears the ridge by this, and the hook's tip clears the wall by it. */
+const CLASP_GAP = 0.2;
 /** The tongue runs this far past the hook (the thumb lip). */
 const CLASP_TIP = 2;
+/** Vertical gap between the hook's catch face and the ridge's when the lid is shut. */
 const CATCH_CLEARANCE = 0.3;
+/** A 6 x 3 mm disc magnet's pocket: 0.2 mm over in each. */
+const MAGNET_POCKET_D = 6.2;
+const MAGNET_POCKET_DEPTH = 3.2;
+/** The column's wall around the pocket. */
+const MAGNET_WALL = 1.2;
+/** The lid's columns clear the base's registration lip by this. */
+const MAGNET_LIP_GAP = 0.3;
 /** The lid's tongue reaches hang + tip below the seam; the base must be 0.5 mm taller than that. */
 const CLASP_MIN_BASE_H = CLASP_HANG + CLASP_TIP + 0.5;
 
@@ -163,18 +209,48 @@ export function computePrintBoxDims(
     hinge = { R, hole, runLen, segments, axisY: outerD + R + KNUCKLE_CLEARANCE };
   }
 
+  // The ridge's catch face sits CATCH_CLEARANCE above the hook's when shut. Its foot at the wall is
+  // hang - proud - flat - (clearance - gap) below the seam (the hook's tip is `gap` off the wall),
+  // and it rises at 45 degrees from there.
+  const ridgeH = 2 * CLASP_PROUD + CLASP_FLAT;
+  const ridgeFoot = CLASP_HANG - CLASP_PROUD - CLASP_FLAT - (CATCH_CLEARANCE - CLASP_GAP);
   const clasp: PrintBoxDims['clasp'] = claspFits
     ? {
         width: claspWidth,
-        tongueT: 1.6,
-        hang: 8,
-        hookProud: 0.8,
-        standoff: 1.0,
-        ridgeH: 1.5,
-        // 0.3 mm catch clearance under the ridge, to survive FDM droop on the 0.8 mm catch faces.
-        ridgeTop: CLASP_HANG - 0.8 - 1.5 - CATCH_CLEARANCE,
+        tongueT: CLASP_TONGUE_T,
+        hang: CLASP_HANG,
+        hookProud: CLASP_PROUD,
+        ridgeProud: CLASP_PROUD,
+        standoff: CLASP_PROUD + CLASP_GAP,
+        ridgeH,
+        ridgeTop: ridgeFoot - ridgeH,
       }
     : null;
+
+  // Magnet columns in the front corners, inside the base's registration lip (which rises into the
+  // lid) with MAGNET_LIP_GAP to spare, and clear of the lip's rounded corner.
+  let magnets: PrintBoxDims['magnets'] = null;
+  if (params.include3dMagnets) {
+    const lipT = Math.max(1, wall / 2);
+    const lipInnerR = Math.max(0, Math.max(0.5, rIn - 0.2) - lipT);
+    const columnR = MAGNET_POCKET_D / 2 + MAGNET_WALL;
+    const edge = 0.2 + lipT + MAGNET_LIP_GAP;
+    const inset = edge + Math.max(columnR, lipInnerR - MAGNET_LIP_GAP);
+    const roomW = innerW - 2 * inset;
+    const roomD = innerD - inset - columnR - 1;
+    if (roomW >= 1 && roomD >= 0) {
+      const y = wall + inset;
+      magnets = {
+        pocketD: MAGNET_POCKET_D,
+        pocketDepth: MAGNET_POCKET_DEPTH,
+        columnR,
+        centres: [
+          { x: wall + inset, y },
+          { x: outerW - wall - inset, y },
+        ],
+      };
+    } else dropped.push('magnet-room');
+  }
 
   return {
     wall,
@@ -191,6 +267,7 @@ export function computePrintBoxDims(
     lip: { height: LIP_HEIGHT, thickness: Math.max(1, wall / 2), clearance: 0.2 },
     hinge,
     clasp,
+    magnets,
     dropped,
   };
 }
@@ -390,6 +467,21 @@ function boreUnderside(cy: number, cz: number, r: number): THREE.Vector2[] {
 }
 
 /**
+ * A pin bore that prints without sagging: round below the axis and up to 45 degrees either side,
+ * then two straight 45 degree sides meeting in a point r * sqrt(2) above the axis (print up). A round
+ * bore's roof is a flat bridge over the pin and droops onto it; this one's roof is two 45 degree
+ * slopes. Counter-clockwise, starting at the right tangent point.
+ */
+function teardropPoints(cy: number, cz: number, r: number): THREE.Vector2[] {
+  const steps = (KNUCKLE_SEGMENTS * 3) / 4;
+  const arc = Array.from({ length: steps + 1 }, (_, i) => {
+    const a = Math.PI / 4 + Math.PI / 2 + (i / steps) * (Math.PI * 3) / 2;
+    return new THREE.Vector2(cy + r * Math.cos(a), cz + r * Math.sin(a));
+  });
+  return [...arc, new THREE.Vector2(cy, cz + r * Math.SQRT2)];
+}
+
+/**
  * Extrudes a shape drawn in the Y-Z plane (shape x -> world y, shape y -> world z) along +X from
  * x0 to x1. ExtrudeGeometry extrudes along local Z; the cyclic axis swap (x, y, z) -> (z, x, y) is a
  * proper rotation (det +1, so winding is preserved) that sends local Z to world +X.
@@ -442,7 +534,7 @@ export function buildHingePieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
     const [x0, x1] = part === 'base' ? [seg.x0, seg.x1] : lidPrintRange(seg, outerW);
 
     const ring = new THREE.Shape(circlePoints(axisY, rim, R, KNUCKLE_SEGMENTS));
-    ring.holes.push(new THREE.Path(circlePoints(axisY, rim, hole / 2, KNUCKLE_SEGMENTS).reverse()));
+    ring.holes.push(new THREE.Path(teardropPoints(axisY, rim, hole / 2).reverse()));
     pieces.push({ partId: 'hinge', geometry: extrudeAlongX(ring, x0, x1) });
 
     // The fill's top edge dips under the bore along its lower semicircle (the same vertices as the
@@ -493,7 +585,7 @@ function yzPrism(pts: [number, number][], x0: number, x1: number): PrintPiece {
 export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): PrintPiece[] {
   const { clasp, outerW, wall } = dims;
   if (!clasp) return [];
-  const { width, tongueT, hang, hookProud, standoff, ridgeH, ridgeTop } = clasp;
+  const { width, tongueT, hang, hookProud, ridgeProud, standoff, ridgeH, ridgeTop } = clasp;
   const cx = outerW / 2;
   const embedY = wall / 2;
 
@@ -501,12 +593,14 @@ export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
     const rim = dims.baseH;
     const top = rim - ridgeTop;
     const bottom = top - ridgeH;
+    // Both faces at 45 degrees: the catch face underneath, the lead-in on top, a flat between.
     return [
       yzPrism(
         [
           [embedY, bottom],
-          [-hookProud, bottom],
-          [-hookProud, top - hookProud],
+          [0, bottom],
+          [-ridgeProud, bottom + ridgeProud],
+          [-ridgeProud, top - ridgeProud],
           [0, top],
           [embedY, top],
         ],
@@ -520,8 +614,10 @@ export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
   const outY = -(standoff + tongueT);
   const inY = -standoff;
   const tipZ = rim + hang + THUMB_LEN;
-  const hookZ0 = rim + hang - hookProud;
+  // The hook in print z: its lead-in ends at hookZ1 (its lowest point in the world), its flat runs
+  // from hookZ0 up to hookZ1 - proud, and its catch face slopes from hookZ0 down to the tongue.
   const hookZ1 = rim + hang;
+  const hookZ0 = hookZ1 - hookProud - (ridgeH - 2 * hookProud);
   const x0 = cx - width / 2;
   const x1 = cx + width / 2;
   return [
@@ -548,15 +644,16 @@ export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
       x0,
       x1
     ),
-    // Hook: a 45 degree triangle, flat catch face at hookZ0, ramp back to the tongue at hookZ1.
-    // Engagement is hookProud - (standoff - hookProud) = 0.6 mm in Y (hook -1.0..-0.2 vs ridge
-    // -0.8..0), with 0.3 mm Z clearance under the ridge after the snap: the catch face is
-    // hang - hookProud = 7.2 below the seam in the world, the ridge underside 6.9. The hook's back
-    // edge reaches OVERLAP into the tongue so the two do not merely share a face.
+    // Hook: a 45 degree catch face (it prints without support, and lies parallel to the ridge's
+    // underside once shut), a flat tip, and a 45 degree lead-in back to the tongue at hookZ1. It
+    // overlaps the ridge by hookProud - (standoff - ridgeProud) = 1.2 mm in Y. Its back edge reaches
+    // OVERLAP into the tongue so the two do not merely share a face.
     yzPrism(
       [
-        [inY - OVERLAP, hookZ0],
+        [inY - OVERLAP, hookZ0 - hookProud],
+        [inY, hookZ0 - hookProud],
         [inY + hookProud, hookZ0],
+        [inY + hookProud, hookZ1 - hookProud],
         [inY, hookZ1],
         [inY - OVERLAP, hookZ1],
       ],
@@ -575,6 +672,36 @@ export function buildClaspPieces(dims: PrintBoxDims, part: 'base' | 'lid'): Prin
       x1
     ),
   ];
+}
+
+/** A circle's outline, `n` points counter-clockwise. */
+const circleXY = (cx: number, cy: number, r: number, n = 32) =>
+  Array.from({ length: n }, (_, i) => ({ x: cx + r * Math.cos((i / n) * 2 * Math.PI), y: cy + r * Math.sin((i / n) * 2 * Math.PI) }));
+
+/**
+ * The magnet columns of one part, in its print frame (open side up): each a solid cylinder from the
+ * plate up to the pocket's floor, then a ring around the pocket up to the rim. The pocket opens up,
+ * so nothing overhangs. Built at the same x in both parts: the centres are symmetric across the box.
+ */
+export function buildMagnetPieces(dims: PrintBoxDims, part: 'base' | 'lid'): PrintPiece[] {
+  const { magnets, floor } = dims;
+  if (!magnets) return [];
+  const rim = part === 'base' ? dims.baseH : dims.lidH;
+  const pocketFloor = rim - magnets.pocketDepth;
+  return magnets.centres.flatMap(({ x, y }) => {
+    const solid = new THREE.ExtrudeGeometry(toShape(circleXY(x, y, magnets.columnR)), {
+      depth: pocketFloor - (floor - OVERLAP),
+      bevelEnabled: false,
+    });
+    solid.translate(0, 0, floor - OVERLAP);
+    return [
+      { partId: 'shell' as const, geometry: nonIndexed(solid) },
+      {
+        partId: 'shell' as const,
+        geometry: extrudeRing(circleXY(x, y, magnets.columnR), circleXY(x, y, magnets.pocketD / 2), pocketFloor - OVERLAP, magnets.pocketDepth + OVERLAP),
+      },
+    ];
+  });
 }
 
 /** The lowest divider worth printing. */

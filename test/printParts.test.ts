@@ -3,7 +3,7 @@ import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
 import * as THREE from 'three';
 import { generateBoxModel } from '../src/engine/boxGenerator';
 import { export3DPrintBoxStl, export3DPrintBoxStlParts } from '../src/engine/exporters';
-import { buildClaspPieces, buildDividerPieces, buildHingePieces, buildShellPieces, computePrintBoxDims, resolveDividerHeight, type PrintPiece } from '../src/engine/printParts';
+import { buildClaspPieces, buildDividerPieces, buildHingePieces, buildMagnetPieces, buildShellPieces, computePrintBoxDims, KNUCKLE_CLEARANCE as KC, KNUCKLE_GAP, PIN_CLEARANCE, resolveDividerHeight, type PrintPiece } from '../src/engine/printParts';
 import { hingeHoleLayout } from '../src/engine/fingerJointEngine';
 import { buildPrintedHingeLeaves, buildPrintedHingePins, exportPrintedHingeStl, printedHingeStl } from '../src/engine/printedHinge';
 const p = { ...DEFAULT_BOX_PARAMETERS, category: '3d-print' as const, templateId: '3d-snap-box' as const };
@@ -12,11 +12,11 @@ describe('print box dims', () => {
     const d = computePrintBoxDims(p, 110, 80, 55);
     expect(d.outerW).toBeCloseTo(110 + 2 * p.wallThickness3dMm);
     expect(d.lip.thickness).toBeCloseTo(Math.max(1, p.wallThickness3dMm / 2));
-    expect(d.hinge!.hole).toBeCloseTo(1.75 + 0.25);
-    expect(d.hinge!.R).toBeCloseTo(1.0 + p.wallThickness3dMm);
+    expect(d.hinge!.hole).toBeCloseTo(1.75 + PIN_CLEARANCE);
+    expect(d.hinge!.R).toBeCloseTo((1.75 + PIN_CLEARANCE) / 2 + p.wallThickness3dMm);
     expect(d.hinge!.segments.length % 2).toBe(1);
     expect(d.hinge!.segments.filter((s) => s.owner === 'base').length).toBe(d.hinge!.segments.filter((s) => s.owner === 'lid').length + 1);
-    for (let i = 1; i < d.hinge!.segments.length; i++) expect(d.hinge!.segments[i].x0 - d.hinge!.segments[i - 1].x1).toBeCloseTo(0.3, 3);
+    for (let i = 1; i < d.hinge!.segments.length; i++) expect(d.hinge!.segments[i].x0 - d.hinge!.segments[i - 1].x1).toBeCloseTo(KNUCKLE_GAP, 3);
     expect(d.clasp!.width).toBeCloseTo(Math.min(18, Math.max(10, d.outerW * 0.25)));
   });
   it('keeps the lip inside a short base', () => {
@@ -36,7 +36,7 @@ describe('print box dims', () => {
     expect(d.hinge!.R).toBe(2.6);
   });
   it('keeps the clasp between the corner fillets and drops it when it cannot fit', () => {
-    // 30 mm tall so the base clears the clasp's height rule (baseH >= 10.5).
+    // 30 mm tall so the base clears the clasp's height rule (baseH >= 14.5).
     const small = computePrintBoxDims({ ...p, outerFilletMm: 4 }, 15, 15, 30);
     expect(small.outerW).toBeCloseTo(19.8);
     expect(small.clasp!.width).toBeLessThanOrEqual(19.8 - 12 + 1e-9);
@@ -59,8 +59,8 @@ describe('print box dims', () => {
   it('puts the hinge axis behind the back face (y = outerD) and gives the base the even knuckles', () => {
     const d = computePrintBoxDims(p, 110, 80, 55);
     const h = d.hinge!;
-    // R + 0.3: each knuckle clears the other part's back-wall edge by 0.3 mm radially.
-    expect(h.axisY).toBeCloseTo(d.outerD + h.R + 0.3);
+    // R + KC: each knuckle clears the other part's back-wall edge by KC radially.
+    expect(h.axisY).toBeCloseTo(d.outerD + h.R + KC);
     expect(h.segments.map((s) => s.owner)).toEqual(['base', 'lid', 'base', 'lid', 'base']);
     // The run is centred on the box and is symmetric under x -> outerW - x.
     const first = h.segments[0];
@@ -79,10 +79,10 @@ describe('print box dims', () => {
     expect(d.lidH).toBeCloseTo(18 + d.floor);
     expect(d.baseH).toBeCloseTo(55 - 18 + d.floor);
     expect(d.baseH + d.lidH).toBeCloseTo(55 + 2 * d.floor);
-    // A tall lid clamps to innerH - 8, then yields to the clasp: the base must reach 10.5 mm.
+    // A tall lid clamps to innerH - 8, then yields to the clasp: the base must reach 14.5 mm.
     const tall = computePrintBoxDims({ ...p, lidHeightMm: 100 }, 60, 60, 40);
-    expect(tall.lidH).toBeCloseTo(40 + tall.floor - 10.5 + tall.floor);
-    expect(tall.baseH).toBeCloseTo(10.5);
+    expect(tall.lidH).toBeCloseTo(40 + tall.floor - 14.5 + tall.floor);
+    expect(tall.baseH).toBeCloseTo(14.5);
     expect(tall.clasp).not.toBeNull();
     const tallNoClasp = computePrintBoxDims({ ...p, lidHeightMm: 100, includeSnapClasp: false }, 60, 60, 40);
     expect(tallNoClasp.lidH).toBeCloseTo(40 - 8 + tallNoClasp.floor);
@@ -90,22 +90,23 @@ describe('print box dims', () => {
     expect(small.lidH).toBeCloseTo(10 + small.floor);
   });
   it('caps the lid so the clasp fits, and reports why a feature was dropped', () => {
-    // 30 x 30 x 20: the 12 mm lid would leave a 10 mm base; it yields to 11.5 so the base is 10.5.
-    const t = computePrintBoxDims(p, 30, 30, 20);
+    // 30 x 30 x 24: the 16 mm lid would leave a 10 mm base; it yields to 11.5 so the base is 14.5,
+    // the 12 mm tongue's 14 mm plus 0.5.
+    const t = computePrintBoxDims(p, 30, 30, 24);
     expect(t.clasp).not.toBeNull();
-    expect(t.baseH).toBeCloseTo(10.5, 6);
+    expect(t.baseH).toBeCloseTo(14.5, 6);
     expect(t.lidH - t.floor).toBeCloseTo(11.5, 6);
     expect(t.lidH - t.floor).toBeGreaterThanOrEqual(10);
-    expect(t.baseH + t.lidH).toBeCloseTo(20 + 2 * t.floor, 6);
+    expect(t.baseH + t.lidH).toBeCloseTo(24 + 2 * t.floor, 6);
     expect(t.dropped).toEqual([]);
-    // Every box 18.5 to 30 mm tall keeps its clasp with the default floor.
-    for (let h = 18.5; h <= 30; h += 0.5) {
+    // Every box 22.5 to 34 mm tall keeps its clasp with the default floor.
+    for (let h = 22.5; h <= 34; h += 0.5) {
       const b = computePrintBoxDims(p, 30, 30, h);
       expect(b.clasp).not.toBeNull();
-      expect(b.baseH).toBeGreaterThanOrEqual(10.5 - 1e-9);
+      expect(b.baseH).toBeGreaterThanOrEqual(14.5 - 1e-9);
     }
-    // Under 18.5 mm the lid would have to drop below its 10 mm minimum (it is already innerH - 8).
-    const tooShort = computePrintBoxDims(p, 30, 30, 18);
+    // Under 22.5 mm the lid would have to drop below its 10 mm minimum.
+    const tooShort = computePrintBoxDims(p, 30, 30, 22);
     expect(tooShort.clasp).toBeNull();
     expect(tooShort.dropped).toEqual(['clasp-height']);
     // A narrow, round box has no flat front wide enough.
@@ -121,8 +122,11 @@ describe('print box dims', () => {
 
   it('sets the clasp constants and ridge position', () => {
     const c = computePrintBoxDims(p, 110, 80, 55).clasp!;
-    expect(c).toMatchObject({ tongueT: 1.6, hang: 8, hookProud: 0.8, standoff: 1.0, ridgeH: 1.5 });
-    expect(c.ridgeTop).toBeCloseTo(8 - 0.8 - 1.5 - 0.3);
+    expect(c).toMatchObject({ tongueT: 1.6, hang: 12, hookProud: 1.4, ridgeProud: 1.4 });
+    expect(c.standoff).toBeCloseTo(1.6);
+    // Two 45 degree faces 1.4 mm each and a 0.6 mm flat; the ridge's foot 9.9 below the seam.
+    expect(c.ridgeH).toBeCloseTo(3.4);
+    expect(c.ridgeTop).toBeCloseTo(9.9 - 3.4);
   });
 });
 
@@ -338,9 +342,9 @@ describe('knuckle hinge pieces', () => {
     const rim = d.baseH;
     const b = unionBox(pieces);
     expect(b.min.y).toBeCloseTo(d.outerD - d.wall / 2, 5);
-    expect(b.max.y).toBeCloseTo(d.outerD + 0.3 + 2 * h.R, 5);
+    expect(b.max.y).toBeCloseTo(d.outerD + KC + 2 * h.R, 5);
     expect(b.max.z).toBeCloseTo(rim + h.R, 5);
-    expect(b.min.z).toBeCloseTo(rim - 2 * h.R - 0.3, 5);
+    expect(b.min.z).toBeCloseTo(rim - 2 * h.R - KC, 5);
   });
 
   it('pairs each annulus with a prism over the same X range', () => {
@@ -356,13 +360,13 @@ describe('knuckle hinge pieces', () => {
     }
   });
 
-  it('interleaves base and lid knuckles in world x with 0.3 gaps, covering the segment list', () => {
+  it('interleaves base and lid knuckles in world x with their gaps, covering the segment list', () => {
     const all = [...worldRanges(d, 'base'), ...worldRanges(d, 'lid')].sort((a, b) => a[0] - b[0]);
     expect(all).toHaveLength(h.segments.length);
     all.forEach(([a, b], i) => {
       expect(a).toBeCloseTo(h.segments[i].x0, 5);
       expect(b).toBeCloseTo(h.segments[i].x1, 5);
-      if (i > 0) expect(a - all[i - 1][1]).toBeCloseTo(0.3, 5);
+      if (i > 0) expect(a - all[i - 1][1]).toBeCloseTo(KNUCKLE_GAP, 5);
     });
     const base = worldRanges(d, 'base');
     const lid = worldRanges(d, 'lid');
@@ -454,10 +458,10 @@ describe('knuckle hinge pieces', () => {
   });
 
   it('raises the lid so its knuckle fill stays above the bed', () => {
-    // wall 6 -> R 7, lid needs 2R + 0.3 + 1 = 15.3; lidHeightMm 10 gives only 12.
+    // wall 6 -> R 7, lid needs 2R + KC + 1 = 15.5; lidHeightMm 10 gives only 12.
     const t = computePrintBoxDims({ ...p, wallThickness3dMm: 6, lidHeightMm: 10 }, 60, 60, 40);
     expect(t.hinge).not.toBeNull();
-    expect(t.lidH).toBeCloseTo(2 * t.hinge!.R + 1.3, 6);
+    expect(t.lidH).toBeCloseTo(2 * t.hinge!.R + KC + 1, 6);
     expect(t.baseH + t.lidH).toBeCloseTo(40 + 2 * t.floor, 6);
     expect(t.baseH - t.floor).toBeGreaterThanOrEqual(5);
     expect(unionBox(buildHingePieces(t, 'lid')).min.z).toBeGreaterThanOrEqual(-1e-9);
@@ -518,10 +522,10 @@ describe('snap clasp pieces', () => {
     expect(base.length).toBe(1);
     expect(base[0].partId).toBe('clasp');
     const b = bbox(base[0].geometry);
-    expect(b.min.y).toBeCloseTo(-c.hookProud, 4);
+    expect(b.min.y).toBeCloseTo(-c.ridgeProud, 4);
     expect(b.max.y).toBeCloseTo(d.wall / 2, 4);
-    expect(b.min.z).toBeCloseTo(d.baseH - 6.9, 4);
-    expect(b.max.z).toBeCloseTo(d.baseH - 5.4, 4);
+    expect(b.min.z).toBeCloseTo(d.baseH - 9.9, 4);
+    expect(b.max.z).toBeCloseTo(d.baseH - 6.5, 4);
     expect(b.max.x - b.min.x).toBeCloseTo(c.width + 1, 4);
     expect(b.min.x + b.max.x).toBeCloseTo(d.outerW, 4);
   });
@@ -536,21 +540,27 @@ describe('snap clasp pieces', () => {
     const hb = bbox(hook!.geometry);
     const ridge = bbox(buildClaspPieces(d, 'base')[0].geometry);
     // World distances below the seam: the lid prints rim-down, so print z = lidH + k is k below.
+    // The catch faces are parallel 45 degree slopes. The hook's runs from the tongue (its highest
+    // point in the world) down to its tip, 0.2 mm off the wall; the ridge's from its foot at the wall
+    // up and out.
     const hookTopBelowSeam = hb.min.z - d.lidH;
-    const ridgeBottomBelowSeam = d.baseH - ridge.min.z;
-    expect(hookTopBelowSeam).toBeCloseTo(7.2, 4);
-    expect(ridgeBottomBelowSeam).toBeCloseTo(6.9, 4);
+    const ridgeFootBelowSeam = d.baseH - ridge.min.z;
+    expect(hookTopBelowSeam).toBeCloseTo(8.6, 4);
+    expect(ridgeFootBelowSeam).toBeCloseTo(9.9, 4);
     expect(hb.max.z - d.lidH).toBeCloseTo(c.hang, 4);
-    // Engagement is 0.6 mm in Y (hook -1.0..-0.2 vs ridge -0.8..0), with 0.3 mm Z clearance
-    // between the ridge's underside and the hook's catch face after the snap.
+    // Engagement is 1.2 mm in Y (hook to -0.2 vs ridge -1.4..0).
     const yOverlap = Math.min(hb.max.y, ridge.max.y) - Math.max(hb.min.y, ridge.min.y);
-    expect(yOverlap).toBeCloseTo(0.6, 6);
-    // Precision 5: both terms are float32 differences near 30 mm (~8e-7 rounding).
-    expect(hookTopBelowSeam - ridgeBottomBelowSeam).toBeCloseTo(0.3, 5);
+    expect(hb.max.y).toBeCloseTo(-0.2, 5);
+    expect(yOverlap).toBeCloseTo(1.2, 5);
+    // At the hook's tip (y = -0.2) its catch face is 10.0 below the seam and the ridge's 9.7: the
+    // faces sit 0.3 mm apart, measured up. Precision 5: float32 near 30 mm.
+    const hookAtTip = hookTopBelowSeam + c.hookProud;
+    const ridgeAtTip = ridgeFootBelowSeam - 0.2;
+    expect(hookAtTip - ridgeAtTip).toBeCloseTo(0.3, 5);
   });
 
   it('keeps the clasp between the corner fillets on a small, round box', () => {
-    // 30 mm tall: at 20 mm the base is only 10 mm, under the clasp's 10.5 mm height rule.
+    // 30 mm tall, so the base clears the clasp's 14.5 mm height rule.
     // The 8 mm fillet clamps to rOut = 24.8 / 4 = 6.2; the clasp keeps 2 mm clear of that.
     const t = computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 30);
     expect(t.clasp).not.toBeNull();
@@ -561,10 +571,10 @@ describe('snap clasp pieces', () => {
       expect(u.min.x).toBeGreaterThanOrEqual(t.rOut - 1e-4);
       expect(u.max.x).toBeLessThanOrEqual(t.outerW - t.rOut + 1e-4);
     }
-    // At 20 mm the lid yields 0.5 mm so the base reaches the clasp's 10.5 mm.
-    const short = computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 20);
+    // At 24 mm the lid yields so the base reaches the clasp's 14.5 mm.
+    const short = computePrintBoxDims({ ...p, outerFilletMm: 8 }, 20, 20, 24);
     expect(short.clasp).not.toBeNull();
-    expect(short.baseH).toBeCloseTo(10.5, 6);
+    expect(short.baseH).toBeCloseTo(14.5, 6);
   });
 
   it('drops the clasp when the base is too short for the tongue', () => {
@@ -920,5 +930,50 @@ describe('printed dividers', () => {
     const ids = (panelId: string) => m.panels2D.find((x) => x.id === panelId)!.paths.map((x) => x.id);
     expect(ids('base-3d-plan')).toEqual(expect.arrayContaining(['3d-divider-v', '3d-divider-h']));
     expect(ids('lid-3d-plan').some((id) => id.startsWith('3d-divider'))).toBe(false);
+  });
+});
+
+describe('magnet pockets', () => {
+  const on = { ...p, include3dMagnets: true };
+
+  it('are off by default and add nothing', () => {
+    const d = computePrintBoxDims(p, 110, 80, 55);
+    expect(d.magnets).toBeNull();
+    expect(buildMagnetPieces(d, 'base')).toEqual([]);
+  });
+
+  it('stand a column in each front corner, symmetric across the box, inside the lip', () => {
+    const d = computePrintBoxDims(on, 110, 80, 55);
+    const m = d.magnets!;
+    expect(m.centres).toHaveLength(2);
+    expect(m.centres[0].x + m.centres[1].x).toBeCloseTo(d.outerW, 6);
+    expect(m.centres[0].y).toBeCloseTo(m.centres[1].y, 6);
+    // Each column stays clear of the lip, which runs `clearance + thickness` in from the inner wall.
+    const lipInner = d.wall + d.lip.clearance + d.lip.thickness;
+    for (const c of m.centres) {
+      expect(Math.min(c.x, d.outerW - c.x) - m.columnR).toBeGreaterThanOrEqual(lipInner + 0.3 - 1e-9);
+      expect(c.y - m.columnR).toBeGreaterThanOrEqual(lipInner + 0.3 - 1e-9);
+    }
+  });
+
+  it('meet at the seam: base and lid columns both reach their rims, pockets open at the top', () => {
+    const d = computePrintBoxDims(on, 110, 80, 55);
+    for (const part of ['base', 'lid'] as const) {
+      const pieces = buildMagnetPieces(d, part);
+      expect(pieces).toHaveLength(4);
+      const rim = part === 'base' ? d.baseH : d.lidH;
+      const b = unionBox(pieces);
+      expect(b.max.z).toBeCloseTo(rim, 4);
+      expect(b.min.z).toBeLessThanOrEqual(d.floor);
+      // The pocket: the ring's hole, 6.2 across and 3.2 deep.
+      const ring = bbox(pieces[1].geometry);
+      expect(ring.max.z - ring.min.z).toBeCloseTo(3.2 + 0.01, 4);
+    }
+  });
+
+  it('are left off a box too small for them', () => {
+    const d = computePrintBoxDims(on, 10, 10, 30);
+    expect(d.magnets).toBeNull();
+    expect(d.dropped).toContain('magnet-room');
   });
 });

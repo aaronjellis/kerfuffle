@@ -416,6 +416,7 @@ export const DEFAULT_BOX_PARAMETERS: BoxParameters = {
   outerChamferMm: 1.2,
   outerFilletMm: 4.0,
   includeSnapClasp: true,
+  include3dMagnets: false,
   include3dHinge: true,
   printDividers: [],
   printDividersBasis: { w: 0, d: 0 },

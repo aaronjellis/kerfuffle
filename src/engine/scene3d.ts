@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three';
 import { bendBentPanel } from './bentPanel';
-import { catchTongueEdge, catchTongueRadii, livingHingeCatch, livingHingeZoneCuts, wrapBendRadiusMm } from './fingerJointEngine';
+import { CATCH_TAPER_DEG, catchTongueEdge, catchTongueRadii, livingHingeCatch, livingHingeZoneCuts, wrapBendRadiusMm } from './fingerJointEngine';
 import { buildRoundedRectPoints } from './roundedRect';
 import type { GeneratedBoxModel, Panel3DTransform } from './types';
 
@@ -288,7 +288,7 @@ export function buildLivingHingeLidGeometry(
   const tongue = livingHingeCatch(params, innerW, straightH - frontLipH);
   const radii = catchTongueRadii(tongue.width, tongue.height);
   const tongueShape = new THREE.Shape(
-    catchTongueEdge(tongue.width, tongue.height, radii.tip, radii.root).map((p) => new THREE.Vector2(p.x, -p.y))
+    catchTongueEdge(tongue.width, tongue.height, radii.tip, radii.root, 8, CATCH_TAPER_DEG).map((p) => new THREE.Vector2(p.x, -p.y))
   );
   if (tongue.hole) {
     const { width: hw, height: hh } = tongue.hole;

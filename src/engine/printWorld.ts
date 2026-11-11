@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GeneratedBoxModel } from './types';
 import {
   buildClaspPieces,
+  buildMagnetPieces,
   buildDividerPieces,
   buildHingePieces,
   buildShellPieces,
@@ -56,6 +57,7 @@ export function buildPrintPartWorldGeometry(
     ...buildShellPieces(dims, part, params.outerChamferMm),
     ...buildHingePieces(dims, part),
     ...buildClaspPieces(dims, part),
+    ...buildMagnetPieces(dims, part),
     ...(part === 'base' ? buildDividerPieces(params, dims) : []),
   ];
   return pieces.map((piece) => ({

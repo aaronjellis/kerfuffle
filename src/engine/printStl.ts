@@ -3,6 +3,7 @@ import { BoxParameters } from './types';
 import { generateBoxModel } from './boxGenerator';
 import {
   buildClaspPieces,
+  buildMagnetPieces,
   buildDividerPieces,
   buildHingePieces,
   buildShellPieces,
@@ -30,6 +31,7 @@ function partGeometries(
     ...buildShellPieces(dims, part, params.outerChamferMm),
     ...buildHingePieces(dims, part),
     ...buildClaspPieces(dims, part),
+    ...buildMagnetPieces(dims, part),
     ...(part === 'base' ? buildDividerPieces(params, dims) : []),
   ].map((piece) => piece.geometry);
 }

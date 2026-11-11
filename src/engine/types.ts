@@ -196,6 +196,8 @@ export interface BoxParameters {
   outerChamferMm: number;
   outerFilletMm: number;
   includeSnapClasp: boolean;
+  /** Pockets for 6 x 3 mm disc magnets in the front corners of the printed base and lid */
+  include3dMagnets: boolean;
   include3dHinge: boolean;
   /** Freeform dividers in the printed base, in the interior's own frame */
   printDividers: PrintDivider[];

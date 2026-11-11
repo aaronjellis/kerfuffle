@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOX_PARAMETERS } from '../src/engine/presets';
-import { computeOddFingerCount } from '../src/engine/fingerJointEngine';
+import { CATCH_TAPER_DEG, computeOddFingerCount } from '../src/engine/fingerJointEngine';
 import { generateBoxModel } from '../src/engine/boxGenerator';
 import {
   export3DPrintBoxStl,
@@ -53,6 +53,8 @@ describe('Kerfuffle Parametric Geometry & Export Engine', () => {
           const dx = Math.abs(seg.x2 - seg.x1);
           const dy = Math.abs(seg.y2 - seg.y1);
           if (roundedCatch && Math.hypot(dx, dy) < 1.5) continue;
+          // Their sides lean in by the catch's taper, a wedge rather than a slash.
+          if (roundedCatch && dy > 0 && dx / dy <= Math.tan((CATCH_TAPER_DEG * Math.PI) / 180) + 1e-3) continue;
           // Every segment on a rectangular finger-joint panel must be horizontal (dy ~ 0) or vertical (dx ~ 0)
           expect(Math.min(dx, dy)).toBeLessThan(1e-3);
         }
