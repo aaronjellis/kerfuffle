@@ -145,6 +145,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     controls.dampingFactor = 0.08;
     controls.maxDistance = 1500;
     controls.minDistance = 40;
+    // Middle-drag grabs and slides the model, as right-drag does; the wheel still zooms.
+    controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
     controlsRef.current = controls;
 
     // Studio Lighting
