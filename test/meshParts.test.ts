@@ -86,3 +86,14 @@ describe('meshPartIdFor', () => {
     }
   });
 });
+
+describe('book box meshes', () => {
+  it('sends the spine to the hinge, the spine wall to the book, and the rest to their faces', () => {
+    expect(meshPartIdFor(panel('spine'), wood('finger-book'))).toBe('living-hinge');
+    expect(meshPartIdFor(panel('spine-wall'), wood('finger-book'))).toBe('book');
+    expect(meshPartIdFor(panel('top'), wood('finger-book'))).toBe('top');
+    expect(partForMesh('living-hinge', 'finger-book')).toBe('living-hinge');
+    expect(partForMesh('book', 'finger-book')).toBe('book');
+    expect(partForMesh('top', 'finger-book')).toBe('artwork');
+  });
+});

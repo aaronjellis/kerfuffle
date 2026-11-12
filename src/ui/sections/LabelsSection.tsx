@@ -4,7 +4,7 @@ import { NumberField } from '../../components/NumberField';
 import { DEFAULT_FACE_LABELS } from '../../engine/presets';
 import type { FaceLabelPosition } from '../../engine/types';
 import { Field, Switch } from '../Field';
-import { FACE_OPTIONS, unitHelpers } from './shared';
+import { faceOptionsFor, unitHelpers } from './shared';
 import type { SectionProps } from './types';
 
 /** Single-stroke side names scored onto the inner faces. */
@@ -77,7 +77,7 @@ export const LabelsSection: React.FC<SectionProps> = ({ params, updateParam, dis
           </button>
         </div>
         <div className="two-col-inputs">
-          {FACE_OPTIONS.map((f) => (
+          {faceOptionsFor(params.templateId).map((f) => (
             <Field key={f.id} label={f.label}>
               <input
                 type="text"

@@ -1,6 +1,7 @@
 import { polygonDifference, polygonUnion, startAtTopRight } from './polygonOps';
 import { buildRoundedRectPoints } from './roundedRect';
 import { generateWineCarrier } from './wineCarrier';
+import { generateBookBox } from './bookBox';
 import { hingeCuts, hingePatternInfo, hingeShapePath, type HingePatternSettings, type HingeShape } from './livingHinge';
 import {
   BoxDims,
@@ -54,14 +55,24 @@ export interface FingerPanelSpec {
    * Open notches cut down from a plain ('flat-inner') top edge, in the panel's spec frame: a
    * divider drops into each one from above.
    */
-  topNotches?: { x0: number; x1: number; depth: number }[];
+  topNotches?: TopNotch[];
+}
+
+/** An open notch in a plain top edge; `scoopR` dips a half-round finger scoop from the middle of its floor. */
+export interface TopNotch {
+  x0: number;
+  x1: number;
+  depth: number;
+  scoopR?: number;
+  /** How much narrower the notch is at its floor, each side: its walls lean in, so a tab wedges as it seats. */
+  floorInset?: number;
 }
 
 /**
  * Cuts open notches into a panel's plain top edge: wherever the outline runs along the top, each
  * notch in that stretch dips `depth` down and back, in the order the outline travels.
  */
-function notchTopEdge(points: Point2D[], topY: number, notches: { x0: number; x1: number; depth: number }[]): Point2D[] {
+function notchTopEdge(points: Point2D[], topY: number, notches: TopNotch[]): Point2D[] {
   if (notches.length === 0) return points;
   const out: Point2D[] = [];
   points.forEach((a, i) => {
@@ -76,7 +87,17 @@ function notchTopEdge(points: Point2D[], topY: number, notches: { x0: number; x1
       .sort((m, n) => dir * (m.x0 - n.x0))
       .forEach((n) => {
         const [enter, exit] = dir > 0 ? [n.x0, n.x1] : [n.x1, n.x0];
-        out.push({ x: enter, y: topY }, { x: enter, y: topY + n.depth }, { x: exit, y: topY + n.depth }, { x: exit, y: topY });
+        const lean = dir * (n.floorInset ?? 0);
+        out.push({ x: enter, y: topY }, { x: enter + lean, y: topY + n.depth });
+        if (n.scoopR && n.scoopR > 0) {
+          const cx = (n.x0 + n.x1) / 2;
+          const floor = topY + n.depth;
+          for (let k = 0; k <= 12; k++) {
+            const a = (Math.PI * k) / 12;
+            out.push({ x: cx - dir * n.scoopR * Math.cos(a), y: floor + n.scoopR * Math.sin(a) });
+          }
+        }
+        out.push({ x: exit - lean, y: topY + n.depth }, { x: exit, y: topY });
       });
   });
   return out;
@@ -468,6 +489,88 @@ function specToPanel2D(spec: FingerPanelSpec): { panel2D: BoxPanel2D; outlinePoi
   };
 }
 
+/** Side clearance between the pivot lid and the walls it sits between. */
+const PIVOT_LID_GAP_MM = 0.25;
+/**
+ * The front tab's fit in its notch, as cut: this much room across the notch's mouth, more than the
+ * lid's side play, so the tab finds it wherever the lid sits, and this much squeeze at its floor, so the tab wedges shut over the last of its travel.
+ */
+export const PIVOT_TAB_MOUTH_MM = 0.6;
+export const PIVOT_TAB_SQUEEZE_MM = 0.1;
+
+/**
+ * The pivot lid's sizes, all from the thickness. The lid lies between the four walls, flush with
+ * their tops, and swings on a square pin at each back corner, cut in one piece with it, turning in
+ * a round hole in the side wall. The hole is half a thickness below the wall's top, so it breaks
+ * out of the edge: an ear stands up round it. `pivotDepth` is measured from the box's outer back face.
+ */
+export function pivotLidGeometry(T: number, innerW: number) {
+  const holeR = Math.SQRT1_2 * T + 0.15;
+  // Sound wood round the hole: in the ear above it, and between it and the wall's back end.
+  const webMm = Math.max(2, 0.6 * T);
+  const earR = holeR + webMm;
+  // The pivot stands this far in front of the back wall's inner face.
+  const pivotIn = holeR + webMm;
+  // The lid runs on behind the pivot. Its back-bottom corner swings on a circle about the pivot, so
+  // the overhang stops where that circle just clears the back wall.
+  const overhang = Math.sqrt(pivotIn * pivotIn - (T * T) / 4) - 0.2;
+  const backGap = pivotIn - overhang;
+  const tabW = Math.max(8, Math.min(Math.max(20, Math.min(60, innerW * 0.3)), innerW - 10));
+  const scoopR = Math.max(0, Math.min(6, tabW / 2 - 3));
+  // Open, the lid leans back until its top face meets the back wall's top inner edge.
+  const u = T / 2;
+  let lo = Math.PI / 2;
+  let hi = Math.PI;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (u * Math.cos(mid) + pivotIn * Math.sin(mid) > u) lo = mid;
+    else hi = mid;
+  }
+  return { backGap, overhang, pivotIn, pivotDepth: T + pivotIn, holeR, earR, earRiseMm: earR - T / 2, tabW, scoopR, openAngleRad: lo };
+}
+
+/** The shallowest box, front to back inside, whose side walls hold the pivot's hole and ear. */
+export const pivotLidMinDepthMm = (T: number): number => {
+  const g = pivotLidGeometry(T, 100);
+  return g.pivotIn + g.earR + 1;
+};
+
+/** Whether the box is a pivot-lid box deep enough to be one; a shallower one gets a flat lift-off lid. */
+export const hasPivotLid = (params: Pick<BoxParameters, 'templateId' | 'woodLidStyle' | 'materialThicknessMm'>, innerD: number): boolean =>
+  params.templateId === 'finger-basic' && params.woodLidStyle === 'pivot-lid' && innerD >= pivotLidMinDepthMm(params.materialThicknessMm);
+
+/**
+ * The gap between the lid's front edge and the front wall. The pivot is at the lid's mid-thickness,
+ * so its front bottom corner swings forward a little before it rises: more in thick wood on a short lid.
+ */
+export const pivotLidFrontGapMm = (T: number, innerD: number): number => {
+  const reach = Math.max(1, innerD - pivotLidGeometry(T, 100).pivotIn);
+  return PIVOT_LID_GAP_MM + Math.hypot(reach, T / 2) - reach;
+};
+
+/** A wall's outline with the pivot ear standing up from its top edge (y = 0), round the hole at `cx`. */
+function withPivotEar(outline: Point2D[], cx: number, T: number, earR: number): Point2D[] {
+  const i = outline.findIndex((p, k) => {
+    const q = outline[(k + 1) % outline.length];
+    return Math.abs(p.y) < 1e-6 && Math.abs(q.y) < 1e-6 && q.x > p.x;
+  });
+  if (i < 0) return outline;
+  const cy = T / 2;
+  const a0 = Math.asin(cy / earR);
+  const arc: Point2D[] = [];
+  for (let k = 0; k <= 16; k++) {
+    const a = Math.PI - a0 - ((Math.PI - 2 * a0) * k) / 16;
+    arc.push({ x: cx + earR * Math.cos(a), y: cy - earR * Math.sin(a) });
+  }
+  return [...outline.slice(0, i + 1), ...arc, ...outline.slice(i + 1)];
+}
+
+const circlePoints = (cx: number, cy: number, r: number, steps = 32): Point2D[] =>
+  Array.from({ length: steps }, (_, k) => {
+    const a = (2 * Math.PI * k) / steps;
+    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+  });
+
 export function generateWoodFingerBox(
   params: BoxParameters,
   innerW: number,
@@ -494,10 +597,15 @@ export function generateWoodFingerBox(
   const lidInnerD = innerD + 2 * T + 2 * lidGap;
   // Lid depth inside the plate: at least 8 mm, at most the base's full outside height.
   const lidInnerH = Math.min(Math.max(8, params.lidHeightMm), innerH + T);
+  // A pivot lid lies between the walls, which rise to its top face; its ears stand above that.
+  const isPivotLid = hasPivotLid(params, innerD);
+  // Too shallow for the pivot, it falls back to a flat lift-off lid.
+  const pivotFallback = params.templateId === 'finger-basic' && params.woodLidStyle === 'pivot-lid' && !isPivotLid;
+  const pivot = pivotLidGeometry(T, innerW);
   const outerDims: BoxDims = {
     widthMm: isTelescope ? lidInnerW + 2 * T : innerW + 2 * T,
     depthMm: isTelescope ? lidInnerD + 2 * T : innerD + 2 * T,
-    heightMm: innerH + (hasTopPly ? 2 * T : T),
+    heightMm: innerH + (hasTopPly ? 2 * T : T) + (isPivotLid ? pivot.earRiseMm : 0),
   };
 
   const panels2D: BoxPanel2D[] = [];
@@ -511,6 +619,8 @@ export function generateWoodFingerBox(
     return { ...generateLivingHingeBox(params, innerW, innerD, innerH, countW, countD, countH), outerDims };
   }
 
+  if (params.templateId === 'finger-book') return generateBookBox(params, innerW, innerD, innerH);
+
   if (params.templateId === 'finger-wine-carrier') {
     // Tab-and-slot: the front and back lie over the sides, one ply each way; the handle sets the height.
     return { ...generateWineCarrier(params), outerDims: { widthMm: innerW + 2 * T, depthMm: innerD + 2 * T, heightMm: innerH } };
@@ -520,8 +630,8 @@ export function generateWoodFingerBox(
   const isClosedTop = !isOrganizer && params.woodLidStyle === 'closed';
   const hasLiftLid =
     !isOrganizer &&
-    (params.woodLidStyle === 'flat-lid' || params.woodLidStyle === 'inset-lid');
-  const topWallEdge: EdgeJointMode = isClosedTop ? 'even-tabs' : 'flat-inner';
+    (params.woodLidStyle === 'flat-lid' || params.woodLidStyle === 'inset-lid' || pivotFallback);
+  const topWallEdge: EdgeJointMode = isClosedTop ? 'even-tabs' : isPivotLid ? 'flat-outer' : 'flat-inner';
 
   /**
    * An organizer's walls: an open notch down from the top edge for each divider, as deep as the
@@ -592,8 +702,32 @@ export function generateWoodFingerBox(
       bottomEdge: 'even-tabs',
       leftEdge: 'even-tabs',
       ownCorners: true,
-      topNotches: fbNotches,
+      // The pivot lid's front tab drops into a notch in the front wall, a finger scoop under it.
+      topNotches:
+        isPivotLid && isFront
+          ? [
+              {
+                // The laser takes a kerf off the tab's width and adds one to the notch's.
+                x0: T + innerW / 2 - (pivot.tabW - 2 * kerf + PIVOT_TAB_MOUTH_MM) / 2,
+                x1: T + innerW / 2 + (pivot.tabW - 2 * kerf + PIVOT_TAB_MOUTH_MM) / 2,
+                depth: T,
+                scoopR: pivot.scoopR,
+                floorInset: (PIVOT_TAB_MOUTH_MM + PIVOT_TAB_SQUEEZE_MM) / 2,
+              },
+            ]
+          : fbNotches,
     });
+    if (isPivotLid && isFront) {
+      // A pattern keeps below the finger scoop.
+      const sr = res.panel2D.safeRect;
+      const dip = pivot.scoopR + 2;
+      res.panel2D.patternOutline = [
+        { x: sr.x, y: sr.y + dip },
+        { x: sr.x + sr.width, y: sr.y + dip },
+        { x: sr.x + sr.width, y: sr.y + sr.height },
+        { x: sr.x, y: sr.y + sr.height },
+      ];
+    }
     panels2D.push(res.panel2D);
 
     const zSign = isFront ? 1 : -1;
@@ -632,9 +766,37 @@ export function generateWoodFingerBox(
       ownCorners: false,
       topNotches: lrNotches,
     });
+    const xSign = isRight ? 1 : -1;
+    // The pivot lid's pin turns in a hole near the wall's back end: the left wall's back is its x = 0.
+    let sideOutline = res.outlinePoints;
+    let pinHole: Point2D[] | null = null;
+    if (isPivotLid) {
+      const hx = isRight ? innerD + 2 * T - pivot.pivotDepth : pivot.pivotDepth;
+      sideOutline = withPivotEar(res.outlinePoints, hx, T, pivot.earR);
+      // Drawn half a kerf small: the laser opens it out to size.
+      pinHole = circlePoints(hx, T / 2, Math.max(0.5, pivot.holeR - kerf / 2));
+      const minY = Math.min(...sideOutline.map((p) => p.y));
+      // The ear stands above the wall's frame: the piece on the sheet grows by it.
+      res.panel2D.heightMm -= minY;
+      res.panel2D.safeRect = { ...res.panel2D.safeRect, y: res.panel2D.safeRect.y - minY };
+      // A pattern keeps below the hole, which dips a little into the face.
+      const sr = res.panel2D.safeRect;
+      const dip = pivot.holeR - T / 2 + 2;
+      res.panel2D.patternOutline = [
+        { x: sr.x, y: sr.y + dip },
+        { x: sr.x + sr.width, y: sr.y + dip },
+        { x: sr.x + sr.width, y: sr.y + sr.height },
+        { x: sr.x, y: sr.y + sr.height },
+      ];
+      const moved = (pts: Point2D[]) => pts.map((p) => ({ x: p.x, y: p.y - minY }));
+      res.panel2D.paths = [
+        { id: `${side}-outline`, layer: 'cut', d: pointsToSvgPath(moved(sideOutline), true), closed: true },
+        { id: `${side}-pin-hole`, layer: 'cut', d: pointsToSvgPath(moved(pinHole), true), closed: true },
+        ...res.panel2D.paths.slice(1).map((p) => ({ ...p, d: translateSvgPath(p.d, 0, -minY, 1) })),
+      ];
+    }
     panels2D.push(res.panel2D);
 
-    const xSign = isRight ? 1 : -1;
     panels3D.push({
       id: side,
       name: isRight ? 'Right Wall' : 'Left Wall',
@@ -646,7 +808,9 @@ export function generateWoodFingerBox(
       closedPos: [xSign * (innerW / 2 + T / 2), 0, 0],
       explodedPos: [xSign * (innerW / 2 + T / 2 + explodeDist), 0, 0],
       rotation: [0, isRight ? Math.PI / 2 : -Math.PI / 2, 0],
-      outlinePoints: res.outlinePoints,
+      outlinePoints: sideOutline,
+      // The pin hole is in the wall's top strip, clear of the face a pattern fills.
+      ...(pinHole ? { holeContours: [pinHole], patternSafe: true } : {}),
     });
   }
 
@@ -780,6 +944,75 @@ export function generateWoodFingerBox(
         holeContours: [innerHole],
       });
     }
+  }
+
+  // 4a. PIVOT LID: lies between the walls on a pin at each back corner and a tab in the front wall.
+  if (isPivotLid) {
+    const c = PIVOT_LID_GAP_MM;
+    const frameW = innerW + 2 * T;
+    const frameD = innerD + 2 * T;
+    const x0 = T + c;
+    const x1 = T + innerW - c;
+    const yBack = T + pivot.backGap;
+    const yFront = T + innerD - pivotLidFrontGapMm(T, innerD);
+    const tab0 = frameW / 2 - pivot.tabW / 2;
+    const tab1 = frameW / 2 + pivot.tabW / 2;
+    // Drawn a kerf wide, the pins cut to a true square.
+    const pin0 = pivot.pivotDepth - (T + kerf) / 2;
+    const pin1 = pivot.pivotDepth + (T + kerf) / 2;
+    // In the box's top frame, the back edge on top: each pin runs out to the side wall's outer face.
+    const lidOutline: Point2D[] = [
+      { x: x0, y: yBack },
+      { x: x1, y: yBack },
+      { x: x1, y: pin0 },
+      { x: frameW, y: pin0 },
+      { x: frameW, y: pin1 },
+      { x: x1, y: pin1 },
+      { x: x1, y: yFront },
+      { x: tab1, y: yFront },
+      { x: tab1, y: frameD },
+      { x: tab0, y: frameD },
+      { x: tab0, y: yFront },
+      { x: x0, y: yFront },
+      { x: x0, y: pin1 },
+      { x: 0, y: pin1 },
+      { x: 0, y: pin0 },
+      { x: x0, y: pin0 },
+    ];
+    const sheetOutline = lidOutline.map((p) => ({ x: p.x, y: p.y - yBack }));
+    panels2D.push({
+      id: 'top',
+      name: 'Pivot Lid',
+      faceLabel: 'LID TOP',
+      widthMm: frameW,
+      heightMm: frameD - yBack,
+      safeRect: { x: x0, y: 0, width: x1 - x0, height: yFront - yBack },
+      sheetX: 0,
+      sheetY: 0,
+      paths: [{ id: 'lid-top-cut', layer: 'cut', d: pointsToSvgPath(sheetOutline, true), closed: true }],
+    });
+    const lidPos: [number, number, number] = [0, innerH / 2 + T / 2, 0];
+    panels3D.push({
+      id: 'top',
+      name: 'Pivot Lid',
+      faceId: 'top',
+      widthMm: frameW,
+      heightMm: frameD,
+      thicknessMm: T,
+      color: '#e5c89e',
+      closedPos: lidPos,
+      explodedPos: lidPos,
+      rotation: [-Math.PI / 2, 0, 0],
+      outlinePoints: lidOutline,
+      // The lid stays on its pins and swings open as the walls part.
+      foldRig: {
+        pivotOffset: [0, innerH / 2 + T / 2, -(innerD / 2 + T) + pivot.pivotDepth],
+        axis: 'x',
+        flatAngleRad: -pivot.openAngleRad,
+        foldedAngleRad: 0,
+        stage: [0.35, 1],
+      },
+    });
   }
 
   // 4b. TELESCOPING LID: a plate fingered all round, and four skirts whose top edges mate it and

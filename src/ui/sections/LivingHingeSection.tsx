@@ -13,6 +13,7 @@ import {
   hingeShapePath,
   type HingePatternId,
 } from '../../engine/livingHinge';
+import { bookLayout } from '../../engine/bookBox';
 import { CATCH_TAPER_DEG, CATCH_WEAR_TRAVEL_MM, MIN_THUMB_HOLE_MM, livingHingeCatch, livingHingeSettings, wrapBendRadiusMm } from '../../engine/fingerJointEngine';
 import type { BoxParameters } from '../../engine/types';
 import { wineCarrierLayout } from '../../engine/wineBottles';
@@ -53,11 +54,19 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
   const settings = livingHingeSettings(params);
   const web = hingeMinWebMm(settings, params.kerfMm);
   // The lid's hinge runs the box's outer width; a serpentine's links span it.
-  const hingeWidth = model.innerDims.widthMm + 2 * params.materialThicknessMm;
+  const isBook = params.templateId === 'finger-book';
+  const book = isBook ? bookLayout(params, model.innerDims.widthMm, model.innerDims.depthMm, model.innerDims.heightMm) : null;
+  const hingeWidth = book ? book.wrapWidthMm : model.innerDims.widthMm + 2 * params.materialThicknessMm;
   const bend = hingeBendRadiusMm(settings, params.materialThicknessMm, params.kerfMm, hingeWidth);
   // The wine carrier's hinges are its shoulders; the living-hinge box's is its lid.
   const isCarrier = params.templateId === 'finger-wine-carrier';
-  const lid = isCarrier ? wineCarrierLayout(params).topBendRadiusMm : wrapBendRadiusMm(model.innerDims.depthMm, model.innerDims.heightMm);
+  // The carrier and the book show the pattern only: the catch and the back attachment are the living-hinge box's.
+  const patternOnly = isCarrier || isBook;
+  const lid = book
+    ? book.radiusMm
+    : isCarrier
+      ? wineCarrierLayout(params).topBendRadiusMm
+      : wrapBendRadiusMm(model.innerDims.depthMm, model.innerDims.heightMm);
   const [pitchMin, pitchMax] = HINGE_PITCH_RANGE_MM;
   // The front wall's height under the lid's lip, as the engine works it out.
   const straightH = Math.max(15, model.innerDims.heightMm - lid);
@@ -166,14 +175,16 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
         <p className={bend > lid ? 'helper-note hinge-web-warning' : 'helper-note'}>
           {Number.isFinite(bend) ? (
             <>
-              Bends to about a <strong>{len(bend, 0)} {uLabel}</strong> radius; the {isCarrier ? 'shoulders curve' : 'lid curves'} at {len(lid, 0)} {uLabel}.
+              Bends to about a <strong>{len(bend, 0)} {uLabel}</strong> radius; the {isBook ? 'spine curves' : isCarrier ? 'shoulders curve' : 'lid curves'} at {len(lid, 0)} {uLabel}.
             </>
           ) : (
             'The cuts leave no wood between the rows.'
           )}
           {Number.isFinite(bend) &&
             bend > lid &&
-            ' It may crack: move the rows closer or lengthen the slits.'}
+            (isBook
+              ? ' It may crack: move the rows closer, lengthen the slits, or make the book thicker.'
+              : ' It may crack: move the rows closer or lengthen the slits.')}
         </p>
         <p className="helper-note">
           An estimate from how far wood twists; test cards show what your sheet really does.
@@ -186,7 +197,7 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
         </button>
       )}
 
-      {!isCarrier && (<>
+      {!patternOnly && (<>
       <Field label="Back attachment">
         <select
           value={params.livingHingeAttachMode === 'finger-joint-back' ? 'finger-joint-back' : 'one-piece-back'}

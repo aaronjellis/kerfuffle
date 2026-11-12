@@ -2,6 +2,7 @@ import type React from 'react';
 import type { PartId } from '../parts';
 import type { SectionProps } from './types';
 import { ArtworkSection } from './ArtworkSection';
+import { BookSection } from './BookSection';
 import { ClaspSection } from './ClaspSection';
 import { ClosureSection } from './ClosureSection';
 import { DividersSection } from './DividersSection';
@@ -32,6 +33,7 @@ export const SECTION_COMPONENTS: Record<PartId, React.FC<SectionProps>> = {
   hinge: HingeSection,
   clasp: ClaspSection,
   joints: JointsSection,
+  book: BookSection,
   dividers: DividersSection,
   'living-hinge': LivingHingeSection,
   wine: WineCarrierSection,

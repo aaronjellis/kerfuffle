@@ -15,6 +15,7 @@ import {
   MATERIAL_PRESETS,
 } from './engine/presets';
 import { generateBoxModel } from './engine/boxGenerator';
+import { bookFaceTurnDeg } from './engine/bookBox';
 import { imageAspect, sizeForAspect } from './engine/artworkImage';
 import { generateKerfTestModel, kerfTestValues } from './engine/kerfTest';
 import { generateHingeCardsModel, hingeCardSets, type HingeCardVary } from './engine/hingeCards';
@@ -393,7 +394,9 @@ export const App: React.FC = () => {
     const initialConfig: TextArtworkConfig = { ...DEFAULT_TEXT_ARTWORK_CONFIG };
     const { dataUrl, aspectRatio } = await renderTextPicture(initialConfig, 'engrave');
     const pieceDims = resolvePieceDimensions(model, selectedFaceId);
-    const targetW = Math.max(18, Math.min(85, Math.round(pieceDims.widthMm * 0.65)));
+    // A book's cover text is turned a quarter, so it runs along the cover's other side.
+    const turned = Math.abs(bookFaceTurnDeg(params, selectedFaceId)) === 90;
+    const targetW = Math.max(18, Math.min(85, Math.round((turned ? pieceDims.heightMm : pieceDims.widthMm) * 0.65)));
     const targetH = Math.max(8, Number((targetW / aspectRatio).toFixed(1)));
     const newArt: FaceArtwork = {
       id: newArtworkId('text'),
@@ -404,7 +407,7 @@ export const App: React.FC = () => {
       yMm: 0,
       widthMm: targetW,
       heightMm: targetH,
-      rotationDeg: 0,
+      rotationDeg: bookFaceTurnDeg(params, selectedFaceId),
       mode: 'engrave',
       textConfig: initialConfig,
     };
@@ -516,7 +519,7 @@ export const App: React.FC = () => {
           yMm: 0,
           widthMm: Math.round(size.widthMm * 10) / 10,
           heightMm: Math.round(size.heightMm * 10) / 10,
-          rotationDeg: 0,
+          rotationDeg: bookFaceTurnDeg(params, selectedFaceId),
           mode: 'print',
         };
         setArtworks((prev) => [...prev, newArt]);
@@ -542,7 +545,7 @@ export const App: React.FC = () => {
       yMm: 0,
       widthMm: Math.min(preset.defaultWidthMm, Math.round(model.innerDims.widthMm * 0.7)),
       heightMm: Math.min(preset.defaultHeightMm, Math.round(model.innerDims.depthMm * 0.7)),
-      rotationDeg: 0,
+      rotationDeg: bookFaceTurnDeg(params, selectedFaceId),
       mode: 'print',
     };
     setArtworks((prev) => [...prev, newArt]);

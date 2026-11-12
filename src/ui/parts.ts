@@ -1,5 +1,6 @@
 import {
   ArrowDownToLine,
+  BookOpen,
   Box,
   Grid3x3,
   Image,
@@ -28,6 +29,7 @@ export type PartId =
   | 'hinge'
   | 'clasp'
   | 'joints'
+  | 'book'
   | 'dividers'
   | 'living-hinge'
   | 'wine'
@@ -92,6 +94,12 @@ const DEFS: Record<PartId, PartDef> = {
     label: 'Living hinge',
     keywords: 'living hinge pitch',
     icon: Waves
+  },
+  book: {
+    id: 'book',
+    label: 'Book',
+    keywords: 'book cover overhang spine radius full round guide pins page lines spacing fore edge',
+    icon: BookOpen
   },
   closure: {
     id: 'closure',
@@ -173,6 +181,7 @@ const PART_IDS: Record<BoxTemplateId, PartId[]> = {
   'finger-clamshell': ['size', 'material', 'lid', 'hinge', 'joints', ...PATTERN_TAIL],
   'finger-living-hinge': ['size', 'material', 'living-hinge', 'joints', ...PATTERN_TAIL],
   'finger-organizer': ['size', 'material', 'joints', 'dividers', ...COMMON_TAIL],
+  'finger-book': ['size', 'material', 'book', 'living-hinge', 'joints', ...PATTERN_TAIL],
   'finger-wine-carrier': ['wine', 'material', 'living-hinge', ...PATTERN_TAIL],
   'cardboard-mailer': ['size', 'material', 'closure', 'side-locks', 'flaps', 'score-lines', ...PATTERN_TAIL],
   'cardboard-tuck-carton': ['size', 'material', 'score-lines', ...PATTERN_TAIL],
@@ -216,7 +225,8 @@ const MESH_TO_PART: Record<string, PartId> = {
   lip: 'shell',
   divider: 'print-dividers',
   dividers: 'dividers',
-  'living-hinge': 'living-hinge'
+  'living-hinge': 'living-hinge',
+  book: 'book'
 };
 
 /** Maps a clicked 3D mesh id to an inspector part, or `null` if the template has no such part. */

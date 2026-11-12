@@ -44,6 +44,18 @@ describe('project files', () => {
     expect(back.artworks).toEqual([]);
   });
 
+  it('gives a file from before the book box its book defaults, and round-trips a book', () => {
+    const { bookCoverOverhangMm: _a, bookSpineRadiusMm: _b, bookGuidePins: _c, bookPageLines: _d, bookPageLineSpacingMm: _e, ...older } = params;
+    const back = parseProject(JSON.stringify({ format: 'kerfuffle-project', version: 1, params: older }));
+    expect(back.params.bookCoverOverhangMm).toBe(4);
+    expect(back.params.bookSpineRadiusMm).toBe(0);
+    expect(back.params.bookGuidePins).toBe(true);
+    expect(back.params.bookPageLines).toBe(false);
+    expect(back.params.bookPageLineSpacingMm).toBe(1.5);
+    const book: BoxParameters = { ...DEFAULT_BOX_PARAMETERS, category: 'wood-finger', templateId: 'finger-book', bookSpineRadiusMm: 12, bookGuidePins: false };
+    expect(parseProject(serializeProject({ params: book, artworks: [], displayUnit: 'mm' })).params).toEqual(book);
+  });
+
   it('drops unknown settings, wrong types and broken patterns', () => {
     const back = parseProject(
       fileWith({}, { futureSetting: 3, widthMm: 'wide', facePatterns: { top: { style: 'zigzag', cellMm: 1, barMm: 1, paddingMm: 1 } } }),

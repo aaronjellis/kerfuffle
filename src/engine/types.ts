@@ -8,12 +8,13 @@ export type BoxTemplateId =
   | 'finger-living-hinge'
   | 'finger-organizer'
   | 'finger-wine-carrier'
+  | 'finger-book'
   | 'cardboard-mailer'
   | 'cardboard-tuck-carton'
   | 'cardboard-telescope'
   | '3d-snap-box';
 
-export type WoodLidStyle = 'closed' | 'open' | 'flat-lid' | 'inset-lid' | 'sliding-lid' | 'telescope-lid';
+export type WoodLidStyle = 'closed' | 'open' | 'flat-lid' | 'inset-lid' | 'sliding-lid' | 'telescope-lid' | 'pivot-lid';
 export type ClamshellHingeType = 'butt-hardware' | 'side-pivot' | 'knuckle-pin' | 'printed-hinge';
 export type LivingHingeAttachMode =
   | 'one-piece-back'
@@ -246,6 +247,15 @@ export interface BoxParameters {
   wineShoulderHeightMm: number;
   /** Arched feet cut into the bottom of the front and back */
   wineFeet: boolean;
+  /** Book box: how far the covers overhang the page walls at the tail, head and fore edge */
+  bookCoverOverhangMm: number;
+  /** Book box: the spine's bend radius at mid-thickness; 0 rounds the whole spine */
+  bookSpineRadiusMm: number;
+  /** Book box: pins on the fore-edge wall that press into the front cover and hold it shut */
+  bookGuidePins: boolean;
+  /** Book box: score lines along the page walls, standing in for page edges */
+  bookPageLines: boolean;
+  bookPageLineSpacingMm: number;
   showDimensions: boolean;
   includeRegistrationMarks: boolean;
 }

@@ -228,6 +228,16 @@ export const BOX_TEMPLATES: TemplateMetadata[] = [
       'Sized from the bottle; the front and back bend over living-hinge shoulders into a handle whose hooked tabs lock into keyhole slots in the side pieces.',
   },
   {
+    id: 'finger-book',
+    name: 'Book box with a living-hinge spine',
+    shortName: 'Book box',
+    category: 'wood-finger',
+    pass: 'Pass 2 (Specialty)',
+    tagline: 'A box that looks like a hardcover book, its cover opening on a curved living-hinge spine.',
+    description:
+      'One wrap piece is the back cover, the spine and the front cover; three walls show as page edges, and pins on the fore edge hold the cover shut.',
+  },
+  {
     id: 'finger-organizer',
     name: 'Organizer box with slotted dividers',
     shortName: 'Organizer grid',
@@ -380,6 +390,11 @@ export const DEFAULT_BOX_PARAMETERS: BoxParameters = {
   wineClearanceMm: 4,
   wineShoulderHeightMm: 0,
   wineFeet: true,
+  bookCoverOverhangMm: 4,
+  bookSpineRadiusMm: 0,
+  bookGuidePins: true,
+  bookPageLines: false,
+  bookPageLineSpacingMm: 1.5,
   clamshellHingeType: 'butt-hardware',
   hingeFingerWidthMm: 8,
   includeHingeScrewHoles: true,

@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three';
 import { bendBentPanel } from './bentPanel';
+import { bookCoverPose } from './bookBox';
 import { CATCH_TAPER_DEG, catchTongueEdge, catchTongueRadii, livingHingeCatch, livingHingeZoneCuts, wrapBendRadiusMm } from './fingerJointEngine';
 import { buildRoundedRectPoints } from './roundedRect';
 import type { GeneratedBoxModel, Panel3DTransform } from './types';
@@ -67,6 +68,13 @@ export function applyAssemblyTransform(
   };
 
   map.forEach(({ wrapper, spec }) => {
+    // The book's front cover rides on the end of the spine as it bends.
+    if (templateId === 'finger-book' && spec.id === 'top') {
+      const pose = bookCoverPose(model, t * t * (3 - 2 * t));
+      wrapper.position.set(...pose.position);
+      wrapper.quaternion.set(...pose.quaternion);
+      return;
+    }
     if (isClamshell) {
       // For Clamshell:
       // t in [0.45 .. 1.0]: Box base & lid stay 100% assembled while lid hinges open/shut!

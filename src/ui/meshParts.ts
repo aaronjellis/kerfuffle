@@ -29,6 +29,9 @@ export function meshPartIdFor(panel: Panel3DTransform, params: MeshParams): stri
       return panel.faceId;
     case 'finger-living-hinge':
       return id === 'living-hinge-lid' ? 'living-hinge' : panel.faceId;
+    case 'finger-book':
+      // The spine strip is the hinge; the wall behind it is the book's own.
+      return id === 'spine' ? 'living-hinge' : id === 'spine-wall' ? 'book' : panel.faceId;
     case 'finger-organizer':
       return id.startsWith('divider-') ? 'dividers' : panel.faceId;
     default:

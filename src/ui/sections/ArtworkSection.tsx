@@ -22,7 +22,7 @@ import { FontPicker } from '../FontPicker';
 import { SAMPLE_ARTWORK_PRESETS } from '../../engine/sampleArtworks';
 import type { FaceArtwork, TextArtworkConfig } from '../../engine/types';
 import { Field, Segmented } from '../Field';
-import { FACE_OPTIONS, unitHelpers } from './shared';
+import { faceOptionsFor, unitHelpers } from './shared';
 import type { SectionProps } from './types';
 
 /** One catalog fetch for the session: the section and the picker both need it. */
@@ -115,7 +115,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
       </p>
 
       <div className="chip-row" role="group" aria-label="Piece">
-        {FACE_OPTIONS.map((f) => {
+        {faceOptionsFor(model.params.templateId).map((f) => {
           const count = artworks.filter((a) => a.faceId === f.id).length;
           return (
             <button
@@ -181,7 +181,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
 
       <ItemList
         items={artworks.filter((a) => a.faceId === selectedFaceId)}
-        pieceLabel={FACE_OPTIONS.find((f) => f.id === selectedFaceId)?.label ?? 'this piece'}
+        pieceLabel={faceOptionsFor(model.params.templateId).find((f) => f.id === selectedFaceId)?.label ?? 'this piece'}
         selectedId={selectedArtwork?.id ?? null}
         onSelect={setSelectedArtworkId}
         onRemove={removeArtwork}
@@ -462,7 +462,7 @@ export const ArtworkSection: React.FC<SectionProps> = ({ displayUnit, handlers, 
                   setSelectedFaceId(nextFace);
                 }}
               >
-                {FACE_OPTIONS.map((f) => (
+                {faceOptionsFor(model.params.templateId).map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.label}
                   </option>

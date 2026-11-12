@@ -14,6 +14,7 @@ const TEMPLATES: BoxTemplateId[] = [
   'finger-living-hinge',
   'finger-organizer',
   'finger-wine-carrier',
+  'finger-book',
   'cardboard-mailer',
   'cardboard-tuck-carton',
   'cardboard-telescope',
@@ -21,7 +22,7 @@ const TEMPLATES: BoxTemplateId[] = [
 ];
 
 describe('SECTION_COMPONENTS', () => {
-  it('lists all nine templates', () => {
+  it('lists all ten templates', () => {
     expect([...TEMPLATES].sort()).toEqual(BOX_TEMPLATES.map((t) => t.id).sort());
   });
 
@@ -103,6 +104,47 @@ describe('section rendering', () => {
         expect(html.length, `${templateId} / ${part.id}`).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('book box sections', () => {
+  const params: BoxParameters = { ...DEFAULT_BOX_PARAMETERS, category: 'wood-finger', templateId: 'finger-book' };
+  const render = (part: 'book' | 'living-hinge' | 'artwork', extra: Partial<BoxParameters> = {}) => {
+    const p = { ...params, ...extra };
+    return renderToString(
+      createElement(SECTION_COMPONENTS[part], { params: p, updateParam: noop, displayUnit: 'mm', model: generateBoxModel(p), handlers: stubHandlers([]) })
+    );
+  };
+
+  it('shows the book settings', () => {
+    const html = render('book', { bookPageLines: true });
+    for (const label of ['Cover overhang', 'Full round spine', 'Guide pins', 'Engrave page lines', 'Line spacing']) expect(html).toContain(label);
+    expect(html).not.toContain('Spine radius');
+    expect(render('book', { bookSpineRadiusMm: 12 })).toContain('Spine radius');
+    expect(render('book')).not.toContain('Line spacing');
+  });
+
+  it('shows the hinge pattern without the living-hinge box controls', () => {
+    const html = render('living-hinge');
+    expect(html).toContain('spine curves');
+    expect(html).not.toContain('Back attachment');
+    expect(html).not.toContain('Top guides');
+  });
+
+  it('warns when the book is too thin for the hinge pattern', () => {
+    expect(render('living-hinge', { heightMm: 15 })).toContain('make the book thicker');
+  });
+
+  it('says when the book is too short for a guide pin', () => {
+    expect(render('book', { depthMm: 15, materialThicknessMm: 6 })).toContain('nothing holds the cover shut');
+    expect(render('book')).not.toContain('nothing holds the cover shut');
+  });
+
+  it('names the faces like a book', () => {
+    const html = render('artwork');
+    expect(html).toContain('Front cover');
+    expect(html).toContain('Fore edge');
+    expect(html).not.toContain('Spine');
   });
 });
 

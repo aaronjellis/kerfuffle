@@ -3,6 +3,7 @@ import type { BoxPanel2D, BoxParameters, FacePatternSettings, FacePatternStyle, 
 import { pointsToSvgPath } from './fingerJointEngine';
 import { bounds as polyBounds, intersect, translate as movePoly, type Poly as Region } from './geom';
 import { buildShape, clampShape, DEFAULT_SHAPE } from './shapes';
+import { bookPatternTargets } from './bookBox';
 
 /** Faces a see-through pattern can go on. The floor is left solid. */
 export const PATTERN_FACE_IDS = ['top', 'front', 'back', 'left', 'right', 'bottom'] as const;
@@ -450,7 +451,15 @@ export function resolvePatternFaces(
   if (params.category === '3d-print') return [];
   const byId = new Map(panels3D.map((p) => [p.id, p]));
   const targets: PatternFaceTarget[] = [];
+  // The book's covers are stretches of one wrap piece, and take a pattern over the page block; it has no left face.
+  const isBook = params.templateId === 'finger-book';
+  const bookCovers = isBook ? bookPatternTargets(panels2D, panels3D) : [];
   for (const faceId of PATTERN_FACE_IDS) {
+    if (isBook && (faceId === 'top' || faceId === 'bottom' || faceId === 'left')) {
+      const cover = bookCovers.find((t) => t.faceId === faceId);
+      if (cover) targets.push(cover);
+      continue;
+    }
     // A folding box's bottom is its lock; only a wood box's bottom is a plain panel.
     if (faceId === 'bottom' && params.category !== 'wood-finger') continue;
     // An organizer's walls carry the dividers' notches; a pattern would run into them.

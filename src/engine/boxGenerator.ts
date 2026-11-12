@@ -11,6 +11,7 @@ import {
 import { DEFAULT_FACE_LABELS, MACHINE_BED_PRESETS } from './presets';
 import { fmt, generateWoodFingerBox } from './fingerJointEngine';
 import { wineCarrierInnerDims } from './wineCarrier';
+import { BOOK_FACE_NAMES, bookInnerDims } from './bookBox';
 import { generateCardboardBox } from './cardboardEngine';
 import { generate3DPrintBox } from './print3dEngine';
 import { buildSingleStrokeTextPath } from './vectorFont';
@@ -42,6 +43,13 @@ function applyFaceLabelsAndVectorScores(
   params: BoxParameters
 ): BoxPanel2D[] {
   const customMap = { ...DEFAULT_FACE_LABELS, ...(params.customFaceLabels || {}) };
+  // A book's faces have their own names; a label still at the generic default gives way to them.
+  const isBook = params.templateId === 'finger-book';
+  if (isBook) {
+    for (const [id, name] of Object.entries(BOOK_FACE_NAMES)) {
+      if (!(id in customMap) || customMap[id] === DEFAULT_FACE_LABELS[id]) customMap[id] = name.toUpperCase();
+    }
+  }
   const capH = Math.max(2.0, Math.min(25, params.faceLabelSizeMm || 5.0));
   const posMode = params.faceLabelPosition || 'center';
   const mirrorX = Boolean(params.mirrorInnerFaceLabels);
@@ -186,7 +194,11 @@ export function generateBoxModel(params: BoxParameters): GeneratedBoxModel {
   // The wine carrier is sized from its bottle, so the typed size and inside/outside don't apply.
   if (params.templateId === 'finger-wine-carrier') inner = wineCarrierInnerDims(params);
   let res = generateForInner(params, inner);
-  if (params.dimensionReference !== 'inner' && params.templateId !== 'finger-wine-carrier') {
+  if (params.dimensionReference !== 'inner' && params.templateId === 'finger-book') {
+    // The spine's bulge grows with the height, so the book solves its inside size itself.
+    inner = bookInnerDims(params, MIN_INNER_MM);
+    res = generateForInner(params, inner);
+  } else if (params.dimensionReference !== 'inner' && params.templateId !== 'finger-wine-carrier') {
     // Each template's outside size is its inner size plus a fixed allowance, so one run with the
     // typed size as inner gives the allowance, and a second run cuts the box that has that outside size.
     const allowance = (k: keyof BoxDims) => res.outerDims[k] - typed[k];

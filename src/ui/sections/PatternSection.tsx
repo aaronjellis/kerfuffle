@@ -1,3 +1,4 @@
+import { BOOK_FACE_NAMES } from '../../engine/bookBox';
 import React from 'react';
 import { NumberField } from '../../components/NumberField';
 import { generatePatternHoles } from '../../engine/facePatterns';
@@ -58,6 +59,7 @@ const Preview: React.FC<{ style: FacePatternStyle; className?: string }> = ({ st
 export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, displayUnit, model, handlers }) => {
   const { isInch, uLabel } = unitHelpers(displayUnit);
   const available = model.patternFaceIds;
+  const faceLabel = (id: string) => (params.templateId === 'finger-book' ? BOOK_FACE_NAMES[id] : undefined) ?? FACE_LABELS[id] ?? id;
   const patterns = params.facePatterns;
   // The side being edited is the app's selected face, so a click on a wall in 3D or on the sheet picks
   // it too. A face that can't take a pattern falls back to one that has a pattern, then the first.
@@ -113,7 +115,7 @@ export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, di
                 onClick={() => setSelectedFaceId(id)}
               >
                 {p && p.style !== 'none' && <Preview style={p.style} className="pattern-side-icon" />}
-                {FACE_LABELS[id] ?? id}
+                {faceLabel(id)}
               </button>
             );
           })}
@@ -121,7 +123,7 @@ export const PatternSection: React.FC<SectionProps> = ({ params, updateParam, di
       </Field>
       <p className="helper-note">Or click a side on the box.</p>
 
-      <div className="pattern-picker" role="radiogroup" aria-label={`Pattern on the ${FACE_LABELS[face]?.toLowerCase() ?? face}`}>
+      <div className="pattern-picker" role="radiogroup" aria-label={`Pattern on the ${faceLabel(face).toLowerCase()}`}>
         {STYLES.map(({ value, label }) => (
           <button
             key={value}

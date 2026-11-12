@@ -606,8 +606,8 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       };
 
       // Dark laser-charred edge highlight for wood & cardboard panels
-      // The wine carrier's tabbed walls draw their own edges (see panelEdgesGeometry).
-      const ownEdges = spec.bend || model.params.templateId === 'finger-wine-carrier';
+      // The wine carrier's and the book's slotted panels draw their own edges (see panelEdgesGeometry).
+      const ownEdges = spec.bend || model.params.templateId === 'finger-wine-carrier' || model.params.templateId === 'finger-book';
       const edgeLines = new THREE.LineSegments(
         ownEdges ? panelEdgesGeometry(spec) : new THREE.EdgesGeometry(geometry, 20),
         new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.65 })

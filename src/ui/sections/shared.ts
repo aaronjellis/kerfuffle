@@ -1,3 +1,4 @@
+import { BOOK_FACE_NAMES } from '../../engine/bookBox';
 import type { DisplayUnit } from '../../engine/types';
 import { fmt } from '../../engine/fingerJointEngine';
 import type { PrintDroppedFeature } from '../../engine/printParts';
@@ -10,6 +11,12 @@ export const FACE_OPTIONS = [
   { id: 'right', label: 'Right' },
   { id: 'bottom', label: 'Bottom' },
 ];
+
+/** The faces as a template names them: a book's are its covers and page edges; its spine is the hinge and takes nothing. */
+export const faceOptionsFor = (templateId: string) =>
+  templateId === 'finger-book'
+    ? FACE_OPTIONS.filter((f) => f.id !== 'left').map((f) => ({ id: f.id, label: BOOK_FACE_NAMES[f.id] ?? f.label }))
+    : FACE_OPTIONS;
 
 /** The unit helpers every section used to read from `App`. */
 export function unitHelpers(displayUnit: DisplayUnit) {
