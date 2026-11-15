@@ -1023,3 +1023,12 @@
   font-size: 1.0625rem;
   text-overflow: ellipsis;
 }
+
+/* A short numbered sequence in a helper note: an assembly order. */
+.helper-steps {
+  margin-top: 0;
+  padding-left: 1.25em;
+}
+.helper-steps li + li {
+  margin-top: 2px;
+}

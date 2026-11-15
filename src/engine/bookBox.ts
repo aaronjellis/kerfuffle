@@ -20,6 +20,11 @@ import { roundCorners } from './wineCarrier';
 /** The covers' free corners are eased like a hardcover's. */
 const COVER_CORNER_MM = 2;
 export const BOOK_OVERHANG_MAX_MM = 10;
+/**
+ * The tightest spine curve: three board thicknesses. Tighter, the hinge's quarter-turn falls on a
+ * few millimetres of kerf cuts and the webs snap.
+ */
+export const bookMinSpineRadiusMm = (T: number) => 3 * T;
 export const BOOK_PAGE_LINE_RANGE_MM: [number, number] = [0.8, 5];
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -67,7 +72,7 @@ export function bookLayout(params: BoxParameters, innerW: number, innerD: number
   const bandMm = Math.max(5, 1.5 * T);
   const full = (innerH + T) / 2;
   const asked = params.bookSpineRadiusMm;
-  const radiusMm = asked > 0 ? clamp(asked, Math.min(T, full), full) : full;
+  const radiusMm = asked > 0 ? clamp(asked, Math.min(bookMinSpineRadiusMm(T), full), full) : full;
   const flatBandRaw = innerH + T - 2 * radiusMm;
   const fullRound = flatBandRaw < 0.01;
   const flatBandMm = fullRound ? 0 : flatBandRaw;

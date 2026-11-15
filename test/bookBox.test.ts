@@ -46,6 +46,14 @@ describe('bookLayout', () => {
     expect(l.spineSegments.map((s) => s.kind)).toEqual(['arc', 'straight', 'arc']);
   });
   it('clamps the radius to full round', () => expect(L({ bookSpineRadiusMm: 99 }).radiusMm).toBeCloseTo(19));
+  it('keeps the spine at least three board thicknesses round', () => {
+    const T = book({}).materialThicknessMm;
+    expect(L({ bookSpineRadiusMm: 1 }).radiusMm).toBeCloseTo(3 * T);
+    expect(L({ bookSpineRadiusMm: 1 }).flatBandMm).toBeGreaterThan(0);
+    // A book too short for two such curves stays full round.
+    const short = L({ bookSpineRadiusMm: 1, materialThicknessMm: 6 }, 120, 170, 20);
+    expect(short.fullRound).toBe(true);
+  });
   it('sizes the wrap and the outside', () => {
     const l = L();
     expect(l.coverLengthMm).toBeCloseTo(135);

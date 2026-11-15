@@ -52,9 +52,15 @@ export const LidSection: React.FC<SectionProps> = ({ params, updateParam, displa
         <p className="helper-note">
           The lid lies between the walls, flush with their tops. A pin at each back corner turns in a hole in the side
           wall, and a tab at the front wedges into a notch whose sides lean in, so the lid presses shut; a finger scoop under
-          the tab lifts it. Fit the lid as you glue up the
-          box: the pins are held between the side walls, so it can't go in or come out afterwards.
+          the tab lifts it. The pins can't go in once the box is glued, so glue up in this order:
         </p>
+      )}
+      {params.templateId === 'finger-basic' && params.woodLidStyle === 'pivot-lid' && (
+        <ol className="helper-note helper-steps">
+          <li>Glue the bottom, back, front and left wall.</li>
+          <li>Set the lid's left pin in the left wall's hole.</li>
+          <li>Slide the right wall on, its hole over the right pin, and glue it.</li>
+        </ol>
       )}
 
       {params.templateId === 'finger-basic' && params.woodLidStyle === 'telescope-lid' && (

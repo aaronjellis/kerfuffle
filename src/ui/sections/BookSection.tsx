@@ -1,6 +1,6 @@
 import React from 'react';
 import { NumberField } from '../../components/NumberField';
-import { BOOK_OVERHANG_MAX_MM, BOOK_PAGE_LINE_RANGE_MM, bookLayout, bookMinOverhangMm, bookPinCount } from '../../engine/bookBox';
+import { BOOK_OVERHANG_MAX_MM, BOOK_PAGE_LINE_RANGE_MM, bookLayout, bookMinOverhangMm, bookMinSpineRadiusMm, bookPinCount } from '../../engine/bookBox';
 import { Field, Switch } from '../Field';
 import { unitHelpers } from './shared';
 import type { SectionProps } from './types';
@@ -13,6 +13,9 @@ export const BookSection: React.FC<SectionProps> = ({ params, updateParam, displ
   const layout = bookLayout(params, widthMm, depthMm, heightMm);
   const fullRadius = (heightMm + T) / 2;
   const minOverhang = bookMinOverhangMm(T);
+  const minRadius = Math.min(bookMinSpineRadiusMm(T), fullRadius);
+  // A curve at each cover needs room for a flat band between: a short book in thick board is full round only.
+  const canFlatBand = minRadius < fullRadius - 0.5;
   const len = (v: number) => (isInch ? (v / 25.4).toFixed(2) : v.toFixed(1));
   return (
     <>
@@ -37,13 +40,19 @@ export const BookSection: React.FC<SectionProps> = ({ params, updateParam, displ
       <Switch
         label="Full round spine"
         checked={layout.fullRound}
-        onChange={(v) => updateParam('bookSpineRadiusMm', v ? 0 : Math.max(T, Math.round(fullRadius * 0.6 * 2) / 2))}
+        disabled={layout.fullRound && !canFlatBand}
+        onChange={(v) =>
+          updateParam(
+            'bookSpineRadiusMm',
+            v ? 0 : Math.min(fullRadius - 0.5, Math.max(minRadius, Math.round(fullRadius * 0.6 * 2) / 2)),
+          )
+        }
       />
       {!layout.fullRound && (
         <Field label={`Spine radius (${uLabel})`}>
           <NumberField
             valueMm={layout.radiusMm}
-            minMm={Math.min(T, fullRadius)}
+            minMm={minRadius}
             maxMm={fullRadius}
             step={isInch ? 0.02 : 0.5}
             displayUnit={displayUnit}
@@ -56,8 +65,10 @@ export const BookSection: React.FC<SectionProps> = ({ params, updateParam, displ
       )}
       <p className="helper-note" role="status">
         {layout.fullRound
-          ? 'The spine is one half-round, with hinge cuts all the way across.'
-          : `The spine curves at each cover and keeps a solid band ${len(layout.flatBandMm)} ${uLabel} tall between them.`}
+          ? `The spine is one half-round, with hinge cuts all the way across.${
+              canFlatBand ? '' : ` A flat band needs the book taller: each curve is at least ${len(minRadius)} ${uLabel}.`
+            }`
+          : `The spine curves at each cover and keeps a solid band ${len(layout.flatBandMm)} ${uLabel} tall between them. Each curve is at least ${len(minRadius)} ${uLabel}, three board thicknesses, so the hinge doesn't snap.`}
       </p>
 
       <Switch label="Guide pins" checked={params.bookGuidePins} onChange={(v) => updateParam('bookGuidePins', v)} />
