@@ -196,7 +196,7 @@ export function exportBoxSvg(
       : null;
     const node =
       vector ??
-      `<image id="art-${artwork.id}" href="${artwork.dataUrl}" x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" preserveAspectRatio="xMidYMid meet"${transform} />`;
+      `<image id="art-${escapeAttr(artwork.id)}" href="${escapeAttr(artwork.dataUrl)}" x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" preserveAspectRatio="xMidYMid meet"${transform} />`;
     (artwork.mode === 'engrave' ? engraveNodes : artworkNodes).push(`    ${node}`);
   });
 

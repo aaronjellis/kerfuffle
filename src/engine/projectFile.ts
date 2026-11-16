@@ -1,4 +1,5 @@
 import type { BoxParameters, DisplayUnit, FaceArtwork, FacePatternSettings, FacePatternStyle, PrintDivider } from './types';
+import { isImageDataUrl } from './artworkImage';
 import { isHingePatternId } from './livingHinge';
 import { BOX_TEMPLATES, DEFAULT_BOX_PARAMETERS } from './presets';
 
@@ -109,7 +110,7 @@ export function parseProject(text: string): KerfProject {
           isRecord(a) &&
           typeof a.id === 'string' &&
           typeof a.faceId === 'string' &&
-          typeof a.dataUrl === 'string' &&
+          isImageDataUrl(a.dataUrl) &&
           ['xMm', 'yMm', 'widthMm', 'heightMm', 'rotationDeg'].every((k) => typeof a[k] === 'number'),
       )
     : [];
