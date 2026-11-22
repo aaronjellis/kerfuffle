@@ -15,6 +15,7 @@ import {
 import { generateBoxModel } from '../src/engine/boxGenerator';
 import { CATCH_TAPER_DEG, CATCH_WEAR_TRAVEL_MM, catchOutline, catchTongueEdge, catchTongueRadii, livingHingeCatch, wrapBendRadiusMm } from '../src/engine/fingerJointEngine';
 import type { CatchShapeId } from '../src/engine/types';
+import { buildLivingHingeLidGeometry, catchTabShape } from '../src/engine/scene3d';
 
 const taper = Math.tan((CATCH_TAPER_DEG * Math.PI) / 180);
 /** A closed outline's width across at height y, between its crossings within `near` of x = cx. */
@@ -754,5 +755,50 @@ describe('catch shapes', () => {
       const deck = Math.max(10, innerD - 2 * R);
       expect(wrap.heightMm).toBeCloseTo(c.height + lip + 2 * shoulder + deck + straightH + params.materialThicknessMm, 3);
     });
+  });
+});
+
+describe('3D catch tab', () => {
+  const shapes: CatchShapeId[] = ['tapered', 'dovetail', 'keyhole', 'circle'];
+  const paramsFor = (shape: CatchShapeId, hole: boolean) => ({
+    ...DEFAULT_BOX_PARAMETERS,
+    templateId: 'finger-living-hinge' as const,
+    livingHingeCatchShape: shape,
+    livingHingeThumbHole: hole,
+  });
+
+  it.each(shapes)('draws the %s tab as deep and as wide as its catch, the hole at its centre depth', (shape) => {
+    const c = livingHingeCatch(paramsFor(shape, true), 110, 60);
+    const tab = catchTabShape(c);
+    const pts = tab.getPoints();
+    expect(Math.min(...pts.map((p) => p.y))).toBeCloseTo(-c.height, 6);
+    expect(Math.max(...pts.map((p) => p.y))).toBeCloseTo(0, 6);
+    // The widest point, at or below the root fillet, is the catch's width.
+    const lowerHalf = pts.filter((p) => p.y < -1.4);
+    expect(Math.max(...lowerHalf.map((p) => Math.abs(p.x))) * 2).toBeGreaterThan(c.width - 0.2);
+    expect(tab.holes).toHaveLength(1);
+    const hole = tab.holes[0].getPoints();
+    const ys = hole.map((p) => p.y);
+    const xs = hole.map((p) => p.x);
+    expect((Math.min(...ys) + Math.max(...ys)) / 2).toBeCloseTo(-c.hole!.centerY, 6);
+    expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(0, 6);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(c.hole!.width, 6);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(c.hole!.height, 6);
+  });
+
+  it.each(shapes)('hangs the closed lid’s %s tongue its depth below the lip', (shape) => {
+    const params = paramsFor(shape, false);
+    const m = generateBoxModel(params);
+    const { widthMm: innerW, depthMm: innerD, heightMm: innerH } = m.innerDims;
+    const straightH = Math.max(15, innerH - wrapBendRadiusMm(innerD, innerH));
+    const lip = Math.min(14, straightH * 0.38);
+    const c = livingHingeCatch(params, innerW, straightH - lip);
+    const geometry = buildLivingHingeLidGeometry(m, m.panels3D.find((p) => p.id === 'living-hinge-lid')!, Math.PI / 2);
+    const pos = geometry.getAttribute('position');
+    let lowestFront = Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getZ(i) > innerD / 2 - 1e-6 && Math.abs(pos.getX(i)) < innerW / 2) lowestFront = Math.min(lowestFront, pos.getY(i));
+    }
+    expect(lowestFront).toBeCloseTo(-innerH / 2 + straightH - lip - c.height, 3);
   });
 });

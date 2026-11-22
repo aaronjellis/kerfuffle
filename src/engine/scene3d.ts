@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { bendBentPanel } from './bentPanel';
 import { bookCoverPose } from './bookBox';
-import { CATCH_TAPER_DEG, catchTongueEdge, catchTongueRadii, livingHingeCatch, livingHingeZoneCuts, wrapBendRadiusMm } from './fingerJointEngine';
+import { catchOutline, livingHingeCatch, livingHingeZoneCuts, wrapBendRadiusMm, type LivingHingeCatch } from './fingerJointEngine';
 import { buildRoundedRectPoints } from './roundedRect';
 import type { GeneratedBoxModel, Panel3DTransform } from './types';
 
@@ -201,6 +201,21 @@ export function wrapBend(model: GeneratedBoxModel, bend: number) {
 }
 
 /**
+ * The catch tongue's face as a shape, its root line at y = 0 and its tip at y = -depth, the finger
+ * hole cut through at its centre depth.
+ */
+export function catchTabShape(c: LivingHingeCatch): THREE.Shape {
+  const shape = new THREE.Shape(catchOutline(c, 0).map((p) => new THREE.Vector2(p.x, -p.y)));
+  if (c.hole) {
+    const { width: hw, height: hh, centerY } = c.hole;
+    shape.holes.push(
+      new THREE.Path(buildRoundedRectPoints(hw, hh, hh / 2).map((p) => new THREE.Vector2(p.x - hw / 2, -centerY - (p.y - hh / 2))))
+    );
+  }
+  return shape;
+}
+
+/**
  * Builds the 3D curved living-hinge wrap lid mesh:
  * - Integrated Lower Back Wall (with finger joints) when 'one-piece-back' or 'side-arch-tabs',
  *   or mating Rear Finger-Jointed Skirt when 'finger-joint-back'
@@ -293,21 +308,7 @@ export function buildLivingHingeLidGeometry(
 
   // The catch tongue hangs below the lip, in its plane, into the front wall's notch, its finger
   // hole through the middle.
-  const tongue = livingHingeCatch(params, innerW, straightH - frontLipH);
-  const radii = catchTongueRadii(tongue.width, tongue.height);
-  const tongueShape = new THREE.Shape(
-    catchTongueEdge(tongue.width, tongue.height, radii.tip, radii.root, 8, CATCH_TAPER_DEG).map((p) => new THREE.Vector2(p.x, -p.y))
-  );
-  if (tongue.hole) {
-    const { width: hw, height: hh } = tongue.hole;
-    tongueShape.holes.push(
-      new THREE.Path(
-        buildRoundedRectPoints(hw, hh, hh / 2).map(
-          (p) => new THREE.Vector2(p.x - hw / 2, -tongue.height / 2 - (p.y - hh / 2))
-        )
-      )
-    );
-  }
+  const tongueShape = catchTabShape(livingHingeCatch(params, innerW, straightH - frontLipH));
   const catchTab = new THREE.ExtrudeGeometry(tongueShape, { depth: T, bevelEnabled: false });
   catchTab.translate(0, seamY - frontLipH, innerD / 2);
   catchTab.applyMatrix4(wrap.carry(true));
