@@ -15,11 +15,18 @@ import {
 } from '../../engine/livingHinge';
 import { bookLayout } from '../../engine/bookBox';
 import { CATCH_TAPER_DEG, CATCH_WEAR_TRAVEL_MM, MIN_THUMB_HOLE_MM, livingHingeCatch, livingHingeSettings, wrapBendRadiusMm } from '../../engine/fingerJointEngine';
-import type { BoxParameters } from '../../engine/types';
+import type { BoxParameters, CatchShapeId } from '../../engine/types';
 import { wineCarrierLayout } from '../../engine/wineBottles';
 import { Field, Switch } from '../Field';
 import { unitHelpers } from './shared';
 import type { SectionProps } from './types';
+
+const CATCH_SHAPES: { id: CatchShapeId; name: string }[] = [
+  { id: 'tapered', name: 'Tapered' },
+  { id: 'dovetail', name: 'Dovetail' },
+  { id: 'keyhole', name: 'Keyhole' },
+  { id: 'circle', name: 'Circle' },
+];
 
 const PREVIEW_W = 56;
 const PREVIEW_H = 40;
@@ -71,6 +78,8 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
   // The front wall's height under the lid's lip, as the engine works it out.
   const straightH = Math.max(15, model.innerDims.heightMm - lid);
   const tongue = livingHingeCatch(params, model.innerDims.widthMm, straightH - Math.min(14, straightH * 0.38));
+  const roundHead = tongue.shape === 'circle' || tongue.shape === 'keyhole';
+  const chosenShape = CATCH_SHAPES.find((c) => c.id === params.livingHingeCatchShape) ?? CATCH_SHAPES[0];
   /** A length in the display unit: millimetres to `mmDecimals` places, inches to three. */
   const len = (v: number, mmDecimals: number) => (isInch ? (v / 25.4).toFixed(3) : v.toFixed(mmDecimals));
 
@@ -209,6 +218,38 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
           <option value="finger-joint-back">Finger-jointed to the back wall</option>
         </select>
       </Field>
+      <Field label="Catch shape">
+        <select
+          value={chosenShape.id}
+          onChange={(e) => updateParam('livingHingeCatchShape', e.target.value as CatchShapeId)}
+        >
+          {CATCH_SHAPES.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {chosenShape.id !== 'tapered' && (
+        <Field label={`Lock (${uLabel})`}>
+          <NumberField
+            valueMm={params.livingHingeCatchLockMm}
+            minMm={0.1}
+            maxMm={0.8}
+            step={isInch ? 0.005 : 0.05}
+            displayUnit={displayUnit}
+            inDecimals={3}
+            mmDecimals={2}
+            ariaLabel="Catch lock"
+            onChangeMm={(mm) => updateParam('livingHingeCatchLockMm', mm)}
+          />
+        </Field>
+      )}
+      {tongue.fellBack && (
+        <p className="helper-note hinge-web-warning" role="status">
+          The front wall is too small for the {chosenShape.name.toLowerCase()} catch, so the tapered catch is used.
+        </p>
+      )}
       <Switch
         label="Finger hole in the front catch"
         checked={params.livingHingeThumbHole}
@@ -217,7 +258,7 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
       {params.livingHingeThumbHole && (
         <>
           <div className="two-col-inputs">
-            <Field label={`Hole width (${uLabel})`}>
+            <Field label={roundHead ? `Hole diameter (${uLabel})` : `Hole width (${uLabel})`}>
               <NumberField
                 valueMm={params.livingHingeThumbHoleWidthMm}
                 minMm={MIN_THUMB_HOLE_MM}
@@ -226,10 +267,11 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
                 displayUnit={displayUnit}
                 inDecimals={2}
                 mmDecimals={1}
-                ariaLabel="Finger hole width"
+                ariaLabel={roundHead ? 'Finger hole diameter' : 'Finger hole width'}
                 onChangeMm={(mm) => updateParam('livingHingeThumbHoleWidthMm', mm)}
               />
             </Field>
+            {!roundHead && (
             <Field label={`Hole height (${uLabel})`}>
               <NumberField
                 valueMm={params.livingHingeThumbHoleHeightMm}
@@ -243,22 +285,35 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
                 onChangeMm={(mm) => updateParam('livingHingeThumbHoleHeightMm', mm)}
               />
             </Field>
+            )}
           </div>
-          <p className={tongue.shrunk ? 'helper-note hinge-web-warning' : 'helper-note'} role="status">
+          <p className={tongue.shrunk || tongue.holeDropped ? 'helper-note hinge-web-warning' : 'helper-note'} role="status">
             {tongue.hole
               ? `The tongue grows to ${len(tongue.width, 0)} × ${len(tongue.height, 0)} ${uLabel} round the hole: press through it to seat the lid, hook it to pull the lid free.`
-              : 'The front wall is too short for a finger hole, so the catch stays a plain tab.'}
+              : tongue.holeDropped
+                ? 'The catch has no room for a finger hole, so it is left off.'
+                : 'The front wall is too short for a finger hole, so the catch stays a plain tab.'}
             {tongue.hole &&
               tongue.shrunk &&
-              ` Shrunk to ${len(tongue.hole.width, 1)} × ${len(tongue.hole.height, 1)} ${uLabel} to fit this box.`}
+              (roundHead
+                ? ` Shrunk to ${len(tongue.hole.width, 1)} ${uLabel} across to fit this box.`
+                : ` Shrunk to ${len(tongue.hole.width, 1)} × ${len(tongue.hole.height, 1)} ${uLabel} to fit this box.`)}
           </p>
         </>
       )}
-      <p className="helper-note">
-        The catch tongue and its notch taper {CATCH_TAPER_DEG}° a side, so the fit wedges tight as it seats. A new lid
-        stops about {len(CATCH_WEAR_TRAVEL_MM, 0)} {uLabel} above the front wall; as the sides wear it sinks onto the
-        wall, getting tighter on the way.
-      </p>
+      {tongue.shape === 'tapered' ? (
+        <p className="helper-note">
+          The catch tongue and its notch taper {CATCH_TAPER_DEG}° a side, so the fit wedges tight as it seats. A new lid
+          stops about {len(CATCH_WEAR_TRAVEL_MM, 0)} {uLabel} above the front wall; as the sides wear it sinks onto the
+          wall, getting tighter on the way.
+        </p>
+      ) : (
+        <p className="helper-note">
+          The {tongue.shape} tongue is {len(tongue.lockMm, 2)} {uLabel} a side wider at its tip than below its root, and
+          its notch is the reverse. Press the tongue straight in to lock it; only a firm pull on the lid's front edge
+          frees it. The wood flexes a fraction of a millimetre, so a larger lock needs a firmer press.
+        </p>
+      )}
       <Switch
         label="Top guides"
         checked={params.livingHingeTopGuides || params.livingHingeAttachMode === 'side-arch-tabs'}
