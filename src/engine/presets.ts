@@ -404,6 +404,8 @@ export const DEFAULT_BOX_PARAMETERS: BoxParameters = {
   livingHingeCutMm: 30,
   livingHingeBridgeMm: 3,
   livingHingeAttachMode: 'one-piece-back',
+  livingHingeCatchShape: 'tapered',
+  livingHingeCatchLockMm: 0.4,
   livingHingeThumbHole: true,
   livingHingeThumbHoleWidthMm: 16,
   livingHingeThumbHoleHeightMm: 8,

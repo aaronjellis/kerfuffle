@@ -554,3 +554,34 @@ describe('living-hinge box', () => {
     expect(opened.livingHingePitchMm).toBe(DEFAULT_BOX_PARAMETERS.livingHingePitchMm);
   });
 });
+
+describe('locking catch settings', () => {
+  const base = { ...DEFAULT_BOX_PARAMETERS, templateId: 'finger-living-hinge' as const, kerfMm: 0.2 };
+  const wrapOutline = (p: typeof base) =>
+    generateBoxModel(p).panels2D.find((x) => x.id === 'top')!.paths.find((x) => x.id === 'living-wrap-outline')!.d;
+
+  it('defaults to the tapered catch with 0.4 mm of lock', () => {
+    expect(DEFAULT_BOX_PARAMETERS.livingHingeCatchShape).toBe('tapered');
+    expect(DEFAULT_BOX_PARAMETERS.livingHingeCatchLockMm).toBe(0.4);
+  });
+
+  it('round-trips the catch settings through a project file', () => {
+    const text = serializeProject({
+      params: { ...base, livingHingeCatchShape: 'circle', livingHingeCatchLockMm: 0.6 },
+      artworks: [],
+      displayUnit: 'mm',
+    });
+    const opened = parseProject(text).params;
+    expect(opened.livingHingeCatchShape).toBe('circle');
+    expect(opened.livingHingeCatchLockMm).toBe(0.6);
+  });
+
+  it('opens an old file with no catch shape as tapered, its cut sheet unchanged', () => {
+    const raw = JSON.parse(serializeProject({ params: base, artworks: [], displayUnit: 'mm' }));
+    delete raw.params.livingHingeCatchShape;
+    delete raw.params.livingHingeCatchLockMm;
+    const opened = parseProject(JSON.stringify(raw)).params;
+    expect(opened.livingHingeCatchShape).toBe('tapered');
+    expect(wrapOutline(opened as typeof base)).toBe(wrapOutline(base));
+  });
+});

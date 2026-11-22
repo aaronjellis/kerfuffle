@@ -16,6 +16,9 @@ export type BoxTemplateId =
 
 export type WoodLidStyle = 'closed' | 'open' | 'flat-lid' | 'inset-lid' | 'sliding-lid' | 'telescope-lid' | 'pivot-lid';
 export type ClamshellHingeType = 'butt-hardware' | 'side-pivot' | 'knuckle-pin' | 'printed-hinge';
+/** The living-hinge lid's catch shapes. Tapered wedges by friction; the rest lock. */
+export type CatchShapeId = 'tapered' | 'dovetail' | 'keyhole' | 'circle';
+
 export type LivingHingeAttachMode =
   | 'one-piece-back'
   | 'finger-joint-back'
@@ -163,6 +166,10 @@ export interface BoxParameters {
   /** Uncut wood between slits, or at each lattice junction */
   livingHingeBridgeMm: number;
   livingHingeAttachMode: LivingHingeAttachMode;
+  /** The lid's catch tongue: the wedging taper, or a head that presses into a reverse-shaped notch and locks */
+  livingHingeCatchShape: CatchShapeId;
+  /** How far a locking head stands wider than its neck, per side; wood flexes only a fraction of a millimetre */
+  livingHingeCatchLockMm: number;
   /** A finger hole through the lid's catch tongue, to press it home and pull it free */
   livingHingeThumbHole: boolean;
   /** The finger hole's width across the tongue */
