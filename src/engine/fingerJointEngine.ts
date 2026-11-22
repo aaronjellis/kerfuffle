@@ -2175,13 +2175,18 @@ export function catchOutline(c: LivingHingeCatch, grow: number, narrow = 0, step
   let left: Point2D[];
 
   if (c.shape === 'dovetail') {
-    const w = width / 2 + grow;
-    const wn = width / 2 - u + grow;
+    // The sides lean out in a straight line from depth f (half-width `width / 2 - u`) to the tip corners'
+    // start, `width / 2` there. The line keeps its lean as it grows: it shifts out by `grow` square to
+    // itself, so the notch stays the tongue's reverse down its whole length.
+    const wn = width / 2 - u;
     const tipR = Math.max(0, radii.tip + grow);
+    const lean = u / Math.max(1e-9, height - radii.tip - radii.root);
+    const side = (y: number) => wn + lean * (y - radii.root) + grow * Math.sqrt(1 + lean * lean);
+    const tipTop = height - tipR;
     // Left half, from the root line down to the tip's middle.
     left = [
-      ...(f > 0 ? arc(-wn - f, f, f, -Math.PI / 2, 0, steps) : [{ x: -wn, y: 0 }]),
-      ...(tipR > 0 ? arc(-w + tipR, height - tipR, tipR, Math.PI, Math.PI / 2, steps) : [{ x: -w, y: height }]),
+      ...(f > 0 ? arc(-side(f) - f, f, f, -Math.PI / 2, 0, steps) : [{ x: -side(0), y: 0 }]),
+      ...(tipR > 0 ? arc(-side(tipTop) + tipR, tipTop, tipR, Math.PI, Math.PI / 2, steps) : [{ x: -side(height), y: height }]),
     ];
   } else {
     const r = width / 2 + grow;
@@ -2324,15 +2329,12 @@ function generateLivingHingeBox(
   // The notch runs from above the top edge down the tongue's height, so the tongue seats flush. It's drawn
   // a kerf narrower than the tongue and the tongue a kerf wider, as the finger joints are, so once the
   // beam has burned both they meet at catchW and press-fit like the fingers.
-  // Shaped to the tongue: its tip corners rounded inside the notch, its root fillets rounding over
-  // the notch's mouth. The kerf offset moves each radius by half a kerf, as it moves the edges.
-  // Tapered as the tongue is, and narrower at the mouth by the wear travel's worth of taper, so the
+  // Shaped to the tongue: the same profile, a kerf narrower and its radii half a kerf apart the other way.
+  // A tapered tongue's notch is also narrower at the mouth by the wear travel's worth of taper, so the
   // new tongue wedges tight CATCH_WEAR_TRAVEL_MM short of home and has that far to sink as it wears.
-  const radii = catchTongueRadii(catchW, tongue.height);
-  const notchMouth = catchW - kerf - 2 * CATCH_WEAR_TRAVEL_MM * catchTaper;
-  const notchEdge = catchTongueEdge(notchMouth, tongue.height, radii.tip - kerf / 2, radii.root + kerf / 2, 8, CATCH_TAPER_DEG).map(
-    (p) => ({ x: T + innerW / 2 + p.x, y: T + p.y }),
-  );
+  // A locking shape seats flush: its notch is its reverse and nothing more.
+  const wearNarrow = tongue.shape === 'tapered' ? 2 * CATCH_WEAR_TRAVEL_MM * catchTaper : 0;
+  const notchEdge = catchOutline(tongue, -kerf / 2, wearNarrow).map((p) => ({ x: T + innerW / 2 + p.x, y: T + p.y }));
   const notch: Point2D[] = [
     { x: notchEdge[0].x, y: 0 },
     ...notchEdge,
@@ -2574,10 +2576,10 @@ function generateLivingHingeBox(
 
   // The tongue's finger hole: a rounded slot through its middle.
   if (tongue.hole) {
-    const { width: hw, height: hh } = tongue.hole;
+    const { width: hw, height: hh, centerY } = tongue.hole;
     const hole = buildRoundedRectPoints(hw, hh, hh / 2).map((p) => ({
       x: p.x + wFull / 2 - hw / 2,
-      y: p.y + tongue.height / 2 - hh / 2,
+      y: p.y + (tongue.height - centerY) - hh / 2,
     }));
     extraWrapPaths.push({ id: 'lh-catch-finger-hole', layer: 'cut', d: pointsToSvgPath(hole, true), closed: true });
   }
@@ -2586,15 +2588,8 @@ function generateLivingHingeBox(
   const topCatchHeaderPts: Point2D[] = [
     { x: 0, y: zone2End },
     { x: 0, y: tongue.height },
-    // The tongue, tip at y = 0, a kerf wider than the notch's and its radii half a kerf rounder.
-    ...catchTongueEdge(
-      catchW + kerf,
-      tongue.height,
-      catchTongueRadii(catchW, tongue.height).tip + kerf / 2,
-      catchTongueRadii(catchW, tongue.height).root - kerf / 2,
-      8,
-      CATCH_TAPER_DEG,
-    ).map((p) => ({ x: wFull / 2 + p.x, y: tongue.height - p.y })),
+    // The tongue, tip at y = 0: the notch's profile a kerf wider.
+    ...catchOutline(tongue, kerf / 2).map((p) => ({ x: wFull / 2 + p.x, y: tongue.height - p.y })),
     { x: wFull, y: tongue.height },
     { x: wFull, y: zone2End },
   ];

@@ -695,4 +695,64 @@ describe('catch shapes', () => {
     expect(tight.hole).toBeNull();
     expect(tight.holeDropped).toBe(true);
   });
+
+  describe('on the cut sheet', () => {
+    const modelFor = (shape: CatchShapeId, over: Partial<typeof DEFAULT_BOX_PARAMETERS> = {}) => {
+      const params = catchParams(shape, over);
+      const m = generateBoxModel(params);
+      const { widthMm: innerW, depthMm: innerD, heightMm: innerH } = m.innerDims;
+      const R = wrapBendRadiusMm(innerD, innerH);
+      const straightH = Math.max(15, innerH - R);
+      const lip = Math.min(14, straightH * 0.38);
+      const c = livingHingeCatch(params, innerW, straightH - lip);
+      const wrap = m.panels2D.find((x) => x.id === 'top')!;
+      const pts = (d: string) => [...d.matchAll(/[ML]\s*(-?[\d.]+)\s+(-?[\d.]+)/g)].map((x) => ({ x: Number(x[1]), y: Number(x[2]) }));
+      const outline = pts(wrap.paths.find((p) => p.id === 'living-wrap-outline')!.d);
+      const front = m.panels3D.find((x) => x.id === 'front')!.outlinePoints!;
+      const tongueAt = (d: number) => widthAt(outline, wrap.heightMm - c.height + d, wrap.widthMm / 2, c.width);
+      const notchAt = (d: number) => widthAt(front, params.materialThicknessMm + d, params.materialThicknessMm + innerW / 2, c.width);
+      return { params, m, c, wrap, innerW, innerD, innerH, R, straightH, lip, outline, tongueAt, notchAt, pts };
+    };
+    // Where the head is widest: the circle's and keyhole's equator, the dovetail's tip corners' start (less 0.3 mm
+    // so both the tongue's and the notch's straight sides reach it, at any kerf tested).
+    const widestDepth = (c: ReturnType<typeof livingHingeCatch>) =>
+      c.shape === 'dovetail' ? c.height - catchTongueRadii(c.width, c.height).tip - 0.3 : c.height - c.width / 2;
+
+    it.each(LOCKING.flatMap((shape) => [0, 0.2, 0.5].map((kerf) => [shape, kerf] as const)))(
+      'cuts the %s notch as its tongue reversed, a kerf narrower and the tongue a kerf wider, at kerf %s',
+      (shape, kerf) => {
+        const { c, tongueAt, notchAt } = modelFor(shape, { kerfMm: kerf });
+        expect(c.shape).toBe(shape);
+        const d = widestDepth(c);
+        // Drawn a kerf apart each way, so once the beam has burned both they meet and press-fit.
+        expect(tongueAt(d) - notchAt(d)).toBeCloseTo(2 * kerf, 1);
+        // The tongue is wider at its widest than just below the root fillet, in the cut sheet as in the shape.
+        if (kerf === 0) expect(tongueAt(d) - tongueAt(1.5 + 0.01)).toBeGreaterThanOrEqual(2 * c.lockMm - 0.2); // the dovetail is sampled 0.3 mm short of its widest
+      },
+    );
+
+    it.each(LOCKING)('seats the %s flush: no wear travel narrows its notch', (shape) => {
+      const { c, tongueAt, notchAt } = modelFor(shape, { kerfMm: 0 });
+      for (const d of [c.height * 0.3, c.height * 0.5, c.height * 0.7]) expect(notchAt(d)).toBeCloseTo(tongueAt(d), 2);
+    });
+
+    it.each(LOCKING)('centres the %s finger hole on its head', (shape) => {
+      const { c, wrap, pts } = modelFor(shape, { livingHingeThumbHole: true });
+      const hole = pts(wrap.paths.find((p) => p.id === 'lh-catch-finger-hole')!.d);
+      const xs = hole.map((p) => p.x);
+      const ys = hole.map((p) => p.y);
+      expect(c.hole).not.toBeNull();
+      expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(wrap.widthMm / 2, 3);
+      expect((Math.min(...ys) + Math.max(...ys)) / 2).toBeCloseTo(wrap.heightMm - c.height + c.hole!.centerY, 3);
+      expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(c.hole!.width, 3);
+      expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(c.hole!.height, 3);
+    });
+
+    it.each(LOCKING)('keeps the %s wrap as long as its tongue, lip, shoulders, deck and back wall', (shape) => {
+      const { c, wrap, R, innerD, lip, straightH, params } = modelFor(shape);
+      const shoulder = (Math.PI * (R + params.materialThicknessMm / 2)) / 2;
+      const deck = Math.max(10, innerD - 2 * R);
+      expect(wrap.heightMm).toBeCloseTo(c.height + lip + 2 * shoulder + deck + straightH + params.materialThicknessMm, 3);
+    });
+  });
 });
