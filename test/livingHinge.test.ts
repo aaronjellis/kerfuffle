@@ -13,7 +13,8 @@ import {
   type HingeShape,
 } from '../src/engine/livingHinge';
 import { generateBoxModel } from '../src/engine/boxGenerator';
-import { CATCH_TAPER_DEG, CATCH_WEAR_TRAVEL_MM, catchTongueEdge, catchTongueRadii, livingHingeCatch, wrapBendRadiusMm } from '../src/engine/fingerJointEngine';
+import { CATCH_TAPER_DEG, CATCH_WEAR_TRAVEL_MM, catchOutline, catchTongueEdge, catchTongueRadii, livingHingeCatch, wrapBendRadiusMm } from '../src/engine/fingerJointEngine';
+import type { CatchShapeId } from '../src/engine/types';
 
 const taper = Math.tan((CATCH_TAPER_DEG * Math.PI) / 180);
 /** A closed outline's width across at height y, between its crossings within `near` of x = cx. */
@@ -583,5 +584,115 @@ describe('locking catch settings', () => {
     const opened = parseProject(JSON.stringify(raw)).params;
     expect(opened.livingHingeCatchShape).toBe('tapered');
     expect(wrapOutline(opened as typeof base)).toBe(wrapOutline(base));
+  });
+});
+
+describe('catch shapes', () => {
+  const T = DEFAULT_BOX_PARAMETERS.materialThicknessMm;
+  const catchParams = (shape: CatchShapeId, over: Partial<typeof DEFAULT_BOX_PARAMETERS> = {}) => ({
+    ...DEFAULT_BOX_PARAMETERS,
+    templateId: 'finger-living-hinge' as const,
+    livingHingeCatchShape: shape,
+    livingHingeThumbHole: false,
+    ...over,
+  });
+  const LOCKING: CatchShapeId[] = ['dovetail', 'keyhole', 'circle'];
+  const ROOT_FILLET = 1.5;
+
+  it('draws the tapered shape exactly as the tapered tongue is drawn', () => {
+    const c = livingHingeCatch(catchParams('tapered'), 110, 40);
+    const { tip, root } = catchTongueRadii(c.width, c.height);
+    expect(catchOutline(c, 0)).toEqual(catchTongueEdge(c.width, c.height, tip, root, 8, CATCH_TAPER_DEG));
+  });
+
+  describe.each(LOCKING.flatMap((shape) => [0.1, 0.4, 0.8].map((lock) => [shape, lock] as const)))('%s at %s mm of lock', (shape, lock) => {
+    const c = livingHingeCatch(catchParams(shape, { livingHingeCatchLockMm: lock }), 110, 60);
+    const edge = catchOutline(c, 0);
+
+    it('is wider at its widest than just below the root fillet by at least twice the lock', () => {
+      expect(c.shape).toBe(shape);
+      const widest = Math.max(...edge.map((p) => 2 * Math.abs(p.x - 0))) ;
+      const neck = widthAt(edge, ROOT_FILLET + 1e-4, 0, 1e3);
+      expect(c.width - neck).toBeGreaterThanOrEqual(2 * lock - 1e-3);
+      expect(widest).toBeGreaterThanOrEqual(c.width - 1e-6);
+    });
+
+    it('is at least 2T deep, rounded, mirror-symmetric, and runs root line to root line', () => {
+      expect(c.height).toBeGreaterThanOrEqual(2 * T);
+      expect(Math.max(...edge.map((p) => p.y))).toBeCloseTo(c.height, 6);
+      expect(edge[0].y).toBeCloseTo(0, 9);
+      expect(edge[edge.length - 1].y).toBeCloseTo(0, 9);
+      edge.forEach((p, i) => {
+        const q = edge[edge.length - 1 - i];
+        expect(p.x).toBeCloseTo(-q.x, 9);
+        expect(p.y).toBeCloseTo(q.y, 9);
+      });
+      for (let i = 1; i + 1 < edge.length; i++) {
+        const a = Math.atan2(edge[i].y - edge[i - 1].y, edge[i].x - edge[i - 1].x);
+        const b = Math.atan2(edge[i + 1].y - edge[i].y, edge[i + 1].x - edge[i].x);
+        const turn = Math.abs(((b - a + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
+        expect(turn).toBeLessThan(Math.PI / 4);
+      }
+    });
+  });
+
+  it('puts the circle’s lip edge above its equator at every lock', () => {
+    for (const lock of [0.1, 0.4, 0.8]) {
+      const c = livingHingeCatch(catchParams('circle', { livingHingeCatchLockMm: lock }), 110, 60);
+      const edge = catchOutline(c, 0);
+      const equator = c.height - c.width / 2;
+      expect(equator).toBeGreaterThan(ROOT_FILLET);
+      expect(widthAt(edge, equator, 0, 1e3)).toBeGreaterThan(c.width - 0.02);
+    }
+  });
+
+  it('uses a blank or zero lock as 0.4 mm', () => {
+    for (const bad of [0, Number.NaN, undefined as unknown as number]) {
+      expect(livingHingeCatch(catchParams('dovetail', { livingHingeCatchLockMm: bad }), 110, 60).lockMm).toBe(0.4);
+    }
+    expect(livingHingeCatch(catchParams('dovetail', { livingHingeCatchLockMm: 5 }), 110, 60).lockMm).toBe(0.8);
+  });
+
+  it.each(LOCKING)('falls back to the tapered catch on a %s too narrow or too short for it', (shape) => {
+    for (const [w, h] of [[15, 60], [110, 10]]) {
+      const c = livingHingeCatch(catchParams(shape), w, h);
+      expect(c.shape).toBe('tapered');
+      expect(c.fellBack).toBe(true);
+      const edge = catchOutline(c, 0);
+      edge.forEach((p, i) => {
+        expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
+        if (i > 0) expect(Math.hypot(p.x - edge[i - 1].x, p.y - edge[i - 1].y)).toBeGreaterThan(1e-9);
+      });
+    }
+    expect(livingHingeCatch(catchParams(shape), 110, 60).fellBack).toBe(false);
+    expect(livingHingeCatch(catchParams('tapered'), 15, 10).fellBack).toBe(false);
+  });
+
+  it('puts a round finger hole in the middle of a circle or keyhole head, with wood all round', () => {
+    for (const shape of ['circle', 'keyhole'] as const) {
+      const c = livingHingeCatch(catchParams(shape, { livingHingeThumbHole: true }), 110, 60);
+      expect(c.hole).not.toBeNull();
+      expect(c.hole!.width).toBe(c.hole!.height);
+      expect(c.hole!.width).toBeCloseTo(16, 9);
+      expect(c.width / 2 - c.hole!.width / 2).toBeGreaterThanOrEqual(4 - 1e-9);
+      expect(c.hole!.centerY).toBeCloseTo(c.height - c.width / 2, 9);
+      expect(c.shrunk).toBe(false);
+    }
+    const narrow = livingHingeCatch(catchParams('circle', { livingHingeThumbHole: true }), 30, 60);
+    expect(narrow.shape).toBe('circle');
+    expect(narrow.shrunk).toBe(true);
+    expect(narrow.width).toBeLessThanOrEqual(30 * 0.6 + 1e-9);
+    expect(narrow.hole!.width + 8).toBeLessThanOrEqual(narrow.width + 1e-9);
+  });
+
+  it('keeps the dovetail’s obround hole where it fits and drops it with a flag where it does not', () => {
+    const c = livingHingeCatch(catchParams('dovetail', { livingHingeThumbHole: true }), 110, 60);
+    expect(c.hole).toMatchObject({ width: 16, height: 8 });
+    expect(c.hole!.centerY).toBeCloseTo(c.height / 2, 9);
+    expect(c.width).toBeCloseTo(24, 9);
+    const tight = livingHingeCatch(catchParams('dovetail', { livingHingeThumbHole: true }), 17, 60);
+    expect(tight.shape).toBe('dovetail');
+    expect(tight.hole).toBeNull();
+    expect(tight.holeDropped).toBe(true);
   });
 });

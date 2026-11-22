@@ -7,6 +7,7 @@ import {
   BoxDims,
   BoxPanel2D,
   BoxParameters,
+  CatchShapeId,
   DielinePath,
   Panel3DTransform,
   Point2D,
@@ -1974,33 +1975,138 @@ export const CATCH_TAPER_DEG = 2;
 export const CATCH_WEAR_TRAVEL_MM = 1;
 const catchTaper = Math.tan((CATCH_TAPER_DEG * Math.PI) / 180);
 
+/** The catch the living-hinge lid carries: its shape, size, and finger hole, all before kerf. */
+export interface LivingHingeCatch {
+  /** The shape drawn, after any fall-back to tapered. */
+  shape: CatchShapeId;
+  /** The widest width across the head. */
+  width: number;
+  /** The depth from the root line to the tip. */
+  height: number;
+  /** A keyhole's straight neck; 0 for every other shape. */
+  neckLen: number;
+  /** How far the head stands wider than just below the root fillet, per side; 0 for tapered. */
+  lockMm: number;
+  /** The finger hole, its centre `centerY` down from the root line. */
+  hole: null | { width: number; height: number; centerY: number };
+  /** The finger hole is smaller than asked, or the tapered tongue is a plain tab for want of room. */
+  shrunk: boolean;
+  /** The chosen locking shape didn't fit the front wall, so the tapered catch is used. */
+  fellBack: boolean;
+  /** A finger hole was asked for and the locking head has no room for one. */
+  holeDropped: boolean;
+}
+
+const DEFAULT_LOCK_MM = 0.4;
+const MIN_LOCK_MM = 0.1;
+const MAX_LOCK_MM = 0.8;
+/** The root fillet of a locking head: its depth is always 4.5 mm or more, so the fillet is full size. */
+const LOCKING_ROOT_R = 1.5;
+/** The tongue may span up to 60% of the front wall's width. */
+const CATCH_MAX_SPAN = 0.6;
+
+/** The lock a box asks for, in mm per side: a blank or zero field means the default. */
+const catchLockMm = (params: BoxParameters): number => {
+  const v = params.livingHingeCatchLockMm;
+  return Number.isFinite(v) && v > 0 ? Math.min(MAX_LOCK_MM, Math.max(MIN_LOCK_MM, v)) : DEFAULT_LOCK_MM;
+};
+
+/** A round head of radius `r` whose width just below the root fillet is `2u` less than its widest: how far its centre sits below that. */
+const circleDrop = (r: number, u: number): number => Math.sqrt(2 * r * u - u * u);
+
 /**
- * The catch tongue on the living-hinge lid's front edge, which drops into a notch in the front wall's
- * top edge. With a finger hole it grows to hold the hole with wood round it; a hole bigger than the
- * box has room for shrinks to fit (`shrunk`), and below `MIN_THUMB_HOLE_MM` the tongue stays a plain
- * tab one thickness deep.
+ * The catch tongue on the living-hinge lid's front edge, which presses into a notch in the front wall's
+ * top edge. Tapered wedges by friction; dovetail, keyhole and circle are wider at the tip than just
+ * below the root, so the notch, their exact reverse, holds them. A locking shape the front wall has no
+ * room for falls back to tapered (`fellBack`).
+ *
+ * With a finger hole the tongue grows to hold the hole with wood round it; a hole bigger than the
+ * box has room for shrinks to fit (`shrunk`), and below `MIN_THUMB_HOLE_MM` a tapered tongue stays a
+ * plain tab one thickness deep, and a locking head drops the hole (`holeDropped`).
  */
-export function livingHingeCatch(params: BoxParameters, innerW: number, frontH: number) {
+export function livingHingeCatch(params: BoxParameters, innerW: number, frontH: number): LivingHingeCatch {
+  const tapered = taperedCatch(params, innerW, frontH);
+  const shape = params.livingHingeCatchShape;
+  if (shape !== 'dovetail' && shape !== 'keyhole' && shape !== 'circle') return tapered;
+  return lockingCatch(shape, params, innerW, frontH) ?? { ...tapered, fellBack: true };
+}
+
+function taperedCatch(params: BoxParameters, innerW: number, frontH: number): LivingHingeCatch {
   const T = params.materialThicknessMm;
-  const plain = {
+  const plain: LivingHingeCatch = {
+    shape: 'tapered',
     width: Math.min(24, Math.max(10, innerW * 0.24)),
     height: T,
-    hole: null as null | { width: number; height: number },
+    neckLen: 0,
+    lockMm: 0,
+    hole: null,
     shrunk: false,
+    fellBack: false,
+    holeDropped: false,
   };
   if (!params.livingHingeThumbHole) return plain;
   const wantW = Math.max(MIN_THUMB_HOLE_MM, params.livingHingeThumbHoleWidthMm || 16);
   const wantH = Math.max(MIN_THUMB_HOLE_MM, params.livingHingeThumbHoleHeightMm || 8);
   // The tongue may span up to 60% of the front, and reach down to 6 mm above the bottom of the wall.
-  const holeW = Math.min(wantW, innerW * 0.6 - 2 * TONGUE_SIDE_MM);
+  const holeW = Math.min(wantW, innerW * CATCH_MAX_SPAN - 2 * TONGUE_SIDE_MM);
   const holeH = Math.min(wantH, frontH - FRONT_BELOW_NOTCH_MM - 2 * TONGUE_END_MM);
   if (holeW < MIN_THUMB_HOLE_MM || holeH < MIN_THUMB_HOLE_MM) return { ...plain, shrunk: true };
+  const height = holeH + 2 * TONGUE_END_MM;
   return {
+    ...plain,
     width: holeW + 2 * TONGUE_SIDE_MM,
-    height: holeH + 2 * TONGUE_END_MM,
-    hole: { width: holeW, height: holeH },
+    height,
+    hole: { width: holeW, height: holeH, centerY: height / 2 },
     shrunk: holeW < wantW || holeH < wantH,
   };
+}
+
+/** A dovetail, keyhole or circle sized for this box, or null when the front wall has no room for it. */
+function lockingCatch(shape: 'dovetail' | 'keyhole' | 'circle', params: BoxParameters, innerW: number, frontH: number): LivingHingeCatch | null {
+  const T = params.materialThicknessMm;
+  const u = catchLockMm(params);
+  const fits = (width: number, height: number) => width <= innerW * CATCH_MAX_SPAN && height + FRONT_BELOW_NOTCH_MM <= frontH;
+  const base = { shape, lockMm: u, fellBack: false, shrunk: false, holeDropped: false };
+  const wantHole = params.livingHingeThumbHole;
+
+  if (shape === 'dovetail') {
+    const plainW = Math.min(24, Math.max(10, innerW * 0.24));
+    const plainH = Math.max(2 * T, 6);
+    if (!fits(plainW, plainH)) return null;
+    const plain: LivingHingeCatch = { ...base, width: plainW, height: plainH, neckLen: 0, hole: null };
+    if (!wantHole) return plain;
+    const wantW = Math.max(MIN_THUMB_HOLE_MM, params.livingHingeThumbHoleWidthMm || 16);
+    const wantH = Math.max(MIN_THUMB_HOLE_MM, params.livingHingeThumbHoleHeightMm || 8);
+    const holeW = Math.min(wantW, innerW * CATCH_MAX_SPAN - 2 * TONGUE_SIDE_MM);
+    const holeH = Math.min(wantH, frontH - FRONT_BELOW_NOTCH_MM - 2 * TONGUE_END_MM);
+    if (holeW < MIN_THUMB_HOLE_MM || holeH < MIN_THUMB_HOLE_MM) return { ...plain, holeDropped: true };
+    const width = holeW + 2 * TONGUE_SIDE_MM;
+    const height = Math.max(plainH, holeH + 2 * TONGUE_END_MM);
+    if (!fits(width, height)) return { ...plain, holeDropped: true };
+    return { ...plain, width, height, hole: { width: holeW, height: holeH, centerY: height / 2 }, shrunk: holeW < wantW || holeH < wantH };
+  }
+
+  // Circle and keyhole: a round head, the keyhole on a straight neck.
+  const neckLen = shape === 'keyhole' ? Math.max(T, LOCKING_ROOT_R) : 0;
+  const y0 = Math.max(neckLen, LOCKING_ROOT_R);
+  const headFor = (D: number) => {
+    const r = D / 2;
+    const cy = y0 + circleDrop(r, u);
+    return { width: D, height: cy + r, centerY: cy };
+  };
+  const plainD = Math.max(8, 4 * T);
+  const plainHead = headFor(plainD);
+  if (!fits(plainHead.width, plainHead.height)) return null;
+  const plain: LivingHingeCatch = { ...base, width: plainHead.width, height: plainHead.height, neckLen, hole: null };
+  if (!wantHole) return plain;
+  const wantD = Math.max(MIN_THUMB_HOLE_MM, params.livingHingeThumbHoleWidthMm || 16);
+  for (let d = wantD; d >= MIN_THUMB_HOLE_MM - 1e-9; d -= 0.5) {
+    const head = headFor(Math.max(plainD, d + 2 * TONGUE_SIDE_MM));
+    if (fits(head.width, head.height)) {
+      return { ...plain, width: head.width, height: head.height, hole: { width: d, height: d, centerY: head.centerY }, shrunk: d < wantD };
+    }
+  }
+  return { ...plain, holeDropped: true };
 }
 
 /**
@@ -2040,6 +2146,64 @@ export const catchTongueRadii = (width: number, height: number) => ({
   tip: Math.min(3, width / 4, height / 2),
   root: Math.min(1.5, height / 3),
 });
+
+/**
+ * The catch's edge as a path, origin at its root's middle, y running out toward its tip: from the left
+ * end of the root line, round the head, to the right end of the root line, mirror-symmetric. Every
+ * edge moves out by `grow` (the tongue's is half a kerf, the notch's minus half a kerf) and every round
+ * radius changes by it; the depth does not. `narrow` is taken off a tapered catch's width, for the
+ * notch's wear travel.
+ *
+ * A locking head is `lockMm` per side wider at its widest than just below the root fillet, the depth
+ * `f` where the fillet ends. A dovetail leans out in a straight line from there to its tip corners; a
+ * circle's centre sits far enough below the lip edge to give that undercut, its top overlapping the lid;
+ * a keyhole is a circle on a straight neck.
+ */
+export function catchOutline(c: LivingHingeCatch, grow: number, narrow = 0, steps = 8): Point2D[] {
+  const { width, height, lockMm: u } = c;
+  const radii = catchTongueRadii(width, height);
+  if (c.shape === 'tapered') {
+    return catchTongueEdge(width + 2 * grow - narrow, height, radii.tip + grow, radii.root - grow, steps, CATCH_TAPER_DEG);
+  }
+  const f = Math.max(0, radii.root - grow);
+  const arc = (cx: number, cy: number, rad: number, a0: number, a1: number, n: number) =>
+    Array.from({ length: n + 1 }, (_, i) => {
+      const a = a0 + ((a1 - a0) * i) / n;
+      return { x: cx + rad * Math.cos(a), y: cy + rad * Math.sin(a) };
+    });
+  const mirror = (left: Point2D[]) => left.map((p) => ({ x: -p.x, y: p.y })).reverse();
+  let left: Point2D[];
+
+  if (c.shape === 'dovetail') {
+    const w = width / 2 + grow;
+    const wn = width / 2 - u + grow;
+    const tipR = Math.max(0, radii.tip + grow);
+    // Left half, from the root line down to the tip's middle.
+    left = [
+      ...(f > 0 ? arc(-wn - f, f, f, -Math.PI / 2, 0, steps) : [{ x: -wn, y: 0 }]),
+      ...(tipR > 0 ? arc(-w + tipR, height - tipR, tipR, Math.PI, Math.PI / 2, steps) : [{ x: -w, y: height }]),
+    ];
+  } else {
+    const r = width / 2 + grow;
+    const r0 = width / 2;
+    const s = circleDrop(r0, u);
+    const y0 = Math.max(c.neckLen, LOCKING_ROOT_R) - grow;
+    const wn = Math.sqrt(Math.max(0, r * r - s * s));
+    const eps = Math.atan2(s, wn);
+    const n = steps * 2;
+    left = [
+      ...(f > 0 ? arc(-wn - f, f, f, -Math.PI / 2, 0, steps) : [{ x: -wn, y: 0 }]),
+      ...(y0 - f > 1e-9 ? [{ x: -wn, y: y0 }] : []),
+      // The head's lower left, from where the neck meets it round to the bottom's middle.
+      ...arc(0, y0 + s, r, Math.PI + eps, Math.PI / 2, n),
+    ];
+  }
+  // The left half is drawn up to the tip's middle; mirror it for the right. A point on the middle line
+  // is shared, so it is kept once.
+  const right = mirror(left);
+  const joined = [...left, ...right];
+  return joined.filter((p, i) => i === 0 || Math.hypot(p.x - joined[i - 1].x, p.y - joined[i - 1].y) > 1e-9);
+}
 
 /** The hinge settings a box's parameters hold. */
 export const livingHingeSettings = (params: BoxParameters): HingePatternSettings => ({
