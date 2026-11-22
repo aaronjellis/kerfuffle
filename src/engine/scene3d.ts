@@ -202,10 +202,16 @@ export function wrapBend(model: GeneratedBoxModel, bend: number) {
 
 /**
  * The catch tongue's face as a shape, its root line at y = 0 and its tip at y = -depth, the finger
- * hole cut through at its centre depth.
+ * hole cut through at its centre depth. With `lip`, the lid's front lip (its `width` across, `height` up
+ * from the root line) joins the tongue as one face: a round hole can climb above the root line, and
+ * a hole must sit inside the outline it cuts or the triangulation misfills it.
  */
-export function catchTabShape(c: LivingHingeCatch): THREE.Shape {
-  const shape = new THREE.Shape(catchOutline(c, 0).map((p) => new THREE.Vector2(p.x, -p.y)));
+export function catchTabShape(c: LivingHingeCatch, lip?: { width: number; height: number }): THREE.Shape {
+  const edge = catchOutline(c, 0).map((p) => new THREE.Vector2(p.x, -p.y));
+  const outline = lip
+    ? [new THREE.Vector2(-lip.width / 2, lip.height), new THREE.Vector2(-lip.width / 2, 0), ...edge, new THREE.Vector2(lip.width / 2, 0), new THREE.Vector2(lip.width / 2, lip.height)]
+    : edge;
+  const shape = new THREE.Shape(outline);
   if (c.hole) {
     const { width: hw, height: hh, centerY } = c.hole;
     shape.holes.push(
@@ -300,19 +306,14 @@ export function buildLivingHingeLidGeometry(
   addCurvedHingeZone(false); // Rear living hinge bend
   addCurvedHingeZone(true); // Front living hinge bend
 
-  // 3. Front Overhang Lip + Front Catch Tongue, built closed, then carried to the front bend's end.
-  const frontLip = new THREE.BoxGeometry(wFull, frontLipH, T);
-  frontLip.translate(0, seamY - frontLipH / 2, innerD / 2 + T / 2);
+  // 3. Front Overhang Lip + Front Catch Tongue, one face: the tongue hangs below the lip, in its plane,
+  //    into the front wall's notch, its finger hole through the middle (a round hole may climb into the
+  //    lip). Built closed, then carried to the front bend's end.
+  const frontFace = catchTabShape(livingHingeCatch(params, innerW, straightH - frontLipH, frontLipH), { width: wFull, height: frontLipH });
+  const frontLip = new THREE.ExtrudeGeometry(frontFace, { depth: T, bevelEnabled: false });
+  frontLip.translate(0, seamY - frontLipH, innerD / 2);
   frontLip.applyMatrix4(wrap.carry(true));
   parts.push(frontLip);
-
-  // The catch tongue hangs below the lip, in its plane, into the front wall's notch, its finger
-  // hole through the middle.
-  const tongueShape = catchTabShape(livingHingeCatch(params, innerW, straightH - frontLipH));
-  const catchTab = new THREE.ExtrudeGeometry(tongueShape, { depth: T, bevelEnabled: false });
-  catchTab.translate(0, seamY - frontLipH, innerD / 2);
-  catchTab.applyMatrix4(wrap.carry(true));
-  parts.push(catchTab);
 
   // 4. Integrated Lower Back Wall (for 1-piece modes) OR Rear Finger-Jointed Edge (for 2-piece
   //    finger-joint-back mode), built closed at Y = seamY, Z in [-(innerD/2 + T) .. -innerD/2], then

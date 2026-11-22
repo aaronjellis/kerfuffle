@@ -77,7 +77,8 @@ export const LivingHingeSection: React.FC<SectionProps> = ({ params, updateParam
   const [pitchMin, pitchMax] = HINGE_PITCH_RANGE_MM;
   // The front wall's height under the lid's lip, as the engine works it out.
   const straightH = Math.max(15, model.innerDims.heightMm - lid);
-  const tongue = livingHingeCatch(params, model.innerDims.widthMm, straightH - Math.min(14, straightH * 0.38));
+  const frontLip = Math.min(14, straightH * 0.38);
+  const tongue = livingHingeCatch(params, model.innerDims.widthMm, straightH - frontLip, frontLip);
   const roundHead = tongue.shape === 'circle' || tongue.shape === 'keyhole';
   const chosenShape = CATCH_SHAPES.find((c) => c.id === params.livingHingeCatchShape) ?? CATCH_SHAPES[0];
   /** A length in the display unit: millimetres to `mmDecimals` places, inches to three. */

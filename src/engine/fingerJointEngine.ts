@@ -2002,6 +2002,8 @@ const MIN_LOCK_MM = 0.1;
 const MAX_LOCK_MM = 0.8;
 /** The root fillet of a locking head: its depth is always 4.5 mm or more, so the fillet is full size. */
 const LOCKING_ROOT_R = 1.5;
+/** Wood kept between a round finger hole and the top of the lid's lip, where the hinge slits begin. */
+const CATCH_LIP_WOOD_MM = 3;
 /** The tongue may span up to 60% of the front wall's width. */
 const CATCH_MAX_SPAN = 0.6;
 
@@ -2018,17 +2020,18 @@ const circleDrop = (r: number, u: number): number => Math.sqrt(2 * r * u - u * u
  * The catch tongue on the living-hinge lid's front edge, which presses into a notch in the front wall's
  * top edge. Tapered wedges by friction; dovetail, keyhole and circle are wider at the tip than just
  * below the root, so the notch, their exact reverse, holds them. A locking shape the front wall has no
- * room for falls back to tapered (`fellBack`).
+ * room for falls back to tapered (`fellBack`). `lipH` is the lid's front lip height, which bounds how far a
+ * round finger hole may climb above the root line.
  *
  * With a finger hole the tongue grows to hold the hole with wood round it; a hole bigger than the
  * box has room for shrinks to fit (`shrunk`), and below `MIN_THUMB_HOLE_MM` a tapered tongue stays a
  * plain tab one thickness deep, and a locking head drops the hole (`holeDropped`).
  */
-export function livingHingeCatch(params: BoxParameters, innerW: number, frontH: number): LivingHingeCatch {
+export function livingHingeCatch(params: BoxParameters, innerW: number, frontH: number, lipH = Infinity): LivingHingeCatch {
   const tapered = taperedCatch(params, innerW, frontH);
   const shape = params.livingHingeCatchShape;
   if (shape !== 'dovetail' && shape !== 'keyhole' && shape !== 'circle') return tapered;
-  return lockingCatch(shape, params, innerW, frontH) ?? { ...tapered, fellBack: true };
+  return lockingCatch(shape, params, innerW, frontH, lipH) ?? { ...tapered, fellBack: true };
 }
 
 function taperedCatch(params: BoxParameters, innerW: number, frontH: number): LivingHingeCatch {
@@ -2062,7 +2065,7 @@ function taperedCatch(params: BoxParameters, innerW: number, frontH: number): Li
 }
 
 /** A dovetail, keyhole or circle sized for this box, or null when the front wall has no room for it. */
-function lockingCatch(shape: 'dovetail' | 'keyhole' | 'circle', params: BoxParameters, innerW: number, frontH: number): LivingHingeCatch | null {
+function lockingCatch(shape: 'dovetail' | 'keyhole' | 'circle', params: BoxParameters, innerW: number, frontH: number, lipH: number): LivingHingeCatch | null {
   const T = params.materialThicknessMm;
   const u = catchLockMm(params);
   const fits = (width: number, height: number) => width <= innerW * CATCH_MAX_SPAN && height + FRONT_BELOW_NOTCH_MM <= frontH;
@@ -2102,7 +2105,9 @@ function lockingCatch(shape: 'dovetail' | 'keyhole' | 'circle', params: BoxParam
   const wantD = Math.max(MIN_THUMB_HOLE_MM, params.livingHingeThumbHoleWidthMm || 16);
   for (let d = wantD; d >= MIN_THUMB_HOLE_MM - 1e-9; d -= 0.5) {
     const head = headFor(Math.max(plainD, d + 2 * TONGUE_SIDE_MM));
-    if (fits(head.width, head.height)) {
+    // A round hole is concentric with its head, so a big one climbs above the root line into the lid's\n    // lip; it stops short of the lip's top, where the hinge slits begin, by CATCH_LIP_WOOD_MM.
+    const rise = d / 2 - head.centerY;
+    if (fits(head.width, head.height) && rise <= lipH - CATCH_LIP_WOOD_MM) {
       return { ...plain, width: head.width, height: head.height, hole: { width: d, height: d, centerY: head.centerY }, shrunk: d < wantD };
     }
   }
@@ -2306,7 +2311,7 @@ function generateLivingHingeBox(
   //    tongue, which locates the lid side to side and front to back.
   //    & LOWER BACK WALL (separate with interlocking top fingers when 'finger-joint-back', or integrated into 1-piece wrap when 'one-piece-back')
   const frontH = straightH - frontLipH;
-  const tongue = livingHingeCatch(params, innerW, frontH);
+  const tongue = livingHingeCatch(params, innerW, frontH, frontLipH);
   const catchW = tongue.width;
   const countFrontH = computeOddFingerCount(frontH, params.fingerWidthMm);
   const lowerWallYCenter = -innerH / 2 + frontH / 2;

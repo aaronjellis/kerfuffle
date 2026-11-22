@@ -686,6 +686,22 @@ describe('catch shapes', () => {
     expect(narrow.hole!.width + 8).toBeLessThanOrEqual(narrow.width + 1e-9);
   });
 
+  it.each(['circle', 'keyhole'] as const)('keeps a round %s hole from climbing into the hinge slits above the lip', (shape) => {
+    const rise = (c: ReturnType<typeof livingHingeCatch>) => c.hole!.width / 2 - c.hole!.centerY;
+    const big = catchParams(shape, { livingHingeThumbHole: true, livingHingeThumbHoleWidthMm: 40 });
+    const unbounded = livingHingeCatch(big, 150, 80);
+    expect(rise(unbounded)).toBeGreaterThan(11);
+    // A 14 mm lip keeps 3 mm of wood above the hole; the hole shrinks to fit and says so.
+    const bounded = livingHingeCatch(big, 150, 80, 14);
+    expect(rise(bounded)).toBeLessThanOrEqual(14 - 3 + 1e-9);
+    expect(bounded.shrunk).toBe(true);
+    expect(bounded.hole!.width).toBeLessThan(unbounded.hole!.width);
+    // The shortest lip (5.7 mm) shrinks even the default 16 mm hole.
+    const short = livingHingeCatch(catchParams(shape, { livingHingeThumbHole: true }), 110, 60, 5.7);
+    expect(short.hole === null || rise(short) <= 5.7 - 3 + 1e-9).toBe(true);
+    if (short.hole === null) expect(short.holeDropped).toBe(true);
+  });
+
   it('keeps the dovetail’s obround hole where it fits and drops it with a flag where it does not', () => {
     const c = livingHingeCatch(catchParams('dovetail', { livingHingeThumbHole: true }), 110, 60);
     expect(c.hole).toMatchObject({ width: 16, height: 8 });
@@ -705,7 +721,7 @@ describe('catch shapes', () => {
       const R = wrapBendRadiusMm(innerD, innerH);
       const straightH = Math.max(15, innerH - R);
       const lip = Math.min(14, straightH * 0.38);
-      const c = livingHingeCatch(params, innerW, straightH - lip);
+      const c = livingHingeCatch(params, innerW, straightH - lip, lip);
       const wrap = m.panels2D.find((x) => x.id === 'top')!;
       const pts = (d: string) => [...d.matchAll(/[ML]\s*(-?[\d.]+)\s+(-?[\d.]+)/g)].map((x) => ({ x: Number(x[1]), y: Number(x[2]) }));
       const outline = pts(wrap.paths.find((p) => p.id === 'living-wrap-outline')!.d);
@@ -769,10 +785,10 @@ describe('3D catch tab', () => {
 
   it.each(shapes)('draws the %s tab as deep and as wide as its catch, the hole at its centre depth', (shape) => {
     const c = livingHingeCatch(paramsFor(shape, true), 110, 60);
-    const tab = catchTabShape(c);
+    const tab = catchTabShape(c, { width: 116, height: 12 });
     const pts = tab.getPoints();
     expect(Math.min(...pts.map((p) => p.y))).toBeCloseTo(-c.height, 6);
-    expect(Math.max(...pts.map((p) => p.y))).toBeCloseTo(0, 6);
+    expect(Math.max(...pts.map((p) => p.y))).toBeCloseTo(12, 6);
     // The widest point, at or below the root fillet, is the catch's width.
     const lowerHalf = pts.filter((p) => p.y < -1.4);
     expect(Math.max(...lowerHalf.map((p) => Math.abs(p.x))) * 2).toBeGreaterThan(c.width - 0.2);
@@ -786,13 +802,32 @@ describe('3D catch tab', () => {
     expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(c.hole!.height, 6);
   });
 
+  it.each(['circle', 'keyhole'] as const)('triangulates the %s tab with its hole, even where the hole crosses the root line into the lip', (shape) => {
+    const shoelace = (poly: THREE.Vector2[]) => poly.reduce((a, p, i) => { const q = poly[(i + 1) % poly.length]; return a + (p.x * q.y - q.x * p.y) / 2; }, 0);
+    for (const holeMm of [16, 24]) {
+      const c = livingHingeCatch({ ...paramsFor(shape, true), livingHingeThumbHoleWidthMm: holeMm }, 150, 80, 14);
+      expect(c.hole!.width / 2 - c.hole!.centerY).toBeGreaterThan(0); // the hole does cross the root line
+      const tab = catchTabShape(c, { width: 116, height: 14 });
+      const geo = new THREE.ShapeGeometry(tab);
+      const pos = geo.getAttribute('position');
+      const idx = geo.getIndex()!;
+      let filled = 0;
+      for (let i = 0; i < idx.count; i += 3) {
+        const [a, b, d] = [0, 1, 2].map((k) => ({ x: pos.getX(idx.getX(i + k)), y: pos.getY(idx.getX(i + k)) }));
+        filled += Math.abs((b.x - a.x) * (d.y - a.y) - (d.x - a.x) * (b.y - a.y)) / 2;
+      }
+      const expected = Math.abs(shoelace(tab.getPoints())) - tab.holes.reduce((a, h) => a + Math.abs(shoelace(h.getPoints())), 0);
+      expect(filled).toBeCloseTo(expected, 4);
+    }
+  });
+
   it.each(shapes)('hangs the closed lid’s %s tongue its depth below the lip', (shape) => {
     const params = paramsFor(shape, false);
     const m = generateBoxModel(params);
     const { widthMm: innerW, depthMm: innerD, heightMm: innerH } = m.innerDims;
     const straightH = Math.max(15, innerH - wrapBendRadiusMm(innerD, innerH));
     const lip = Math.min(14, straightH * 0.38);
-    const c = livingHingeCatch(params, innerW, straightH - lip);
+    const c = livingHingeCatch(params, innerW, straightH - lip, lip);
     const geometry = buildLivingHingeLidGeometry(m, m.panels3D.find((p) => p.id === 'living-hinge-lid')!, Math.PI / 2);
     const pos = geometry.getAttribute('position');
     let lowestFront = Infinity;
