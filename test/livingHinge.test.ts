@@ -451,7 +451,7 @@ describe('living-hinge catch and guides', () => {
 
   it('sizes the tongue round the hole set, with wood all round, and shrinks a hole too big for the box', () => {
     const c = livingHingeCatch({ ...base, livingHingeThumbHoleWidthMm: 20, livingHingeThumbHoleHeightMm: 10 }, 110, 40);
-    expect(c.hole).toEqual({ width: 20, height: 10 });
+    expect(c.hole).toMatchObject({ width: 20, height: 10, centerY: 7.5 });
     expect(c).toMatchObject({ width: 28, height: 15, shrunk: false });
     // A 19.8 mm front wall leaves 19.8 − 6 − 5 for the hole's height.
     const tall = livingHingeCatch({ ...base, livingHingeThumbHoleHeightMm: 30 }, 110, 19.8);
