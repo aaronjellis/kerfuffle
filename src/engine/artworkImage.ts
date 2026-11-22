@@ -3,6 +3,15 @@
  * here are height / width.
  */
 
+/**
+ * True for an image embedded as a data URL, which is the only kind of artwork source the app
+ * makes. A project file is outside input: anything else (a remote address, markup) is refused so
+ * opening a file can't make the app fetch from another site or write stray markup into an export.
+ */
+export function isImageDataUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^data:image\/[a-z0-9.+-]+[;,]/i.test(value);
+}
+
 /** The SVG source inside a data URL, or null when it isn't an SVG. */
 export function svgTextFromDataUrl(dataUrl: string): string | null {
   const m = dataUrl.match(/^data:image\/svg\+xml(;[^,]*)?,(.*)$/s);

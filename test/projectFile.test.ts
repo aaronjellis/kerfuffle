@@ -69,6 +69,13 @@ describe('project files', () => {
     expect(parseProject(fileWith({}, { category: 'wood-finger' })).params.category).toBe('cardboard-fold');
   });
 
+  it('keeps only artwork whose image is embedded in the file', () => {
+    const remote = { ...art, id: 'remote', dataUrl: 'https://example.com/pixel.png' };
+    const markup = { ...art, id: 'markup', dataUrl: '" /><script>alert(1)</script><image href="' };
+    const back = parseProject(fileWith({ artworks: [art, remote, markup] }));
+    expect(back.artworks.map((a) => a.id)).toEqual([art.id]);
+  });
+
   it('refuses files that are not Kerfuffle projects, or come from a newer version', () => {
     expect(() => parseProject('not json')).toThrow(ProjectFileError);
     expect(() => parseProject(JSON.stringify({ hello: 1 }))).toThrow(/isn’t a Kerfuffle project/);
